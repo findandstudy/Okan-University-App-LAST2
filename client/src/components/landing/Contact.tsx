@@ -1,0 +1,171 @@
+import { useState } from 'react';
+import { useI18n } from '@/lib/i18n';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { Card, CardContent } from '@/components/ui/card';
+import { motion } from 'framer-motion';
+import { useToast } from '@/hooks/use-toast';
+import { Mail, Phone, MapPin, Send, MessageCircle } from 'lucide-react';
+
+export function Contact() {
+  const { t, isRTL } = useI18n();
+  const { toast } = useToast();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    message: '',
+  });
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+
+    toast({
+      title: 'Message Sent!',
+      description: 'We will get back to you within 24 hours.',
+    });
+
+    setFormData({ name: '', email: '', message: '' });
+    setIsSubmitting(false);
+  };
+
+  const contactInfo = [
+    {
+      icon: Mail,
+      label: 'Email',
+      value: 'apply@okanuniversity.app',
+    },
+    {
+      icon: Phone,
+      label: 'Phone',
+      value: '+90 212 123 4567',
+    },
+    {
+      icon: MapPin,
+      label: 'Address',
+      value: 'Istanbul, Turkey',
+    },
+    {
+      icon: MessageCircle,
+      label: 'WhatsApp',
+      value: '+90 555 123 4567',
+    },
+  ];
+
+  return (
+    <section id="contact" className="py-20 bg-muted/30">
+      <div className="container mx-auto px-4">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.5 }}
+          className="text-center mb-12"
+        >
+          <h2 className="text-3xl md:text-4xl font-bold mb-4">{t('contact.title')}</h2>
+          <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
+            Have questions? Reach out to our admissions team
+          </p>
+        </motion.div>
+
+        <div className="grid lg:grid-cols-2 gap-8 max-w-5xl mx-auto">
+          <motion.div
+            initial={{ opacity: 0, x: isRTL ? 20 : -20 }}
+            whileInView={{ opacity: 1, x: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.5 }}
+          >
+            <Card className="overflow-visible">
+              <CardContent className="p-6">
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div>
+                    <Label htmlFor="name">{t('contact.name')}</Label>
+                    <Input
+                      id="name"
+                      value={formData.name}
+                      onChange={(e) =>
+                        setFormData({ ...formData, name: e.target.value.toUpperCase() })
+                      }
+                      required
+                      className="mt-1.5"
+                      data-testid="input-contact-name"
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="email">{t('contact.email')}</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      value={formData.email}
+                      onChange={(e) =>
+                        setFormData({ ...formData, email: e.target.value })
+                      }
+                      required
+                      className="mt-1.5"
+                      data-testid="input-contact-email"
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="message">{t('contact.message')}</Label>
+                    <Textarea
+                      id="message"
+                      value={formData.message}
+                      onChange={(e) =>
+                        setFormData({ ...formData, message: e.target.value })
+                      }
+                      required
+                      rows={4}
+                      className="mt-1.5 resize-none"
+                      data-testid="input-contact-message"
+                    />
+                  </div>
+
+                  <Button
+                    type="submit"
+                    className="w-full gap-2"
+                    disabled={isSubmitting}
+                    data-testid="button-contact-submit"
+                  >
+                    {isSubmitting ? 'Sending...' : t('contact.send')}
+                    <Send className="h-4 w-4" />
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, x: isRTL ? -20 : 20 }}
+            whileInView={{ opacity: 1, x: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.5, delay: 0.1 }}
+            className="space-y-4"
+          >
+            {contactInfo.map((item, index) => (
+              <Card key={index} className="overflow-visible hover-elevate">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                      <item.icon className="h-6 w-6 text-primary" />
+                    </div>
+                    <div className={isRTL ? 'text-right' : ''}>
+                      <p className="text-sm text-muted-foreground">{item.label}</p>
+                      <p className="font-medium">{item.value}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </motion.div>
+        </div>
+      </div>
+    </section>
+  );
+}

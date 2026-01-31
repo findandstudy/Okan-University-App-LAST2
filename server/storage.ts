@@ -1,38 +1,168 @@
-import { type User, type InsertUser } from "@shared/schema";
-import { randomUUID } from "crypto";
-
-// modify the interface with any CRUD methods
-// you might need
+import { db } from './db';
+import { eq, desc, and, ilike, gte, lte } from 'drizzle-orm';
+import {
+  tenants, tenantThemes, sections, menuItems, programs, leads, applications,
+  documents, adminUsers, chatSettings, chatSessions, chatMessages,
+  integrationSettings, webhookOutbox, webhookDeliveries, emailSettings,
+  emailTemplates, mediaAssets, faqItems, testimonials, trustBadges,
+  type Tenant, type InsertTenant,
+  type TenantTheme, type InsertTenantTheme,
+  type Section, type InsertSection,
+  type Program, type InsertProgram,
+  type Lead, type InsertLead,
+  type Application, type InsertApplication,
+  type Document, type InsertDocument,
+  type AdminUser, type InsertAdminUser,
+  type FaqItem, type InsertFaqItem,
+  type Testimonial, type InsertTestimonial,
+  type TrustBadge, type InsertTrustBadge,
+} from '@shared/schema';
 
 export interface IStorage {
-  getUser(id: string): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
+  // Tenants
+  getTenant(id: string): Promise<Tenant | undefined>;
+  getTenantByDomain(domain: string): Promise<Tenant | undefined>;
+  createTenant(tenant: InsertTenant): Promise<Tenant>;
+  updateTenant(id: string, data: Partial<InsertTenant>): Promise<Tenant | undefined>;
+
+  // Programs
+  getPrograms(tenantId?: string): Promise<Program[]>;
+  getProgram(id: string): Promise<Program | undefined>;
+  createProgram(program: InsertProgram): Promise<Program>;
+  updateProgram(id: string, data: Partial<InsertProgram>): Promise<Program | undefined>;
+  deleteProgram(id: string): Promise<boolean>;
+
+  // Leads
+  getLeads(tenantId?: string): Promise<Lead[]>;
+  createLead(lead: InsertLead): Promise<Lead>;
+
+  // Applications
+  getApplications(tenantId?: string): Promise<Application[]>;
+  getApplication(id: string): Promise<Application | undefined>;
+  createApplication(application: InsertApplication): Promise<Application>;
+  updateApplication(id: string, data: Partial<InsertApplication>): Promise<Application | undefined>;
+
+  // Admin Users
+  getAdminById(id: string): Promise<AdminUser | undefined>;
+  getAdminByEmail(email: string): Promise<AdminUser | undefined>;
+  createAdminUser(admin: InsertAdminUser): Promise<AdminUser>;
+
+  // Sections
+  getSections(tenantId: string): Promise<Section[]>;
+  updateSection(id: string, data: Partial<InsertSection>): Promise<Section | undefined>;
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<string, User>;
-
-  constructor() {
-    this.users = new Map();
+export class DatabaseStorage implements IStorage {
+  // Tenants
+  async getTenant(id: string): Promise<Tenant | undefined> {
+    const [tenant] = await db.select().from(tenants).where(eq(tenants.id, id));
+    return tenant;
   }
 
-  async getUser(id: string): Promise<User | undefined> {
-    return this.users.get(id);
+  async getTenantByDomain(domain: string): Promise<Tenant | undefined> {
+    const [tenant] = await db.select().from(tenants).where(eq(tenants.domain, domain));
+    return tenant;
   }
 
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username,
-    );
+  async createTenant(tenant: InsertTenant): Promise<Tenant> {
+    const [created] = await db.insert(tenants).values(tenant).returning();
+    return created;
   }
 
-  async createUser(insertUser: InsertUser): Promise<User> {
-    const id = randomUUID();
-    const user: User = { ...insertUser, id };
-    this.users.set(id, user);
-    return user;
+  async updateTenant(id: string, data: Partial<InsertTenant>): Promise<Tenant | undefined> {
+    const [updated] = await db.update(tenants).set(data).where(eq(tenants.id, id)).returning();
+    return updated;
+  }
+
+  // Programs
+  async getPrograms(tenantId?: string): Promise<Program[]> {
+    if (tenantId) {
+      return db.select().from(programs).where(eq(programs.tenantId, tenantId)).orderBy(desc(programs.createdAt));
+    }
+    return db.select().from(programs).orderBy(desc(programs.createdAt));
+  }
+
+  async getProgram(id: string): Promise<Program | undefined> {
+    const [program] = await db.select().from(programs).where(eq(programs.id, id));
+    return program;
+  }
+
+  async createProgram(program: InsertProgram): Promise<Program> {
+    const [created] = await db.insert(programs).values(program).returning();
+    return created;
+  }
+
+  async updateProgram(id: string, data: Partial<InsertProgram>): Promise<Program | undefined> {
+    const [updated] = await db.update(programs).set(data).where(eq(programs.id, id)).returning();
+    return updated;
+  }
+
+  async deleteProgram(id: string): Promise<boolean> {
+    const result = await db.delete(programs).where(eq(programs.id, id));
+    return true;
+  }
+
+  // Leads
+  async getLeads(tenantId?: string): Promise<Lead[]> {
+    if (tenantId) {
+      return db.select().from(leads).where(eq(leads.tenantId, tenantId)).orderBy(desc(leads.createdAt));
+    }
+    return db.select().from(leads).orderBy(desc(leads.createdAt));
+  }
+
+  async createLead(lead: InsertLead): Promise<Lead> {
+    const [created] = await db.insert(leads).values(lead).returning();
+    return created;
+  }
+
+  // Applications
+  async getApplications(tenantId?: string): Promise<Application[]> {
+    if (tenantId) {
+      return db.select().from(applications).where(eq(applications.tenantId, tenantId)).orderBy(desc(applications.createdAt));
+    }
+    return db.select().from(applications).orderBy(desc(applications.createdAt));
+  }
+
+  async getApplication(id: string): Promise<Application | undefined> {
+    const [application] = await db.select().from(applications).where(eq(applications.id, id));
+    return application;
+  }
+
+  async createApplication(application: InsertApplication): Promise<Application> {
+    const [created] = await db.insert(applications).values(application).returning();
+    return created;
+  }
+
+  async updateApplication(id: string, data: Partial<InsertApplication>): Promise<Application | undefined> {
+    const [updated] = await db.update(applications).set(data).where(eq(applications.id, id)).returning();
+    return updated;
+  }
+
+  // Admin Users
+  async getAdminById(id: string): Promise<AdminUser | undefined> {
+    const [admin] = await db.select().from(adminUsers).where(eq(adminUsers.id, id));
+    return admin;
+  }
+
+  async getAdminByEmail(email: string): Promise<AdminUser | undefined> {
+    const [admin] = await db.select().from(adminUsers).where(eq(adminUsers.email, email));
+    return admin;
+  }
+
+  async createAdminUser(admin: InsertAdminUser): Promise<AdminUser> {
+    const [created] = await db.insert(adminUsers).values(admin).returning();
+    return created;
+  }
+
+  // Sections
+  async getSections(tenantId: string): Promise<Section[]> {
+    return db.select().from(sections).where(eq(sections.tenantId, tenantId)).orderBy(sections.displayOrder);
+  }
+
+  async updateSection(id: string, data: Partial<InsertSection>): Promise<Section | undefined> {
+    const [updated] = await db.update(sections).set(data).where(eq(sections.id, id)).returning();
+    return updated;
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();
