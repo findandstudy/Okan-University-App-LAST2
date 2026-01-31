@@ -84,4 +84,4 @@ Preferred communication style: Simple, everyday language.
 - **Google Analytics**: GA4 measurement ID (G-XXXXXXXXXX) stored in tenant settings
 - **Google Search Console**: Site verification meta tag stored and injected into landing page head
 - **TrackingScripts Component**: Dynamically injects GA and GSC codes into page head, with update and removal handling
-- **Object Storage**: Used for logo and favicon uploads via presigned URLs
+- **Object Storage**: Used for logo and favicon uploads via server-side upload endpoint (POST /api/upload with FormData) to avoid CORS issues with presigned URLs

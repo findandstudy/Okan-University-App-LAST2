@@ -89,23 +89,31 @@ export function useUpload(options: UseUploadOptions = {}) {
    */
   const uploadToPresignedUrl = useCallback(
     async (file: File, uploadURL: string): Promise<void> => {
-      const response = await fetch(uploadURL, {
-        method: "PUT",
-        body: file,
-        headers: {
-          "Content-Type": file.type || "application/octet-stream",
-        },
-      });
+      try {
+        const response = await fetch(uploadURL, {
+          method: "PUT",
+          body: file,
+          headers: {
+            "Content-Type": file.type || "application/octet-stream",
+          },
+          mode: "cors",
+        });
 
-      if (!response.ok) {
-        throw new Error("Failed to upload file to storage");
+        if (!response.ok) {
+          const errorText = await response.text().catch(() => "Unknown error");
+          console.error("Upload response error:", response.status, errorText);
+          throw new Error(`Failed to upload file to storage: ${response.status}`);
+        }
+      } catch (err) {
+        console.error("Upload error:", err);
+        throw err;
       }
     },
     []
   );
 
   /**
-   * Upload a file using the presigned URL flow.
+   * Upload a file using server-side upload (avoids CORS issues).
    *
    * @param file - The file to upload
    * @returns The upload response containing the object path
@@ -117,19 +125,32 @@ export function useUpload(options: UseUploadOptions = {}) {
       setProgress(0);
 
       try {
-        // Step 1: Request presigned URL (send metadata as JSON)
         setProgress(10);
-        const uploadResponse = await requestUploadUrl(file);
-
-        // Step 2: Upload file directly to presigned URL
+        
+        // Create FormData and send file to server
+        const formData = new FormData();
+        formData.append("file", file);
+        
         setProgress(30);
-        await uploadToPresignedUrl(file, uploadResponse.uploadURL);
+        const response = await fetch("/api/upload", {
+          method: "POST",
+          body: formData,
+          credentials: "include",
+        });
 
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || "Upload failed");
+        }
+
+        const uploadResponse: UploadResponse = await response.json();
+        
         setProgress(100);
         options.onSuccess?.(uploadResponse);
         return uploadResponse;
       } catch (err) {
         const error = err instanceof Error ? err : new Error("Upload failed");
+        console.error("Upload error:", error);
         setError(error);
         options.onError?.(error);
         return null;
@@ -137,7 +158,7 @@ export function useUpload(options: UseUploadOptions = {}) {
         setIsUploading(false);
       }
     },
-    [requestUploadUrl, uploadToPresignedUrl, options]
+    [options]
   );
 
   /**

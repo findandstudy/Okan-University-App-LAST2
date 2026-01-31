@@ -5,7 +5,8 @@ import { z } from "zod";
 import { insertProgramSchema, insertLeadSchema, insertApplicationSchema, insertMediaAssetSchema } from "@shared/schema";
 import session from "express-session";
 import MemoryStore from "memorystore";
-import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
+import multer from "multer";
+import { registerObjectStorageRoutes, ObjectStorageService } from "./replit_integrations/object_storage";
 
 const SessionStore = MemoryStore(session);
 
@@ -55,6 +56,53 @@ export async function registerRoutes(
 
   // Register Object Storage routes
   registerObjectStorageRoutes(app);
+
+  // Server-side file upload endpoint
+  const upload = multer({ 
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
+  });
+
+  app.post("/api/upload", requireAdmin, upload.single("file"), async (req, res) => {
+    try {
+      const file = req.file;
+      if (!file) {
+        return res.status(400).json({ error: "No file uploaded" });
+      }
+
+      const objectStorageService = new ObjectStorageService();
+      
+      // Get a presigned URL for the upload
+      const uploadURL = await objectStorageService.getObjectEntityUploadURL();
+      const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
+      
+      // Upload the file from server to GCS
+      const response = await fetch(uploadURL, {
+        method: "PUT",
+        body: file.buffer,
+        headers: {
+          "Content-Type": file.mimetype || "application/octet-stream",
+        },
+      });
+
+      if (!response.ok) {
+        console.error("GCS upload failed:", response.status, await response.text());
+        return res.status(500).json({ error: "Failed to upload to storage" });
+      }
+
+      res.json({ 
+        objectPath,
+        metadata: {
+          name: file.originalname,
+          size: file.size,
+          contentType: file.mimetype,
+        }
+      });
+    } catch (error) {
+      console.error("Upload error:", error);
+      res.status(500).json({ error: "Failed to upload file" });
+    }
+  });
 
   // Admin Authentication
   app.post("/api/admin/login", async (req, res) => {
