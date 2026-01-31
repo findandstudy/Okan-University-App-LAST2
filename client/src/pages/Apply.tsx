@@ -128,7 +128,7 @@ export default function Apply() {
       for (const docType of documentTypes) {
         const file = data.documents[docType];
         if (file) {
-          const formData = new FormData();
+          const formData = new globalThis.FormData();
           formData.append('file', file);
           
           const uploadResponse = await fetch('/api/upload', {
@@ -137,13 +137,14 @@ export default function Apply() {
           });
           
           if (uploadResponse.ok) {
-            const { url } = await uploadResponse.json();
+            const uploadResult = await uploadResponse.json();
+            const fileUrl = `/api/object-storage${uploadResult.objectPath}`;
             
             // Create document record linked to application
             await apiRequest('POST', '/api/documents', {
               applicationId: application.id,
               documentType: docType,
-              fileUrl: url,
+              fileUrl: fileUrl,
               fileName: file.name,
             });
           }
