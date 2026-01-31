@@ -101,24 +101,19 @@ export function Contact() {
 
   const contactInfo = [
     {
-      icon: Mail,
-      label: 'Email',
-      value: 'apply@okanuniversity.app',
-    },
-    {
       icon: Phone,
       label: 'Phone',
-      value: '+90 212 123 4567',
+      value: '0 (216) 677 16 30',
     },
     {
       icon: MapPin,
       label: 'Address',
-      value: 'Istanbul, Turkey',
+      value: 'Istanbul Okan University Campus',
     },
     {
       icon: MessageCircle,
       label: 'WhatsApp',
-      value: '+90 555 123 4567',
+      value: '+90 552 689 85 15',
     },
   ];
 
