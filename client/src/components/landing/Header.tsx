@@ -6,6 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Menu, GraduationCap } from 'lucide-react';
 
+const LOGO_CACHE_KEY = 'cached_logo_url';
+const NAME_CACHE_KEY = 'cached_university_name';
+
 interface HeaderProps {
   universityName?: string;
   logoUrl?: string;
@@ -15,10 +18,47 @@ export function Header({ universityName = 'University', logoUrl }: HeaderProps) 
   const { t, isRTL } = useI18n();
   const [isOpen, setIsOpen] = useState(false);
   const [logoError, setLogoError] = useState(false);
+  
+  // Use cached values for instant display, then update with fresh data
+  const [cachedLogoUrl] = useState(() => {
+    try {
+      return localStorage.getItem(LOGO_CACHE_KEY) || '';
+    } catch {
+      return '';
+    }
+  });
+  const [cachedName] = useState(() => {
+    try {
+      return localStorage.getItem(NAME_CACHE_KEY) || '';
+    } catch {
+      return '';
+    }
+  });
+
+  // Cache the logo URL and name when they change
+  useEffect(() => {
+    if (logoUrl && logoUrl.trim() !== '') {
+      try {
+        localStorage.setItem(LOGO_CACHE_KEY, logoUrl);
+      } catch {}
+    }
+  }, [logoUrl]);
+
+  useEffect(() => {
+    if (universityName && universityName !== 'University') {
+      try {
+        localStorage.setItem(NAME_CACHE_KEY, universityName);
+      } catch {}
+    }
+  }, [universityName]);
 
   useEffect(() => {
     setLogoError(false);
   }, [logoUrl]);
+  
+  // Use the prop value if available, otherwise fall back to cached value
+  const displayLogoUrl = logoUrl || cachedLogoUrl;
+  const displayName = universityName !== 'University' ? universityName : (cachedName || universityName);
 
   const navItems = [
     { key: 'nav.home', href: '#hero' },
@@ -39,10 +79,10 @@ export function Header({ universityName = 'University', logoUrl }: HeaderProps) 
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container mx-auto flex h-16 items-center justify-between px-4">
         <div className="flex items-center gap-3">
-          {logoUrl && logoUrl.trim() !== '' && !logoError ? (
+          {displayLogoUrl && displayLogoUrl.trim() !== '' && !logoError ? (
             <img 
-              src={logoUrl} 
-              alt={universityName} 
+              src={displayLogoUrl} 
+              alt={displayName} 
               className="h-10 w-auto"
               onError={() => setLogoError(true)}
             />
@@ -51,7 +91,7 @@ export function Header({ universityName = 'University', logoUrl }: HeaderProps) 
               <div className="rounded-lg bg-primary p-2">
                 <GraduationCap className="h-5 w-5 text-primary-foreground" />
               </div>
-              <span className="font-semibold text-lg">{universityName}</span>
+              <span className="font-semibold text-lg">{displayName}</span>
             </div>
           )}
         </div>
