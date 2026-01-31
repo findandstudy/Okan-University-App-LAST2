@@ -1,15 +1,26 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
-import { Webhook, MessageSquare, Send, CheckCircle } from 'lucide-react';
+import { apiRequest, queryClient } from '@/lib/queryClient';
+import { Webhook, MessageSquare, Send, CheckCircle, BarChart3, Search, Loader2 } from 'lucide-react';
 import AdminLayout from './AdminLayout';
+import type { Tenant } from '@shared/schema';
 
 export default function Integrations() {
   const { toast } = useToast();
+  
+  const [googleSettings, setGoogleSettings] = useState({
+    googleAnalyticsId: '',
+    googleSearchConsoleCode: '',
+  });
+
   const [portalSettings, setPortalSettings] = useState({
     enabled: true,
     webhookUrl: 'https://portal.findandstudy.com/api/webhook',
@@ -20,6 +31,39 @@ export default function Integrations() {
     enabled: false,
     webhookUrl: '',
     webhookSecret: '',
+  });
+
+  const { data: tenant, isLoading } = useQuery<Tenant>({
+    queryKey: ['/api/tenant'],
+  });
+
+  useEffect(() => {
+    if (tenant) {
+      setGoogleSettings({
+        googleAnalyticsId: tenant.googleAnalyticsId || '',
+        googleSearchConsoleCode: tenant.googleSearchConsoleCode || '',
+      });
+    }
+  }, [tenant]);
+
+  const updateGoogleMutation = useMutation({
+    mutationFn: async (data: typeof googleSettings) => {
+      const response = await apiRequest('PATCH', '/api/tenant', data);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/tenant'] });
+      toast({
+        title: 'Google settings saved',
+        description: 'Analytics and Search Console settings have been updated.',
+      });
+    },
+    onError: () => {
+      toast({
+        title: 'Failed to save settings',
+        variant: 'destructive',
+      });
+    },
   });
 
   const handleTestWebhook = (type: 'portal' | 'n8n') => {
@@ -36,13 +80,110 @@ export default function Integrations() {
     });
   };
 
+  const handleSaveGoogle = () => {
+    updateGoogleMutation.mutate(googleSettings);
+  };
+
+  if (isLoading) {
+    return (
+      <AdminLayout>
+        <div className="p-6 space-y-6">
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-64 w-full" />
+        </div>
+      </AdminLayout>
+    );
+  }
+
   return (
     <AdminLayout>
       <div className="p-6 space-y-6">
         <div>
           <h1 className="text-2xl font-bold">Integrations</h1>
-          <p className="text-muted-foreground">Configure webhooks and external services</p>
+          <p className="text-muted-foreground">Configure analytics, tracking, and external services</p>
         </div>
+
+        <div className="space-y-6">
+          <h2 className="text-lg font-semibold">Google Services</h2>
+          
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center">
+                  <BarChart3 className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+                </div>
+                <div>
+                  <CardTitle>Google Analytics</CardTitle>
+                  <CardDescription>Track website traffic and user behavior</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <Label htmlFor="ga-id">Measurement ID</Label>
+                <Input
+                  id="ga-id"
+                  value={googleSettings.googleAnalyticsId}
+                  onChange={(e) =>
+                    setGoogleSettings({ ...googleSettings, googleAnalyticsId: e.target.value })
+                  }
+                  placeholder="G-XXXXXXXXXX"
+                  className="mt-1.5 font-mono"
+                  data-testid="input-google-analytics-id"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Enter your Google Analytics 4 measurement ID (starts with G-)
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                  <Search className="h-5 w-5 text-green-600 dark:text-green-400" />
+                </div>
+                <div>
+                  <CardTitle>Google Search Console</CardTitle>
+                  <CardDescription>Verify your site ownership for search indexing</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <Label htmlFor="gsc-code">Verification Meta Tag</Label>
+                <Textarea
+                  id="gsc-code"
+                  value={googleSettings.googleSearchConsoleCode}
+                  onChange={(e) =>
+                    setGoogleSettings({ ...googleSettings, googleSearchConsoleCode: e.target.value })
+                  }
+                  placeholder='<meta name="google-site-verification" content="..." />'
+                  className="mt-1.5 font-mono text-sm min-h-[80px]"
+                  data-testid="input-google-search-console"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Paste the full meta tag from Google Search Console
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="flex justify-end">
+            <Button 
+              onClick={handleSaveGoogle} 
+              disabled={updateGoogleMutation.isPending}
+              data-testid="button-save-google"
+            >
+              {updateGoogleMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Save Google Settings
+            </Button>
+          </div>
+        </div>
+
+        <div className="space-y-6 pt-6 border-t">
+          <h2 className="text-lg font-semibold">Webhook Integrations</h2>
 
         <div className="grid gap-6">
           <Card>
@@ -195,6 +336,7 @@ export default function Integrations() {
           <Button onClick={handleSave} data-testid="button-save-integrations">
             Save Changes
           </Button>
+        </div>
         </div>
       </div>
     </AdminLayout>

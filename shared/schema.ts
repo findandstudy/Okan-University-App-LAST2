@@ -15,6 +15,8 @@ export const tenants = pgTable("tenants", {
   universityName: text("university_name").notNull(),
   logoUrl: text("logo_url"),
   faviconUrl: text("favicon_url"),
+  googleAnalyticsId: text("google_analytics_id"),
+  googleSearchConsoleCode: text("google_search_console_code"),
   isActive: boolean("is_active").default(true),
   createdAt: timestamp("created_at").defaultNow(),
 });
