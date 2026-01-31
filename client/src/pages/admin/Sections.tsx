@@ -11,16 +11,24 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
-import { GripVertical, Eye, EyeOff, Loader2, Pencil } from 'lucide-react';
+import { GripVertical, Eye, EyeOff, Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import AdminLayout from './AdminLayout';
 import type { Section, ContentByLang, SupportedLanguage } from '@shared/schema';
 
-const DEFAULT_SECTIONS = [
+const SECTION_TYPES = [
   { key: 'hero', label: 'Hero Section' },
   { key: 'trust_badges', label: 'Trust Badges' },
   { key: 'program_finder', label: 'Program Finder' },
@@ -28,7 +36,12 @@ const DEFAULT_SECTIONS = [
   { key: 'testimonials', label: 'Testimonials' },
   { key: 'faq', label: 'FAQ' },
   { key: 'contact', label: 'Contact Form' },
+  { key: 'custom', label: 'Custom Section' },
 ];
+
+const getSectionLabel = (key: string) => {
+  return SECTION_TYPES.find(s => s.key === key)?.label || key;
+};
 
 const LANGUAGES: { code: SupportedLanguage; label: string }[] = [
   { code: 'en', label: 'English' },
@@ -68,6 +81,9 @@ export default function Sections() {
   const [sectionStates, setSectionStates] = useState<SectionState[]>([]);
   const [editingSection, setEditingSection] = useState<SectionState | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [newSectionDialogOpen, setNewSectionDialogOpen] = useState(false);
+  const [newSectionKey, setNewSectionKey] = useState('');
+  const [customSectionName, setCustomSectionName] = useState('');
   const [activeLanguage, setActiveLanguage] = useState<SupportedLanguage>('en');
   const [contentForms, setContentForms] = useState<Record<SupportedLanguage, ContentForm>>({
     en: { ...emptyContentForm },
@@ -88,19 +104,9 @@ export default function Sections() {
         sections.map((section) => ({
           id: section.id,
           key: section.sectionKey,
-          label: DEFAULT_SECTIONS.find((s) => s.key === section.sectionKey)?.label || section.sectionKey,
+          label: getSectionLabel(section.sectionKey),
           isEnabled: section.isEnabled ?? true,
           contentByLang: section.contentByLang,
-        }))
-      );
-    } else {
-      setSectionStates(
-        DEFAULT_SECTIONS.map((s, index) => ({
-          id: `temp-${index}`,
-          key: s.key,
-          label: s.label,
-          isEnabled: true,
-          contentByLang: null,
         }))
       );
     }
@@ -143,6 +149,48 @@ export default function Sections() {
     onError: () => {
       toast({
         title: 'Failed to save content',
+        variant: 'destructive',
+      });
+    },
+  });
+
+  const createSectionMutation = useMutation({
+    mutationFn: async (data: { sectionKey: string; displayOrder: number }) => {
+      const response = await apiRequest('POST', '/api/sections', data);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/sections'] });
+      toast({
+        title: 'Section created',
+        description: 'New section has been added.',
+      });
+      setNewSectionDialogOpen(false);
+      setNewSectionKey('');
+      setCustomSectionName('');
+    },
+    onError: () => {
+      toast({
+        title: 'Failed to create section',
+        variant: 'destructive',
+      });
+    },
+  });
+
+  const deleteSectionMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest('DELETE', `/api/sections/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/sections'] });
+      toast({
+        title: 'Section deleted',
+        description: 'Section has been removed.',
+      });
+    },
+    onError: () => {
+      toast({
+        title: 'Failed to delete section',
         variant: 'destructive',
       });
     },
@@ -241,6 +289,36 @@ export default function Sections() {
     updateContentMutation.mutate({ id: editingSection.id, contentByLang });
   };
 
+  const handleCreateSection = () => {
+    if (!newSectionKey) {
+      toast({
+        title: 'Please select a section type',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
+    const sectionKey = newSectionKey === 'custom' 
+      ? (customSectionName.toLowerCase().replace(/\s+/g, '_') || 'custom_section')
+      : newSectionKey;
+    
+    const maxOrder = sectionStates.reduce((max, s) => {
+      const order = sections.find(sec => sec.id === s.id)?.displayOrder ?? 0;
+      return Math.max(max, order);
+    }, 0);
+    
+    createSectionMutation.mutate({
+      sectionKey,
+      displayOrder: maxOrder + 1,
+    });
+  };
+
+  const handleDeleteSection = (section: SectionState) => {
+    if (confirm(`Are you sure you want to delete "${section.label}"?`)) {
+      deleteSectionMutation.mutate(section.id);
+    }
+  };
+
   if (isLoading) {
     return (
       <AdminLayout>
@@ -261,21 +339,35 @@ export default function Sections() {
         </div>
 
         <Card>
-          <CardHeader>
-            <CardTitle>Landing Page Sections</CardTitle>
-            <CardDescription>
-              Enable or disable sections and edit their content
-            </CardDescription>
+          <CardHeader className="flex flex-row items-center justify-between gap-4">
+            <div>
+              <CardTitle>Landing Page Sections</CardTitle>
+              <CardDescription>
+                Enable or disable sections and edit their content
+              </CardDescription>
+            </div>
+            <Button 
+              onClick={() => setNewSectionDialogOpen(true)}
+              data-testid="button-add-section"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Add Section
+            </Button>
           </CardHeader>
           <CardContent>
+            {sectionStates.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <p>No sections yet. Click "Add Section" to create your first section.</p>
+              </div>
+            ) : (
             <div className="space-y-2">
               {sectionStates.map((section) => (
                 <div
-                  key={section.key}
+                  key={section.id}
                   className={`flex items-center gap-4 p-4 rounded-lg border transition-colors ${
                     section.isEnabled ? 'bg-card' : 'bg-muted/50'
                   }`}
-                  data-testid={`section-item-${section.key}`}
+                  data-testid={`section-item-${section.id}`}
                 >
                   <div className="cursor-grab text-muted-foreground">
                     <GripVertical className="h-5 w-5" />
@@ -295,9 +387,20 @@ export default function Sections() {
                     size="icon"
                     onClick={() => handleEditSection(section)}
                     title="Edit content"
-                    data-testid={`button-edit-section-${section.key}`}
+                    data-testid={`button-edit-section-${section.id}`}
                   >
                     <Pencil className="h-4 w-4" />
+                  </Button>
+
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => handleDeleteSection(section)}
+                    title="Delete section"
+                    disabled={deleteSectionMutation.isPending}
+                    data-testid={`button-delete-section-${section.id}`}
+                  >
+                    <Trash2 className="h-4 w-4 text-destructive" />
                   </Button>
 
                   <div className="flex items-center gap-3">
@@ -315,6 +418,7 @@ export default function Sections() {
                 </div>
               ))}
             </div>
+            )}
           </CardContent>
         </Card>
 
@@ -334,6 +438,9 @@ export default function Sections() {
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit {editingSection?.label} Content</DialogTitle>
+            <DialogDescription>
+              Manage content for this section in all supported languages.
+            </DialogDescription>
           </DialogHeader>
           
           <Tabs value={activeLanguage} onValueChange={(v) => setActiveLanguage(v as SupportedLanguage)}>
@@ -428,6 +535,72 @@ export default function Sections() {
             >
               {updateContentMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               Save Content
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={newSectionDialogOpen} onOpenChange={setNewSectionDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add New Section</DialogTitle>
+            <DialogDescription>
+              Choose a section type to add to your landing page.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="section-type">Section Type</Label>
+              <Select value={newSectionKey} onValueChange={setNewSectionKey}>
+                <SelectTrigger data-testid="select-section-type">
+                  <SelectValue placeholder="Select a section type" />
+                </SelectTrigger>
+                <SelectContent>
+                  {SECTION_TYPES.map((type) => (
+                    <SelectItem key={type.key} value={type.key}>
+                      {type.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            {newSectionKey === 'custom' && (
+              <div className="space-y-2">
+                <Label htmlFor="custom-name">Custom Section Name</Label>
+                <Input
+                  id="custom-name"
+                  value={customSectionName}
+                  onChange={(e) => setCustomSectionName(e.target.value)}
+                  placeholder="Enter section name"
+                  data-testid="input-custom-section-name"
+                />
+              </div>
+            )}
+          </div>
+
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setNewSectionDialogOpen(false);
+                setNewSectionKey('');
+                setCustomSectionName('');
+              }}
+              className="flex-1"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleCreateSection}
+              disabled={createSectionMutation.isPending}
+              className="flex-1"
+              data-testid="button-create-section"
+            >
+              {createSectionMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Create Section
             </Button>
           </div>
         </DialogContent>

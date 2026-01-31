@@ -54,8 +54,10 @@ export interface IStorage {
 
   // Sections
   getSections(tenantId: string): Promise<Section[]>;
+  createSection(section: InsertSection): Promise<Section>;
   updateSection(id: string, data: Partial<InsertSection>): Promise<Section | undefined>;
   updateSections(updates: Array<{ id: string; isEnabled: boolean }>): Promise<Section[]>;
+  deleteSection(id: string, tenantId: string): Promise<boolean>;
 
   // Themes
   getTheme(tenantId: string): Promise<TenantTheme | undefined>;
@@ -186,6 +188,11 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(sections).where(eq(sections.tenantId, tenantId)).orderBy(sections.displayOrder);
   }
 
+  async createSection(section: InsertSection): Promise<Section> {
+    const [created] = await db.insert(sections).values(section as any).returning();
+    return created;
+  }
+
   async updateSection(id: string, data: Partial<InsertSection>): Promise<Section | undefined> {
     const [updated] = await db.update(sections).set(data as any).where(eq(sections.id, id)).returning();
     return updated;
@@ -201,6 +208,13 @@ export class DatabaseStorage implements IStorage {
       if (updated) results.push(updated);
     }
     return results;
+  }
+
+  async deleteSection(id: string, tenantId: string): Promise<boolean> {
+    const result = await db.delete(sections)
+      .where(and(eq(sections.id, id), eq(sections.tenantId, tenantId)))
+      .returning();
+    return result.length > 0;
   }
 
   // Themes

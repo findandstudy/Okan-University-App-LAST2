@@ -393,6 +393,45 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/sections", requireAdmin, async (req, res) => {
+    try {
+      const tenantId = getTenantId(req);
+      const { sectionKey, displayOrder, isEnabled, contentByLang, settings } = req.body;
+      
+      if (!sectionKey) {
+        return res.status(400).json({ error: "sectionKey is required" });
+      }
+      
+      const section = await storage.createSection({
+        tenantId,
+        sectionKey,
+        displayOrder: displayOrder ?? 0,
+        isEnabled: isEnabled ?? true,
+        contentByLang: contentByLang ?? null,
+        settings: settings ?? null,
+      });
+      
+      res.status(201).json(section);
+    } catch (error) {
+      console.error("Error creating section:", error);
+      res.status(500).json({ error: "Failed to create section" });
+    }
+  });
+
+  app.delete("/api/sections/:id", requireAdmin, async (req, res) => {
+    try {
+      const tenantId = getTenantId(req);
+      const deleted = await storage.deleteSection(req.params.id as string, tenantId);
+      if (!deleted) {
+        return res.status(404).json({ error: "Section not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting section:", error);
+      res.status(500).json({ error: "Failed to delete section" });
+    }
+  });
+
   app.patch("/api/sections/:id", requireAdmin, async (req, res) => {
     try {
       const section = await storage.updateSection(req.params.id as string, req.body);
