@@ -73,7 +73,7 @@ export function Hero({ title, subtitle, ctaLabel, backgroundImage }: HeroProps) 
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
               </span>
-              Applications Open for 2025
+              Applications Open for 2026
             </div>
 
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight mb-6 leading-tight">
