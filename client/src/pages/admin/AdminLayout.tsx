@@ -34,6 +34,7 @@ import {
   MessageSquareQuote,
   HelpCircle,
   Sparkles,
+  BadgeCheck,
 } from 'lucide-react';
 import type { Tenant } from '@shared/schema';
 
@@ -46,6 +47,7 @@ const menuItems = [
   { title: 'Tenant', url: '/admin/tenant', icon: Building },
   { title: 'Theme', url: '/admin/theme', icon: Palette },
   { title: 'Hero Content', url: '/admin/hero', icon: Sparkles },
+  { title: 'Why Choose Us', url: '/admin/why-choose-us', icon: BadgeCheck },
   { title: 'Sections', url: '/admin/sections', icon: LayoutList },
   { title: 'Contact Form', url: '/admin/contact-form', icon: FormInput },
   { title: 'Media', url: '/admin/media', icon: Image },
