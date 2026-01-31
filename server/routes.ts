@@ -39,6 +39,13 @@ export async function registerRoutes(
   // Trust proxy for Replit's HTTPS termination
   app.set('trust proxy', 1);
   
+  // Allow embedding for /embed/* routes
+  app.use('/embed', (_req, res, next) => {
+    res.setHeader('X-Frame-Options', 'ALLOWALL');
+    res.setHeader('Content-Security-Policy', "frame-ancestors *");
+    next();
+  });
+  
   app.use(session({
     secret: process.env.SESSION_SECRET || 'university-platform-secret-key',
     resave: false,
