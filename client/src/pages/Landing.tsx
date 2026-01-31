@@ -9,6 +9,7 @@ import { FAQ } from '@/components/landing/FAQ';
 import { Contact } from '@/components/landing/Contact';
 import { Footer } from '@/components/landing/Footer';
 import { ChatWidget } from '@/components/ChatWidget';
+import TrackingScripts from '@/components/TrackingScripts';
 import type { Tenant } from '@shared/schema';
 
 export default function Landing() {
@@ -21,6 +22,7 @@ export default function Landing() {
 
   return (
     <div className="min-h-screen flex flex-col">
+      <TrackingScripts />
       <Header universityName={universityName} logoUrl={logoUrl} />
       <main className="flex-1">
         <Hero />

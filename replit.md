@@ -79,3 +79,9 @@ Preferred communication style: Simple, everyday language.
 - **Vite**: Frontend build and dev server with HMR
 - **esbuild**: Server-side bundling
 - **Drizzle Kit**: Database migrations and schema management
+
+### Integrations
+- **Google Analytics**: GA4 measurement ID (G-XXXXXXXXXX) stored in tenant settings
+- **Google Search Console**: Site verification meta tag stored and injected into landing page head
+- **TrackingScripts Component**: Dynamically injects GA and GSC codes into page head, with update and removal handling
+- **Object Storage**: Used for logo and favicon uploads via presigned URLs
