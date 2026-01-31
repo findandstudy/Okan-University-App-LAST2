@@ -1,0 +1,254 @@
+You are a senior full-stack engineer. Build a production-ready, multi-tenant landing page + admin panel platform to run on Replit.
+
+PROJECT NAME
+- "university-landing-platform"
+
+PRIMARY GOAL
+- We will host the first tenant at: okanuniversity.app
+- This platform is for paid-ads traffic: high conversion, fast, technically SEO-correct, and easy to customize per university via an admin panel.
+- The main site already exists elsewhere; this app is purely conversion landing + application intake + automations.
+
+LANGUAGES / CONTENT
+- Default site language: English (en)
+- Also support: Arabic (ar), Turkish (tr), French (fr), Russian (ru), Farsi (fa)
+- Admin must be able to enter content for each language.
+- Public landing must have a language switcher.
+- If a piece of content is missing in a language, fallback to English.
+- RTL must be supported for Arabic + Farsi (html dir="rtl" + proper UI alignment).
+
+MUST-HAVE FEATURES (PUBLIC)
+1) Landing Page
+- WhatsApp-style minimal conversion layout:
+  - Hero section with university name, main promise, CTA
+  - Trust badges section
+  - Program Finder section with filters
+  - "3 steps" application process section
+  - Testimonials section (optional)
+  - FAQ section (optional)
+  - Contact / Footer
+- ALL of the above sections must be togglable (visible on/off) from admin.
+- Menu structure (which sections appear + order + labels) must be controlled by admin.
+
+2) Program Finder
+- Student can filter and select programs.
+- Programs fields:
+  - University
+  - Program Name
+  - Degree
+  - Language
+  - Tuition Fee
+  - Our Discounted Fee
+  - (optional but recommended) external_program_id (for mapping to portal)
+- Filters: Degree, Language, Fee range, search by name.
+- Program selection must start the application flow without creating SEO-bloating query-param URLs.
+- Use clean routes like:
+/[lang]/apply -> application wizard
+/[lang]/programs -> optional listing (can be embedded on landing)
+
+3) Application Flow (Wizard)
+- Step 1: Lead capture (Full name, phone with country code, email)
+- Step 2: Program confirmation (selected program)
+- Step 3: Document upload + AI checks + autofill
+- Step 4: Review & Submit
+- Enforce ALL user-entered text data to be ENGLISH UPPERCASE:
+  - On frontend: auto-transform to uppercase (onChange)
+  - On backend: validate and reject lowercase or transform before persistence
+- When application is submitted:
+  - Store application + docs metadata
+  - Trigger outbound webhook to portal.findandstudy.com (see Integration section)
+  - Send confirmation email to the student (multi-language template)
+
+4) Chatbot Widget (WhatsApp look)
+- A floating chat button (bottom corner), openable into WhatsApp-style chat UI.
+- Admin can enable/disable chatbot per tenant.
+- Admin can set welcome message per language.
+- Messages are sent to backend endpoint; backend forwards to n8n webhook and returns AI response.
+- Include support for:
+  - session_id
+  - tenant_id
+  - language
+  - selected_program_id (if any)
+- The widget must look like WhatsApp: message bubbles, timestamps, typing indicator, input bar.
+
+ADMIN PANEL REQUIREMENTS
+- Route: /admin
+- Authentication required (simple but secure). Use NextAuth credentials OR a simple admin login with hashed passwords.
+- Admin can manage:
+  1) Tenant / University identity
+     - University name, domain, logo, favicon
+  2) Theme
+     - primary color, secondary color, background, text colors, button style, font
+  3) Sections & Menu Builder
+     - Toggle each section on/off
+     - Order sections (drag/drop if easy)
+     - For each section: multilingual content fields (title, subtitle, body, CTA label)
+  4) Media manager
+     - Upload/manage images, hero video URL, slider images
+  5) Programs
+     - CRUD programs
+     - Bulk upload via CSV (and download template)
+     - Bulk update fees
+  6) Integrations
+     - Portal webhook settings (url + secret + enable/disable)
+     - n8n chatbot webhook settings (url + secret + enable/disable)
+     - Optional generic outgoing webhooks/events list
+  7) Email Notifications
+     - Enable/disable
+     - SMTP settings OR SendGrid API key
+     - Multi-language templates (subject + HTML + text)
+     - Test email
+  8) Application inbox
+     - List applications, statuses, logs
+     - See AI checks result + extracted fields
+     - Resend portal webhook if failed
+     - Resend confirmation email if failed
+  9) Delivery logs
+     - Webhook deliveries with retries and final status
+
+INTEGRATION: PORTAL.FINDANDSTUDY.COM (CRITICAL)
+- On application submission, POST data to portal.findandstudy.com webhook.
+- Implement robust delivery using an Outbox table + worker:
+  - Never lose events
+  - Retry with exponential backoff
+  - Idempotency key to avoid duplicates
+- Security:
+  - HMAC-SHA256 signature header over raw body using shared secret
+  - Timestamp header
+  - Idempotency key header
+- Payload must include:
+  - tenant domain and university name
+  - application_id, status, submitted_at
+  - applicant (UPPERCASE)
+  - program info (UPPERCASE + fees)
+  - documents array with secure file URLs (do NOT send large binaries)
+  - utm parameters (if available)
+- Provide a “Test webhook” button in admin.
+
+DOCUMENT UPLOAD + AI CHECKS (MVP + EXTENSIBLE)
+- Student uploads documents (passport, diploma, transcript, etc.).
+- Store files in a simple storage:
+  - Prefer S3-compatible (if available) but include local disk storage fallback in Replit.
+- After upload:
+  - Run checks:
+    - expiry date validity (passport)
+    - name match between documents and form
+    - age check from birth date
+    - grade/eligibility check (basic rules)
+  - Extract fields to auto-fill missing form fields.
+- Because OCR/AI providers vary, build it as a pluggable pipeline:
+  - interface: DocumentProcessor
+  - default implementation: stub/mock extraction + simple regex parsing
+  - optional integration: call an external AI/OCR webhook if configured
+- Save extracted fields and checks into DB.
+
+TECHNICAL SEO REQUIREMENTS
+- Multi-language routing:
+  - /en, /ar, /tr, /fr, /ru, /fa
+- Add proper tags:
+  - canonical
+  - hreflang alternates for each language
+  - OpenGraph + Twitter cards
+- Generate sitemap.xml and robots.txt
+- Avoid query-param index bloat.
+- Ensure fast performance:
+  - image optimization (WebP where possible)
+  - lazy loading
+  - avoid huge DOM lists; use pagination/virtualization for programs list if needed
+
+STACK / IMPLEMENTATION (REPLIT FRIENDLY)
+- Use Next.js (App Router) + TypeScript + Tailwind CSS
+- Use Prisma ORM + PostgreSQL (Neon/Supabase/Replit DB if available; provide clear env config).
+- Use Zod for validation.
+- Use a simple component library (shadcn/ui optional).
+- Provide a worker script for webhook/email outbox processing:
+  - `npm run worker`
+  - In Replit, provide instructions to run web + worker (two repls or one with a process manager).
+- Provide a seed script:
+  - Creates default tenant for okanuniversity.app
+  - Adds sample sections and sample programs
+  - Creates admin user
+
+DATABASE MODELS (MINIMUM)
+- tenants
+- tenant_theme
+- sections (key, order, is_enabled, content_json_by_lang)
+- media_assets
+- programs
+- leads
+- applications
+- documents
+- ai_extractions
+- chat_settings
+- chat_sessions
+- chat_messages
+- integration_settings (portal + n8n + others)
+- webhook_outbox + webhook_deliveries
+- email_settings + email_templates + email_outbox + email_deliveries
+- audit_logs
+
+API ROUTES (MINIMUM)
+- POST /api/leads
+- POST /api/applications/start
+- POST /api/applications/submit
+- POST /api/upload (multipart)
+- POST /api/chat/send (forwards to n8n)
+- GET /sitemap.xml
+- GET /robots.txt
+
+ADMIN UI PAGES (MINIMUM)
+- /admin/login
+- /admin/dashboard
+- /admin/tenant
+- /admin/theme
+- /admin/sections (toggle + order + multilingual content)
+- /admin/media
+- /admin/programs (table + csv upload)
+- /admin/applications
+- /admin/integrations (portal + n8n)
+- /admin/email (settings + templates)
+- /admin/logs (webhook + email deliveries)
+
+CSV BULK UPLOAD
+- Provide a downloadable template.
+- Required columns:
+  - university
+  - program_name
+  - degree
+  - language
+  - tuition_fee
+  - discounted_fee
+- Optional columns:
+  - external_program_id
+
+QUALITY BAR / ACCEPTANCE CRITERIA
+- The app runs on Replit with clear setup steps and env examples.
+- Admin can fully customize:
+  - logos, media, theme colors
+  - enable/disable sections including chatbot
+  - manage menu/order
+  - bulk upload programs
+  - configure portal webhook and n8n webhook
+  - configure email provider and templates
+- Public site:
+  - supports 6 languages with RTL
+  - fast, mobile-friendly, conversion-focused
+  - program filtering works
+  - application wizard works
+- On submit:
+  - application saved
+  - portal webhook queued and delivered with retry/outbox
+  - confirmation email queued and sent with retry/outbox
+  - logs visible in admin
+
+DELIVERABLES YOU MUST OUTPUT
+1) Full repository code (Next.js app + prisma schema + worker)
+2) README with step-by-step setup for Replit (env vars, DB, run scripts)
+3) .env.example with all required keys
+4) CSV template file
+5) Seed script and initial data
+
+DO NOT ASK CLARIFYING QUESTIONS.
+Make sensible defaults.
+If something is optional, implement stubs with clear extension points.
+Ensure everything is consistent with the requirements above.
+Build it now.
