@@ -106,8 +106,8 @@ export function Footer({
             <h4 className="font-semibold mb-4">Contact</h4>
             <ul className="space-y-2 text-muted-foreground">
               <li>apply@okanuniversity.app</li>
-              <li>+90 212 123 4567</li>
-              <li>Istanbul, Turkey</li>
+              <li>+90 552 689 85 15</li>
+              <li>Istanbul Okan University Campus</li>
             </ul>
           </div>
         </div>
