@@ -33,6 +33,7 @@ import {
   FormInput,
   MessageSquareQuote,
   HelpCircle,
+  Sparkles,
 } from 'lucide-react';
 import type { Tenant } from '@shared/schema';
 
@@ -44,6 +45,7 @@ const menuItems = [
   { title: 'Dashboard', url: '/admin', icon: LayoutDashboard },
   { title: 'Tenant', url: '/admin/tenant', icon: Building },
   { title: 'Theme', url: '/admin/theme', icon: Palette },
+  { title: 'Hero Content', url: '/admin/hero', icon: Sparkles },
   { title: 'Sections', url: '/admin/sections', icon: LayoutList },
   { title: 'Contact Form', url: '/admin/contact-form', icon: FormInput },
   { title: 'Media', url: '/admin/media', icon: Image },

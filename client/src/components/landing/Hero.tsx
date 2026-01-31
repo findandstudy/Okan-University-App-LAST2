@@ -4,7 +4,22 @@ import { useI18n } from '@/lib/i18n';
 import { Button } from '@/components/ui/button';
 import { ArrowRight, Play, CheckCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
-import type { Tenant } from '@shared/schema';
+import type { Tenant, Section, SupportedLanguage } from '@shared/schema';
+
+interface HeroSettings {
+  badge?: Record<SupportedLanguage, string>;
+  title?: Record<SupportedLanguage, string>;
+  subtitle?: Record<SupportedLanguage, string>;
+  features?: Record<SupportedLanguage, string[]>;
+  stats?: {
+    stat1Value?: string;
+    stat1Label?: Record<SupportedLanguage, string>;
+    stat1Sublabel?: Record<SupportedLanguage, string>;
+    stat2Value?: string;
+    stat2Label?: Record<SupportedLanguage, string>;
+    stat2Sublabel?: Record<SupportedLanguage, string>;
+  };
+}
 
 interface HeroProps {
   title?: string;
@@ -35,20 +50,44 @@ function getYouTubeEmbedUrl(url: string): string {
 }
 
 export function Hero({ title, subtitle, ctaLabel, backgroundImage }: HeroProps) {
-  const { t, isRTL } = useI18n();
+  const { t, isRTL, language } = useI18n();
   
   const { data: tenant } = useQuery<Tenant>({
     queryKey: ['/api/tenant'],
   });
 
+  const { data: sections = [] } = useQuery<Section[]>({
+    queryKey: ['/api/sections'],
+  });
+
+  const heroSection = sections.find(s => s.sectionKey === 'hero');
+  const heroSettings = heroSection?.settings as HeroSettings | undefined;
+
   const heroVideoUrl = tenant?.heroVideoUrl || '';
   const embedUrl = getYouTubeEmbedUrl(heroVideoUrl);
 
-  const features = [
+  const lang = language as SupportedLanguage;
+  
+  const badgeText = heroSettings?.badge?.[lang] || heroSettings?.badge?.en || 'Applications Open for 2026';
+  const heroTitle = title || heroSettings?.title?.[lang] || heroSettings?.title?.en || t('hero.title');
+  const heroSubtitle = subtitle || heroSettings?.subtitle?.[lang] || heroSettings?.subtitle?.en || t('hero.subtitle');
+  
+  const defaultFeatures = [
     'Scholarship opportunities up to 50%',
     'Full visa and admission support',
     '48-hour application processing',
   ];
+  const features = heroSettings?.features?.[lang]?.length 
+    ? heroSettings.features[lang] 
+    : (heroSettings?.features?.en?.length ? heroSettings.features.en : defaultFeatures);
+
+  const stat1Value = heroSettings?.stats?.stat1Value || '50+';
+  const stat1Label = heroSettings?.stats?.stat1Label?.[lang] || heroSettings?.stats?.stat1Label?.en || 'Programs';
+  const stat1Sublabel = heroSettings?.stats?.stat1Sublabel?.[lang] || heroSettings?.stats?.stat1Sublabel?.en || 'Available';
+  
+  const stat2Value = heroSettings?.stats?.stat2Value || '98%';
+  const stat2Label = heroSettings?.stats?.stat2Label?.[lang] || heroSettings?.stats?.stat2Label?.en || 'Success Rate';
+  const stat2Sublabel = heroSettings?.stats?.stat2Sublabel?.[lang] || heroSettings?.stats?.stat2Sublabel?.en || 'Visa Approval';
 
   return (
     <section
@@ -73,15 +112,15 @@ export function Hero({ title, subtitle, ctaLabel, backgroundImage }: HeroProps) 
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
               </span>
-              Applications Open for 2026
+              {badgeText}
             </div>
 
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight mb-6 leading-tight">
-              {title || t('hero.title')}
+              {heroTitle}
             </h1>
 
             <p className="text-xl text-muted-foreground mb-8 max-w-xl">
-              {subtitle || t('hero.subtitle')}
+              {heroSubtitle}
             </p>
 
             <div className="flex flex-wrap gap-4 mb-10">
@@ -152,11 +191,11 @@ export function Hero({ title, subtitle, ctaLabel, backgroundImage }: HeroProps) 
             <div className="absolute -bottom-6 -left-6 bg-card rounded-xl shadow-lg p-4 border">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-                  <span className="text-2xl font-bold text-primary">50+</span>
+                  <span className="text-2xl font-bold text-primary">{stat1Value}</span>
                 </div>
                 <div>
-                  <p className="font-semibold">Programs</p>
-                  <p className="text-sm text-muted-foreground">Available</p>
+                  <p className="font-semibold">{stat1Label}</p>
+                  <p className="text-sm text-muted-foreground">{stat1Sublabel}</p>
                 </div>
               </div>
             </div>
@@ -164,11 +203,11 @@ export function Hero({ title, subtitle, ctaLabel, backgroundImage }: HeroProps) 
             <div className="absolute -top-6 -right-6 bg-card rounded-xl shadow-lg p-4 border">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center">
-                  <span className="text-2xl font-bold text-green-600">98%</span>
+                  <span className="text-2xl font-bold text-green-600">{stat2Value}</span>
                 </div>
                 <div>
-                  <p className="font-semibold">Success Rate</p>
-                  <p className="text-sm text-muted-foreground">Visa Approval</p>
+                  <p className="font-semibold">{stat2Label}</p>
+                  <p className="text-sm text-muted-foreground">{stat2Sublabel}</p>
                 </div>
               </div>
             </div>
