@@ -76,6 +76,13 @@ export interface IStorage {
   createTestimonial(testimonial: InsertTestimonial): Promise<Testimonial>;
   updateTestimonial(id: string, data: Partial<InsertTestimonial>): Promise<Testimonial | undefined>;
   deleteTestimonial(id: string): Promise<boolean>;
+
+  // FAQ Items
+  getFaqItems(tenantId: string): Promise<FaqItem[]>;
+  getFaqItem(id: string): Promise<FaqItem | undefined>;
+  createFaqItem(faq: InsertFaqItem): Promise<FaqItem>;
+  updateFaqItem(id: string, data: Partial<InsertFaqItem>): Promise<FaqItem | undefined>;
+  deleteFaqItem(id: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -283,6 +290,31 @@ export class DatabaseStorage implements IStorage {
 
   async deleteTestimonial(id: string): Promise<boolean> {
     const result = await db.delete(testimonials).where(eq(testimonials.id, id)).returning();
+    return result.length > 0;
+  }
+
+  // FAQ Items
+  async getFaqItems(tenantId: string): Promise<FaqItem[]> {
+    return db.select().from(faqItems).where(eq(faqItems.tenantId, tenantId)).orderBy(faqItems.displayOrder);
+  }
+
+  async getFaqItem(id: string): Promise<FaqItem | undefined> {
+    const [faq] = await db.select().from(faqItems).where(eq(faqItems.id, id));
+    return faq;
+  }
+
+  async createFaqItem(faq: InsertFaqItem): Promise<FaqItem> {
+    const [created] = await db.insert(faqItems).values(faq).returning();
+    return created;
+  }
+
+  async updateFaqItem(id: string, data: Partial<InsertFaqItem>): Promise<FaqItem | undefined> {
+    const [updated] = await db.update(faqItems).set(data).where(eq(faqItems.id, id)).returning();
+    return updated;
+  }
+
+  async deleteFaqItem(id: string): Promise<boolean> {
+    const result = await db.delete(faqItems).where(eq(faqItems.id, id)).returning();
     return result.length > 0;
   }
 }
