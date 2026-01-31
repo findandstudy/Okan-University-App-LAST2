@@ -1,5 +1,6 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
+import { useLocation } from 'wouter';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -48,6 +49,7 @@ interface ApplicationWithDetails extends Application {
 
 export default function Applications() {
   const { toast } = useToast();
+  const [location, navigate] = useLocation();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -69,6 +71,25 @@ export default function Applications() {
   const { data: leads = [] } = useQuery<Lead[]>({
     queryKey: ['/api/leads'],
   });
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const viewId = params.get('view');
+    if (viewId && applications.length > 0 && leads.length >= 0 && programs.length >= 0 && !detailsOpen) {
+      const app = applications.find(a => a.id === viewId);
+      if (app) {
+        handleViewDetails(app);
+        navigate('/admin/applications', { replace: true });
+      } else {
+        toast({ 
+          title: 'Application not found', 
+          description: 'The requested application could not be found.',
+          variant: 'destructive' 
+        });
+        navigate('/admin/applications', { replace: true });
+      }
+    }
+  }, [applications, leads, programs, detailsOpen]);
 
   const deleteMutation = useMutation({
     mutationFn: async (ids: string[]) => {

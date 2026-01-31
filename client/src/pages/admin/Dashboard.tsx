@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
+import { Link } from 'wouter';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { FileText, GraduationCap, Users, TrendingUp } from 'lucide-react';
+import { FileText, GraduationCap, Users, TrendingUp, ChevronRight } from 'lucide-react';
 import type { Program, Application } from '@shared/schema';
 import AdminLayout from './AdminLayout';
 
@@ -94,9 +95,11 @@ export default function Dashboard() {
               ) : (
                 <div className="space-y-3">
                   {recentApplications.map((app) => (
-                    <div
+                    <Link
                       key={app.id}
-                      className="flex items-center justify-between p-3 bg-muted/50 rounded-lg"
+                      href={`/admin/applications?view=${app.id}`}
+                      className="flex items-center justify-between p-3 bg-muted/50 rounded-lg hover-elevate cursor-pointer"
+                      data-testid={`link-application-${app.id.slice(0, 8)}`}
                     >
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
@@ -109,16 +112,19 @@ export default function Dashboard() {
                           </p>
                         </div>
                       </div>
-                      <span
-                        className={`text-xs px-2 py-1 rounded-full ${
-                          app.status === 'submitted'
-                            ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                            : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
-                        }`}
-                      >
-                        {app.status}
-                      </span>
-                    </div>
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`text-xs px-2 py-1 rounded-full ${
+                            app.status === 'submitted'
+                              ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                              : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
+                          }`}
+                        >
+                          {app.status}
+                        </span>
+                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                      </div>
+                    </Link>
                   ))}
                 </div>
               )}
