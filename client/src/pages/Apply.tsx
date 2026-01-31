@@ -143,7 +143,7 @@ export default function Apply() {
             
             if (uploadResponse.ok) {
               const uploadResult = await uploadResponse.json();
-              const fileUrl = `/api/object-storage${uploadResult.objectPath}`;
+              const fileUrl = uploadResult.objectPath;
               console.log(`Uploaded ${docType}, creating document record:`, { applicationId: application.id, docType, fileUrl });
               
               // Create document record linked to application
