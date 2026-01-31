@@ -70,6 +70,52 @@ export async function registerRoutes(
     limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
   });
 
+  // Public upload endpoint for application documents (no auth required)
+  app.post("/api/public-upload", upload.single("file"), async (req, res) => {
+    try {
+      const file = req.file;
+      if (!file) {
+        return res.status(400).json({ error: "No file uploaded" });
+      }
+
+      // Validate file type for application documents
+      const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+      if (!allowedTypes.includes(file.mimetype)) {
+        return res.status(400).json({ error: "Invalid file type. Only JPG, PNG, WEBP, and PDF are allowed." });
+      }
+
+      const objectStorageService = new ObjectStorageService();
+      
+      const uploadURL = await objectStorageService.getObjectEntityUploadURL();
+      const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
+      
+      const response = await fetch(uploadURL, {
+        method: "PUT",
+        body: file.buffer,
+        headers: {
+          "Content-Type": file.mimetype || "application/octet-stream",
+        },
+      });
+
+      if (!response.ok) {
+        console.error("GCS upload failed:", response.status, await response.text());
+        return res.status(500).json({ error: "Failed to upload to storage" });
+      }
+
+      res.json({ 
+        objectPath,
+        metadata: {
+          name: file.originalname,
+          size: file.size,
+          type: file.mimetype,
+        },
+      });
+    } catch (error) {
+      console.error("Upload error:", error);
+      res.status(500).json({ error: "Upload failed" });
+    }
+  });
+
   app.post("/api/upload", requireAdmin, upload.single("file"), async (req, res) => {
     try {
       const file = req.file;

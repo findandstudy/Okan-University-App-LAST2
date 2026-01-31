@@ -136,7 +136,7 @@ export default function Apply() {
             const formData = new globalThis.FormData();
             formData.append('file', file);
             
-            const uploadResponse = await fetch('/api/upload', {
+            const uploadResponse = await fetch('/api/public-upload', {
               method: 'POST',
               body: formData,
             });
