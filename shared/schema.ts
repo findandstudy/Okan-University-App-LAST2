@@ -17,6 +17,10 @@ export const tenants = pgTable("tenants", {
   faviconUrl: text("favicon_url"),
   googleAnalyticsId: text("google_analytics_id"),
   googleSearchConsoleCode: text("google_search_console_code"),
+  facebookUrl: text("facebook_url"),
+  instagramUrl: text("instagram_url"),
+  linkedinUrl: text("linkedin_url"),
+  youtubeUrl: text("youtube_url"),
   isActive: boolean("is_active").default(true),
   createdAt: timestamp("created_at").defaultNow(),
 });

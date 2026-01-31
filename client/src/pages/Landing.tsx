@@ -33,7 +33,14 @@ export default function Landing() {
         <FAQ />
         <Contact />
       </main>
-      <Footer universityName={universityName} logoUrl={logoUrl} />
+      <Footer 
+        universityName={universityName} 
+        logoUrl={logoUrl}
+        facebookUrl={tenant?.facebookUrl || undefined}
+        instagramUrl={tenant?.instagramUrl || undefined}
+        linkedinUrl={tenant?.linkedinUrl || undefined}
+        youtubeUrl={tenant?.youtubeUrl || undefined}
+      />
       <ChatWidget />
     </div>
   );

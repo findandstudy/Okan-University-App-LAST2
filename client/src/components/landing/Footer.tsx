@@ -5,18 +5,29 @@ import { SiInstagram, SiFacebook, SiLinkedin, SiYoutube } from 'react-icons/si';
 interface FooterProps {
   universityName?: string;
   logoUrl?: string;
+  facebookUrl?: string;
+  instagramUrl?: string;
+  linkedinUrl?: string;
+  youtubeUrl?: string;
 }
 
-export function Footer({ universityName = 'University', logoUrl }: FooterProps) {
+export function Footer({ 
+  universityName = 'University', 
+  logoUrl,
+  facebookUrl,
+  instagramUrl,
+  linkedinUrl,
+  youtubeUrl,
+}: FooterProps) {
   const { t, isRTL } = useI18n();
   const currentYear = new Date().getFullYear();
 
   const socialLinks = [
-    { icon: SiFacebook, href: '#', label: 'Facebook' },
-    { icon: SiInstagram, href: '#', label: 'Instagram' },
-    { icon: SiLinkedin, href: '#', label: 'LinkedIn' },
-    { icon: SiYoutube, href: '#', label: 'YouTube' },
-  ];
+    { icon: SiFacebook, href: facebookUrl, label: 'Facebook' },
+    { icon: SiInstagram, href: instagramUrl, label: 'Instagram' },
+    { icon: SiLinkedin, href: linkedinUrl, label: 'LinkedIn' },
+    { icon: SiYoutube, href: youtubeUrl, label: 'YouTube' },
+  ].filter(link => link.href);
 
   const quickLinks = [
     { label: 'Programs', href: '#programs' },
@@ -45,19 +56,23 @@ export function Footer({ universityName = 'University', logoUrl }: FooterProps) 
             <p className="text-muted-foreground max-w-md mb-6">
               Your gateway to world-class education. We help students from around the globe achieve their academic dreams with personalized guidance and support.
             </p>
-            <div className="flex gap-3">
-              {socialLinks.map((social, index) => (
-                <a
-                  key={index}
-                  href={social.href}
-                  className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center hover-elevate"
-                  aria-label={social.label}
-                  data-testid={`social-${social.label.toLowerCase()}`}
-                >
-                  <social.icon className="h-5 w-5" />
-                </a>
-              ))}
-            </div>
+            {socialLinks.length > 0 && (
+              <div className="flex gap-3">
+                {socialLinks.map((social, index) => (
+                  <a
+                    key={index}
+                    href={social.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center hover-elevate"
+                    aria-label={social.label}
+                    data-testid={`social-${social.label.toLowerCase()}`}
+                  >
+                    <social.icon className="h-5 w-5" />
+                  </a>
+                ))}
+              </div>
+            )}
           </div>
 
           <div>

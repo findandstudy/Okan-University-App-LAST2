@@ -8,7 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { useUpload } from '@/hooks/use-upload';
-import { Globe, Upload, Loader2, X, Image as ImageIcon } from 'lucide-react';
+import { Globe, Upload, Loader2, X, Image as ImageIcon, Facebook, Instagram, Linkedin, Youtube } from 'lucide-react';
 import AdminLayout from './AdminLayout';
 import type { Tenant } from '@shared/schema';
 
@@ -141,6 +141,10 @@ export default function TenantPage() {
     domain: '',
     logoUrl: '',
     faviconUrl: '',
+    facebookUrl: '',
+    instagramUrl: '',
+    linkedinUrl: '',
+    youtubeUrl: '',
   });
 
   const { data: tenant, isLoading } = useQuery<Tenant>({
@@ -154,6 +158,10 @@ export default function TenantPage() {
         domain: tenant.domain || '',
         logoUrl: tenant.logoUrl || '',
         faviconUrl: tenant.faviconUrl || '',
+        facebookUrl: tenant.facebookUrl || '',
+        instagramUrl: tenant.instagramUrl || '',
+        linkedinUrl: tenant.linkedinUrl || '',
+        youtubeUrl: tenant.youtubeUrl || '',
       });
     }
   }, [tenant]);
@@ -254,6 +262,80 @@ export default function TenantPage() {
                 accept="image/*,.ico"
                 testId="favicon"
               />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Social Media Links</CardTitle>
+            <CardDescription>Add your social media profiles for the footer</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div>
+                <Label>Facebook</Label>
+                <div className="relative mt-1.5">
+                  <Facebook className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    value={settings.facebookUrl}
+                    onChange={(e) =>
+                      setSettings({ ...settings, facebookUrl: e.target.value })
+                    }
+                    placeholder="https://facebook.com/yourpage"
+                    className="pl-10"
+                    data-testid="input-facebook-url"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <Label>Instagram</Label>
+                <div className="relative mt-1.5">
+                  <Instagram className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    value={settings.instagramUrl}
+                    onChange={(e) =>
+                      setSettings({ ...settings, instagramUrl: e.target.value })
+                    }
+                    placeholder="https://instagram.com/yourpage"
+                    className="pl-10"
+                    data-testid="input-instagram-url"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <Label>LinkedIn</Label>
+                <div className="relative mt-1.5">
+                  <Linkedin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    value={settings.linkedinUrl}
+                    onChange={(e) =>
+                      setSettings({ ...settings, linkedinUrl: e.target.value })
+                    }
+                    placeholder="https://linkedin.com/company/yourpage"
+                    className="pl-10"
+                    data-testid="input-linkedin-url"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <Label>YouTube</Label>
+                <div className="relative mt-1.5">
+                  <Youtube className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    value={settings.youtubeUrl}
+                    onChange={(e) =>
+                      setSettings({ ...settings, youtubeUrl: e.target.value })
+                    }
+                    placeholder="https://youtube.com/@yourchannel"
+                    className="pl-10"
+                    data-testid="input-youtube-url"
+                  />
+                </div>
+              </div>
             </div>
           </CardContent>
         </Card>
