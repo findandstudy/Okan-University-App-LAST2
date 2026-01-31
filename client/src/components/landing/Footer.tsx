@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useI18n } from '@/lib/i18n';
 import { GraduationCap } from 'lucide-react';
 import { SiInstagram, SiFacebook, SiLinkedin, SiYoutube } from 'react-icons/si';
@@ -12,6 +13,14 @@ interface FooterProps {
   youtubeUrl?: string;
 }
 
+interface FooterSettings {
+  description?: Record<string, string>;
+  contactTitle?: Record<string, string>;
+  contactEmail?: string;
+  contactPhone?: string;
+  contactAddress?: Record<string, string>;
+}
+
 export function Footer({ 
   universityName = 'University', 
   logoUrl,
@@ -20,9 +29,24 @@ export function Footer({
   linkedinUrl,
   youtubeUrl,
 }: FooterProps) {
-  const { t, isRTL } = useI18n();
+  const { t, isRTL, language } = useI18n();
   const currentYear = new Date().getFullYear();
   const [logoError, setLogoError] = useState(false);
+  const currentLang = language as string;
+
+  const { data: sections = [] } = useQuery<any[]>({
+    queryKey: ['/api/sections'],
+  });
+
+  const footerSection = sections.find(s => s.sectionKey === 'footer');
+  const footerSettings = footerSection?.settings as FooterSettings | undefined;
+
+  const description = footerSettings?.description?.[currentLang] || footerSettings?.description?.en || 
+    'Your gateway to world-class education. We help students from around the globe achieve their academic dreams with personalized guidance and support.';
+  const contactTitle = footerSettings?.contactTitle?.[currentLang] || footerSettings?.contactTitle?.en || 'Contact';
+  const contactEmail = footerSettings?.contactEmail || 'apply@okanuniversity.app';
+  const contactPhone = footerSettings?.contactPhone || '+90 552 689 85 15';
+  const contactAddress = footerSettings?.contactAddress?.[currentLang] || footerSettings?.contactAddress?.en || 'Istanbul Okan University Campus';
 
   useEffect(() => {
     setLogoError(false);
@@ -65,7 +89,7 @@ export function Footer({
               )}
             </div>
             <p className="text-muted-foreground max-w-md mb-6">
-              Your gateway to world-class education. We help students from around the globe achieve their academic dreams with personalized guidance and support.
+              {description}
             </p>
             {socialLinks.length > 0 && (
               <div className="flex gap-3">
@@ -103,11 +127,11 @@ export function Footer({
           </div>
 
           <div>
-            <h4 className="font-semibold mb-4">Contact</h4>
+            <h4 className="font-semibold mb-4">{contactTitle}</h4>
             <ul className="space-y-2 text-muted-foreground">
-              <li>apply@okanuniversity.app</li>
-              <li>+90 552 689 85 15</li>
-              <li>Istanbul Okan University Campus</li>
+              <li>{contactEmail}</li>
+              <li>{contactPhone}</li>
+              <li>{contactAddress}</li>
             </ul>
           </div>
         </div>

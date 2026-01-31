@@ -36,6 +36,7 @@ import {
   Sparkles,
   BadgeCheck,
   Phone,
+  PanelBottom,
 } from 'lucide-react';
 import type { Tenant } from '@shared/schema';
 
@@ -52,6 +53,7 @@ const menuItems = [
   { title: 'Sections', url: '/admin/sections', icon: LayoutList },
   { title: 'Contact Form', url: '/admin/contact-form', icon: FormInput },
   { title: 'Contact Info', url: '/admin/contact-info', icon: Phone },
+  { title: 'Footer', url: '/admin/footer', icon: PanelBottom },
   { title: 'Media', url: '/admin/media', icon: Image },
   { title: 'Programs', url: '/admin/programs', icon: GraduationCap },
   { title: 'Testimonials', url: '/admin/testimonials', icon: MessageSquareQuote },
