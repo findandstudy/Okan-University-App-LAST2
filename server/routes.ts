@@ -295,6 +295,27 @@ export async function registerRoutes(
     }
   });
 
+  app.delete("/api/applications/:id", requireAdmin, async (req, res) => {
+    try {
+      await storage.deleteApplication(req.params.id as string);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting application:", error);
+      res.status(500).json({ error: "Failed to delete application" });
+    }
+  });
+
+  // Get documents for an application
+  app.get("/api/applications/:id/documents", requireAdmin, async (req, res) => {
+    try {
+      const documents = await storage.getDocumentsByApplication(req.params.id as string);
+      res.json(documents);
+    } catch (error) {
+      console.error("Error fetching documents:", error);
+      res.status(500).json({ error: "Failed to fetch documents" });
+    }
+  });
+
   // Tenants API
   app.get("/api/tenant", async (req, res) => {
     try {

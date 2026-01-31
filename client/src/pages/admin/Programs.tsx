@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
   DialogContent,
@@ -30,12 +31,15 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
-import { Plus, Pencil, Trash2, Upload, Download, Loader2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, Upload, Download, Loader2, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import type { Program } from '@shared/schema';
 import AdminLayout from './AdminLayout';
 
 const DEGREE_OPTIONS = ['Bachelor', 'Master', 'PhD', 'Associate', 'Certificate'];
 const LANGUAGE_OPTIONS = ['English', 'Turkish', 'Arabic', 'French', 'German'];
+
+type SortField = 'programName' | 'degree' | 'language' | 'tuitionFee' | 'discountedFee';
+type SortDirection = 'asc' | 'desc';
 
 interface ProgramForm {
   universityName: string;
@@ -63,6 +67,9 @@ export default function Programs() {
   const [editingProgram, setEditingProgram] = useState<Program | null>(null);
   const [formData, setFormData] = useState<ProgramForm>(initialFormState);
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [sortField, setSortField] = useState<SortField>('programName');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
 
   const { data: programs = [], isLoading } = useQuery<Program[]>({
     queryKey: ['/api/programs'],
@@ -120,6 +127,94 @@ export default function Programs() {
     },
   });
 
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      await Promise.all(ids.map(id => apiRequest('DELETE', `/api/programs/${id}`)));
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/programs'] });
+      setSelectedIds(new Set());
+      toast({ title: 'Programs deleted successfully' });
+    },
+    onError: () => {
+      toast({ title: 'Failed to delete programs', variant: 'destructive' });
+    },
+  });
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  const SortIcon = ({ field }: { field: SortField }) => {
+    if (sortField !== field) return <ArrowUpDown className="h-4 w-4 ml-1 opacity-50" />;
+    return sortDirection === 'asc' 
+      ? <ArrowUp className="h-4 w-4 ml-1" /> 
+      : <ArrowDown className="h-4 w-4 ml-1" />;
+  };
+
+  const filteredAndSortedPrograms = useMemo(() => {
+    let filtered = programs.filter((program) =>
+      program.programName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      program.degree.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+
+    filtered.sort((a, b) => {
+      let comparison = 0;
+      switch (sortField) {
+        case 'programName':
+          comparison = a.programName.localeCompare(b.programName);
+          break;
+        case 'degree':
+          comparison = a.degree.localeCompare(b.degree);
+          break;
+        case 'language':
+          comparison = a.language.localeCompare(b.language);
+          break;
+        case 'tuitionFee':
+          comparison = parseFloat(a.tuitionFee) - parseFloat(b.tuitionFee);
+          break;
+        case 'discountedFee':
+          const feeA = a.discountedFee ? parseFloat(a.discountedFee) : Infinity;
+          const feeB = b.discountedFee ? parseFloat(b.discountedFee) : Infinity;
+          comparison = feeA - feeB;
+          break;
+      }
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+
+    return filtered;
+  }, [programs, searchQuery, sortField, sortDirection]);
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filteredAndSortedPrograms.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredAndSortedPrograms.map(p => p.id)));
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    const newSelected = new Set(selectedIds);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
+    } else {
+      newSelected.add(id);
+    }
+    setSelectedIds(newSelected);
+  };
+
+  const handleBulkDelete = () => {
+    if (selectedIds.size === 0) return;
+    if (confirm(`Are you sure you want to delete ${selectedIds.size} program(s)?`)) {
+      bulkDeleteMutation.mutate(Array.from(selectedIds));
+    }
+  };
+
   const handleCloseDialog = () => {
     setIsDialogOpen(false);
     setEditingProgram(null);
@@ -149,11 +244,6 @@ export default function Programs() {
     }
   };
 
-  const filteredPrograms = programs.filter((program) =>
-    program.programName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    program.degree.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
   const formatCurrency = (amount: string | number) => {
     const num = typeof amount === 'string' ? parseFloat(amount) : amount;
     return new Intl.NumberFormat('en-US', {
@@ -182,7 +272,23 @@ export default function Programs() {
             <p className="text-muted-foreground">Manage your university programs</p>
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
+            {selectedIds.size > 0 && (
+              <Button 
+                variant="destructive" 
+                size="sm"
+                onClick={handleBulkDelete}
+                disabled={bulkDeleteMutation.isPending}
+                data-testid="button-bulk-delete-programs"
+              >
+                {bulkDeleteMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Trash2 className="h-4 w-4 mr-2" />
+                )}
+                Delete ({selectedIds.size})
+              </Button>
+            )}
             <Button variant="outline" size="sm" onClick={downloadTemplate}>
               <Download className="h-4 w-4 mr-2" />
               CSV Template
@@ -352,7 +458,7 @@ export default function Programs() {
                   <Skeleton key={i} className="h-16 w-full" />
                 ))}
               </div>
-            ) : filteredPrograms.length === 0 ? (
+            ) : filteredAndSortedPrograms.length === 0 ? (
               <p className="text-muted-foreground text-center py-8">
                 No programs found. Add your first program to get started.
               </p>
@@ -361,17 +467,71 @@ export default function Programs() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Program</TableHead>
-                      <TableHead>Degree</TableHead>
-                      <TableHead>Language</TableHead>
-                      <TableHead>Fee</TableHead>
-                      <TableHead>Discounted</TableHead>
+                      <TableHead className="w-12">
+                        <Checkbox
+                          checked={selectedIds.size === filteredAndSortedPrograms.length && filteredAndSortedPrograms.length > 0}
+                          onCheckedChange={toggleSelectAll}
+                          data-testid="checkbox-select-all-programs"
+                        />
+                      </TableHead>
+                      <TableHead>
+                        <button 
+                          onClick={() => handleSort('programName')} 
+                          className="flex items-center font-medium hover:text-foreground"
+                          data-testid="sort-program-name"
+                        >
+                          Program <SortIcon field="programName" />
+                        </button>
+                      </TableHead>
+                      <TableHead>
+                        <button 
+                          onClick={() => handleSort('degree')} 
+                          className="flex items-center font-medium hover:text-foreground"
+                          data-testid="sort-degree"
+                        >
+                          Degree <SortIcon field="degree" />
+                        </button>
+                      </TableHead>
+                      <TableHead>
+                        <button 
+                          onClick={() => handleSort('language')} 
+                          className="flex items-center font-medium hover:text-foreground"
+                          data-testid="sort-language"
+                        >
+                          Language <SortIcon field="language" />
+                        </button>
+                      </TableHead>
+                      <TableHead>
+                        <button 
+                          onClick={() => handleSort('tuitionFee')} 
+                          className="flex items-center font-medium hover:text-foreground"
+                          data-testid="sort-fee"
+                        >
+                          Fee <SortIcon field="tuitionFee" />
+                        </button>
+                      </TableHead>
+                      <TableHead>
+                        <button 
+                          onClick={() => handleSort('discountedFee')} 
+                          className="flex items-center font-medium hover:text-foreground"
+                          data-testid="sort-discounted"
+                        >
+                          Discounted <SortIcon field="discountedFee" />
+                        </button>
+                      </TableHead>
                       <TableHead className="w-24">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredPrograms.map((program) => (
+                    {filteredAndSortedPrograms.map((program) => (
                       <TableRow key={program.id} data-testid={`program-row-${program.id}`}>
+                        <TableCell>
+                          <Checkbox
+                            checked={selectedIds.has(program.id)}
+                            onCheckedChange={() => toggleSelect(program.id)}
+                            data-testid={`checkbox-program-${program.id}`}
+                          />
+                        </TableCell>
                         <TableCell className="font-medium">{program.programName}</TableCell>
                         <TableCell>
                           <Badge variant="secondary">{program.degree}</Badge>

@@ -42,6 +42,10 @@ export interface IStorage {
   getApplication(id: string): Promise<Application | undefined>;
   createApplication(application: InsertApplication): Promise<Application>;
   updateApplication(id: string, data: Partial<InsertApplication>): Promise<Application | undefined>;
+  deleteApplication(id: string): Promise<boolean>;
+
+  // Documents
+  getDocumentsByApplication(applicationId: string): Promise<Document[]>;
 
   // Admin Users
   getAdminById(id: string): Promise<AdminUser | undefined>;
@@ -148,6 +152,17 @@ export class DatabaseStorage implements IStorage {
   async updateApplication(id: string, data: Partial<InsertApplication>): Promise<Application | undefined> {
     const [updated] = await db.update(applications).set(data).where(eq(applications.id, id)).returning();
     return updated;
+  }
+
+  async deleteApplication(id: string): Promise<boolean> {
+    await db.delete(documents).where(eq(documents.applicationId, id));
+    const result = await db.delete(applications).where(eq(applications.id, id));
+    return true;
+  }
+
+  // Documents
+  async getDocumentsByApplication(applicationId: string): Promise<Document[]> {
+    return db.select().from(documents).where(eq(documents.applicationId, applicationId)).orderBy(desc(documents.uploadedAt));
   }
 
   // Admin Users
