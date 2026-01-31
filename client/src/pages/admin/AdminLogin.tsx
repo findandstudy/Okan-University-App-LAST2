@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useLocation } from 'wouter';
+import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -7,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest } from '@/lib/queryClient';
 import { GraduationCap, Loader2, Lock, Mail } from 'lucide-react';
+import type { Tenant } from '@shared/schema';
 
 export default function AdminLogin() {
   const [, navigate] = useLocation();
@@ -14,6 +16,14 @@ export default function AdminLogin() {
   const [isLoading, setIsLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [logoError, setLogoError] = useState(false);
+
+  const { data: tenant } = useQuery<Tenant>({
+    queryKey: ['/api/tenant'],
+  });
+
+  const logoUrl = tenant?.logoUrl;
+  const universityName = tenant?.universityName || 'University';
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,9 +56,18 @@ export default function AdminLogin() {
     <div className="min-h-screen flex items-center justify-center bg-muted/30 p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <div className="mx-auto w-12 h-12 bg-primary rounded-xl flex items-center justify-center mb-4">
-            <GraduationCap className="h-6 w-6 text-primary-foreground" />
-          </div>
+          {logoUrl && !logoError ? (
+            <img 
+              src={logoUrl} 
+              alt={universityName} 
+              className="mx-auto h-16 w-auto mb-4"
+              onError={() => setLogoError(true)}
+            />
+          ) : (
+            <div className="mx-auto w-12 h-12 bg-primary rounded-xl flex items-center justify-center mb-4">
+              <GraduationCap className="h-6 w-6 text-primary-foreground" />
+            </div>
+          )}
           <CardTitle className="text-2xl">Admin Login</CardTitle>
           <CardDescription>
             Sign in to access the admin panel
