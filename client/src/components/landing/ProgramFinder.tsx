@@ -15,24 +15,31 @@ import {
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { motion } from 'framer-motion';
-import { Search, GraduationCap, Languages, DollarSign, ArrowRight } from 'lucide-react';
+import { Search, GraduationCap, Languages, DollarSign, ArrowRight, LayoutGrid, List, ArrowUpDown } from 'lucide-react';
 import type { Program } from '@shared/schema';
 
 const DEGREE_OPTIONS = ['All', 'Bachelor', 'Master', 'PhD', 'Associate', 'Certificate'];
 const LANGUAGE_OPTIONS = ['All', 'English', 'Turkish', 'Arabic', 'French'];
+const SORT_OPTIONS = [
+  { value: 'default', label: 'Default' },
+  { value: 'price_asc', label: 'Price: Low to High' },
+  { value: 'price_desc', label: 'Price: High to Low' },
+];
 
 export function ProgramFinder() {
   const { t, isRTL } = useI18n();
   const [searchQuery, setSearchQuery] = useState('');
   const [degreeFilter, setDegreeFilter] = useState('All');
   const [languageFilter, setLanguageFilter] = useState('All');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [sortBy, setSortBy] = useState('default');
 
   const { data: programs = [], isLoading } = useQuery<Program[]>({
     queryKey: ['/api/programs'],
   });
 
   const filteredPrograms = useMemo(() => {
-    return programs.filter((program) => {
+    let result = programs.filter((program) => {
       const matchesSearch =
         !searchQuery ||
         program.programName.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -48,7 +55,23 @@ export function ProgramFinder() {
 
       return matchesSearch && matchesDegree && matchesLanguage;
     });
-  }, [programs, searchQuery, degreeFilter, languageFilter]);
+
+    if (sortBy === 'price_asc') {
+      result = [...result].sort((a, b) => {
+        const priceA = parseFloat(String(a.discountedFee || a.tuitionFee));
+        const priceB = parseFloat(String(b.discountedFee || b.tuitionFee));
+        return priceA - priceB;
+      });
+    } else if (sortBy === 'price_desc') {
+      result = [...result].sort((a, b) => {
+        const priceA = parseFloat(String(a.discountedFee || a.tuitionFee));
+        const priceB = parseFloat(String(b.discountedFee || b.tuitionFee));
+        return priceB - priceA;
+      });
+    }
+
+    return result;
+  }, [programs, searchQuery, degreeFilter, languageFilter, sortBy]);
 
   const formatCurrency = (amount: string | number) => {
     const num = typeof amount === 'string' ? parseFloat(amount) : amount;
@@ -83,7 +106,7 @@ export function ProgramFinder() {
           transition={{ duration: 0.5, delay: 0.1 }}
           className="bg-card rounded-xl border p-4 mb-8 shadow-sm"
         >
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
             <div className="relative md:col-span-2">
               <Search className={`absolute top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground ${isRTL ? 'right-3' : 'left-3'}`} />
               <Input
@@ -126,6 +149,41 @@ export function ProgramFinder() {
                 ))}
               </SelectContent>
             </Select>
+
+            <Select value={sortBy} onValueChange={setSortBy}>
+              <SelectTrigger data-testid="select-sort">
+                <div className="flex items-center gap-2">
+                  <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
+                  <SelectValue placeholder="Sort" />
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                {SORT_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <div className="flex items-center gap-1">
+              <Button
+                variant={viewMode === 'grid' ? 'default' : 'outline'}
+                size="icon"
+                onClick={() => setViewMode('grid')}
+                data-testid="button-view-grid"
+              >
+                <LayoutGrid className="h-4 w-4" />
+              </Button>
+              <Button
+                variant={viewMode === 'list' ? 'default' : 'outline'}
+                size="icon"
+                onClick={() => setViewMode('list')}
+                data-testid="button-view-list"
+              >
+                <List className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         </motion.div>
 
@@ -153,7 +211,7 @@ export function ProgramFinder() {
             <h3 className="text-xl font-semibold mb-2">No programs found</h3>
             <p className="text-muted-foreground">Try adjusting your search filters</p>
           </div>
-        ) : (
+        ) : viewMode === 'grid' ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredPrograms.map((program, index) => (
               <motion.div
@@ -212,6 +270,59 @@ export function ProgramFinder() {
                       </Button>
                     </Link>
                   </CardFooter>
+                </Card>
+              </motion.div>
+            ))}
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {filteredPrograms.map((program, index) => (
+              <motion.div
+                key={program.id}
+                initial={{ opacity: 0, x: -20 }}
+                whileInView={{ opacity: 1, x: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.3, delay: index * 0.03 }}
+              >
+                <Card className="hover-elevate overflow-visible" data-testid={`program-card-${program.id}`}>
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start gap-3 mb-2">
+                        <h3 className="font-semibold text-lg leading-tight">
+                          {program.programName}
+                        </h3>
+                        <Badge variant="secondary" className="flex-shrink-0">
+                          {program.degree}
+                        </Badge>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+                        <span>{program.universityName}</span>
+                        <Badge variant="outline" className="gap-1">
+                          <Languages className="h-3 w-3" />
+                          {program.language}
+                        </Badge>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-6 sm:flex-shrink-0">
+                      <div className="text-right">
+                        <div className="text-sm text-muted-foreground line-through">
+                          {formatCurrency(program.tuitionFee)}
+                        </div>
+                        {program.discountedFee && (
+                          <div className="font-bold text-lg text-primary">
+                            {formatCurrency(program.discountedFee)}
+                          </div>
+                        )}
+                      </div>
+                      <Link href={`/apply?program=${program.id}`}>
+                        <Button className="gap-2" data-testid={`button-apply-program-${program.id}`}>
+                          {t('programs.apply')}
+                          <ArrowRight className={`h-4 w-4 ${isRTL ? 'rotate-180' : ''}`} />
+                        </Button>
+                      </Link>
+                    </div>
+                  </div>
                 </Card>
               </motion.div>
             ))}
