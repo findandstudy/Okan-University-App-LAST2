@@ -32,17 +32,55 @@ export function Contact() {
       container.innerHTML = tenant.contactFormEmbed;
       
       const scripts = container.querySelectorAll('script');
+      const jqueryScripts: HTMLScriptElement[] = [];
+      const otherExternalScripts: HTMLScriptElement[] = [];
+      const inlineScripts: HTMLScriptElement[] = [];
+      
       scripts.forEach((oldScript) => {
-        const newScript = document.createElement('script');
         if (oldScript.src) {
-          newScript.src = oldScript.src;
-          newScript.async = true;
-          newScript.defer = true;
+          if (oldScript.src.includes('jquery')) {
+            jqueryScripts.push(oldScript);
+          } else {
+            otherExternalScripts.push(oldScript);
+          }
         } else {
-          newScript.textContent = oldScript.textContent;
+          inlineScripts.push(oldScript);
         }
-        oldScript.parentNode?.replaceChild(newScript, oldScript);
       });
+      
+      const loadScript = (oldScript: HTMLScriptElement): Promise<void> => {
+        return new Promise((resolve) => {
+          const newScript = document.createElement('script');
+          newScript.src = oldScript.src;
+          newScript.onload = () => resolve();
+          newScript.onerror = () => resolve();
+          oldScript.parentNode?.replaceChild(newScript, oldScript);
+        });
+      };
+      
+      const loadAllScripts = async () => {
+        for (const script of jqueryScripts) {
+          await loadScript(script);
+        }
+        
+        for (const script of otherExternalScripts) {
+          await loadScript(script);
+        }
+        
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        inlineScripts.forEach((oldScript) => {
+          try {
+            const newScript = document.createElement('script');
+            newScript.textContent = oldScript.textContent;
+            oldScript.parentNode?.replaceChild(newScript, oldScript);
+          } catch (e) {
+            console.warn('Inline script error:', e);
+          }
+        });
+      };
+      
+      loadAllScripts();
     }
   }, [tenant?.contactFormEmbed]);
 
