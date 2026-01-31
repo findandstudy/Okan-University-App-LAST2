@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Select,
   SelectContent,
@@ -11,8 +13,10 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { Palette } from 'lucide-react';
+import { apiRequest, queryClient } from '@/lib/queryClient';
+import { Loader2 } from 'lucide-react';
 import AdminLayout from './AdminLayout';
+import type { TenantTheme } from '@shared/schema';
 
 const FONT_OPTIONS = ['Inter', 'Open Sans', 'Roboto', 'Poppins', 'Montserrat'];
 const BUTTON_STYLES = ['rounded', 'pill', 'square'];
@@ -28,12 +32,60 @@ export default function Theme() {
     buttonStyle: 'rounded',
   });
 
+  const { data: theme, isLoading } = useQuery<TenantTheme>({
+    queryKey: ['/api/theme'],
+  });
+
+  useEffect(() => {
+    if (theme) {
+      setSettings({
+        primaryColor: theme.primaryColor || '#2563eb',
+        secondaryColor: theme.secondaryColor || '#3b82f6',
+        backgroundColor: theme.backgroundColor || '#ffffff',
+        textColor: theme.textColor || '#1f2937',
+        fontFamily: theme.fontFamily || 'Inter',
+        buttonStyle: theme.buttonStyle || 'rounded',
+      });
+    }
+  }, [theme]);
+
+  const updateMutation = useMutation({
+    mutationFn: async (data: typeof settings) => {
+      const response = await apiRequest('PATCH', '/api/theme', data);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/theme'] });
+      toast({
+        title: 'Theme saved',
+        description: 'Theme settings have been updated.',
+      });
+    },
+    onError: () => {
+      toast({
+        title: 'Failed to save theme',
+        variant: 'destructive',
+      });
+    },
+  });
+
   const handleSave = () => {
-    toast({
-      title: 'Theme saved',
-      description: 'Theme settings have been updated.',
-    });
+    updateMutation.mutate(settings);
   };
+
+  if (isLoading) {
+    return (
+      <AdminLayout>
+        <div className="p-6 space-y-6">
+          <Skeleton className="h-8 w-48" />
+          <div className="grid lg:grid-cols-2 gap-6">
+            <Skeleton className="h-64 w-full" />
+            <Skeleton className="h-64 w-full" />
+          </div>
+        </div>
+      </AdminLayout>
+    );
+  }
 
   return (
     <AdminLayout>
@@ -203,7 +255,12 @@ export default function Theme() {
         </div>
 
         <div className="flex justify-end">
-          <Button onClick={handleSave} data-testid="button-save-theme">
+          <Button 
+            onClick={handleSave} 
+            disabled={updateMutation.isPending}
+            data-testid="button-save-theme"
+          >
+            {updateMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
             Save Changes
           </Button>
         </div>

@@ -1,5 +1,5 @@
 import { db } from './db';
-import { programs, tenants, adminUsers } from '@shared/schema';
+import { programs, tenants, adminUsers, sections, tenantThemes } from '@shared/schema';
 import { eq } from 'drizzle-orm';
 
 const samplePrograms = [
@@ -142,6 +142,26 @@ const demoAdmin = {
   isActive: true,
 };
 
+const defaultSections = [
+  { tenantId: 'default', sectionKey: 'hero', displayOrder: 1, isEnabled: true },
+  { tenantId: 'default', sectionKey: 'trust_badges', displayOrder: 2, isEnabled: true },
+  { tenantId: 'default', sectionKey: 'program_finder', displayOrder: 3, isEnabled: true },
+  { tenantId: 'default', sectionKey: 'steps', displayOrder: 4, isEnabled: true },
+  { tenantId: 'default', sectionKey: 'testimonials', displayOrder: 5, isEnabled: true },
+  { tenantId: 'default', sectionKey: 'faq', displayOrder: 6, isEnabled: true },
+  { tenantId: 'default', sectionKey: 'contact', displayOrder: 7, isEnabled: true },
+];
+
+const defaultTheme = {
+  tenantId: 'default',
+  primaryColor: '#2563eb',
+  secondaryColor: '#3b82f6',
+  backgroundColor: '#ffffff',
+  textColor: '#1f2937',
+  buttonStyle: 'rounded',
+  fontFamily: 'Inter',
+};
+
 async function seed() {
   console.log('🌱 Starting database seed...');
 
@@ -176,6 +196,28 @@ async function seed() {
       console.log('✅ Created admin user (admin@okan.edu.tr / admin123)');
     } else {
       console.log('Demo admin already exists');
+    }
+
+    // Check if sections exist
+    const existingSections = await db.select().from(sections).where(eq(sections.tenantId, 'default'));
+    
+    if (existingSections.length === 0) {
+      console.log('Creating default sections...');
+      await db.insert(sections).values(defaultSections);
+      console.log(`✅ Created ${defaultSections.length} sections`);
+    } else {
+      console.log(`Sections already exist (${existingSections.length} found)`);
+    }
+
+    // Check if theme exists
+    const existingTheme = await db.select().from(tenantThemes).where(eq(tenantThemes.tenantId, 'default'));
+    
+    if (existingTheme.length === 0) {
+      console.log('Creating default theme...');
+      await db.insert(tenantThemes).values(defaultTheme);
+      console.log('✅ Created default theme');
+    } else {
+      console.log('Theme already exists');
     }
 
     console.log('✅ Seed completed successfully!');

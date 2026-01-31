@@ -50,6 +50,12 @@ export interface IStorage {
   // Sections
   getSections(tenantId: string): Promise<Section[]>;
   updateSection(id: string, data: Partial<InsertSection>): Promise<Section | undefined>;
+  updateSections(updates: Array<{ id: string; isEnabled: boolean }>): Promise<Section[]>;
+
+  // Themes
+  getTheme(tenantId: string): Promise<TenantTheme | undefined>;
+  createTheme(theme: InsertTenantTheme): Promise<TenantTheme>;
+  updateTheme(tenantId: string, data: Partial<InsertTenantTheme>): Promise<TenantTheme | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -160,7 +166,35 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateSection(id: string, data: Partial<InsertSection>): Promise<Section | undefined> {
-    const [updated] = await db.update(sections).set(data).where(eq(sections.id, id)).returning();
+    const [updated] = await db.update(sections).set(data as any).where(eq(sections.id, id)).returning();
+    return updated;
+  }
+
+  async updateSections(updates: Array<{ id: string; isEnabled: boolean }>): Promise<Section[]> {
+    const results: Section[] = [];
+    for (const update of updates) {
+      const [updated] = await db.update(sections)
+        .set({ isEnabled: update.isEnabled })
+        .where(eq(sections.id, update.id))
+        .returning();
+      if (updated) results.push(updated);
+    }
+    return results;
+  }
+
+  // Themes
+  async getTheme(tenantId: string): Promise<TenantTheme | undefined> {
+    const [theme] = await db.select().from(tenantThemes).where(eq(tenantThemes.tenantId, tenantId));
+    return theme;
+  }
+
+  async createTheme(theme: InsertTenantTheme): Promise<TenantTheme> {
+    const [created] = await db.insert(tenantThemes).values(theme).returning();
+    return created;
+  }
+
+  async updateTheme(tenantId: string, data: Partial<InsertTenantTheme>): Promise<TenantTheme | undefined> {
+    const [updated] = await db.update(tenantThemes).set(data).where(eq(tenantThemes.tenantId, tenantId)).returning();
     return updated;
   }
 }

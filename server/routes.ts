@@ -34,6 +34,10 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   
+  const isProduction = process.env.NODE_ENV === 'production';
+  
+  app.set('trust proxy', 1);
+  
   app.use(session({
     secret: process.env.SESSION_SECRET || 'university-platform-secret-key',
     resave: false,
@@ -42,8 +46,9 @@ export async function registerRoutes(
       checkPeriod: 86400000
     }),
     cookie: {
-      secure: process.env.NODE_ENV === 'production',
+      secure: isProduction,
       httpOnly: true,
+      sameSite: isProduction ? 'none' : 'lax',
       maxAge: 24 * 60 * 60 * 1000
     }
   }));
@@ -63,7 +68,7 @@ export async function registerRoutes(
       }
       
       req.session.adminId = admin.id;
-      req.session.tenantId = admin.tenantId;
+      req.session.tenantId = admin.tenantId || undefined;
       
       res.json({ 
         success: true, 
@@ -151,7 +156,7 @@ export async function registerRoutes(
 
   app.get("/api/programs/:id", async (req, res) => {
     try {
-      const program = await storage.getProgram(req.params.id);
+      const program = await storage.getProgram(req.params.id as string);
       if (!program) {
         return res.status(404).json({ error: "Program not found" });
       }
@@ -179,7 +184,7 @@ export async function registerRoutes(
 
   app.patch("/api/programs/:id", requireAdmin, async (req, res) => {
     try {
-      const program = await storage.updateProgram(req.params.id, req.body);
+      const program = await storage.updateProgram(req.params.id as string, req.body);
       if (!program) {
         return res.status(404).json({ error: "Program not found" });
       }
@@ -192,7 +197,7 @@ export async function registerRoutes(
 
   app.delete("/api/programs/:id", requireAdmin, async (req, res) => {
     try {
-      await storage.deleteProgram(req.params.id);
+      await storage.deleteProgram(req.params.id as string);
       res.status(204).send();
     } catch (error) {
       console.error("Error deleting program:", error);
@@ -241,7 +246,7 @@ export async function registerRoutes(
 
   app.get("/api/applications/:id", requireAdmin, async (req, res) => {
     try {
-      const application = await storage.getApplication(req.params.id);
+      const application = await storage.getApplication(req.params.id as string);
       if (!application) {
         return res.status(404).json({ error: "Application not found" });
       }
@@ -269,7 +274,7 @@ export async function registerRoutes(
 
   app.patch("/api/applications/:id", requireAdmin, async (req, res) => {
     try {
-      const application = await storage.updateApplication(req.params.id, req.body);
+      const application = await storage.updateApplication(req.params.id as string, req.body);
       if (!application) {
         return res.status(404).json({ error: "Application not found" });
       }
@@ -294,6 +299,57 @@ export async function registerRoutes(
     }
   });
 
+  app.patch("/api/tenant", requireAdmin, async (req, res) => {
+    try {
+      const tenant = await storage.getTenantByDomain("okanuniversity.app");
+      if (!tenant) {
+        return res.status(404).json({ error: "Tenant not found" });
+      }
+      const updated = await storage.updateTenant(tenant.id, req.body);
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating tenant:", error);
+      res.status(500).json({ error: "Failed to update tenant" });
+    }
+  });
+
+  // Theme API
+  app.get("/api/theme", async (req, res) => {
+    try {
+      const tenant = await storage.getTenantByDomain("okanuniversity.app");
+      if (!tenant) {
+        return res.status(404).json({ error: "Tenant not found" });
+      }
+      let theme = await storage.getTheme(tenant.id);
+      if (!theme) {
+        theme = await storage.createTheme({ tenantId: tenant.id });
+      }
+      res.json(theme);
+    } catch (error) {
+      console.error("Error fetching theme:", error);
+      res.status(500).json({ error: "Failed to fetch theme" });
+    }
+  });
+
+  app.patch("/api/theme", requireAdmin, async (req, res) => {
+    try {
+      const tenant = await storage.getTenantByDomain("okanuniversity.app");
+      if (!tenant) {
+        return res.status(404).json({ error: "Tenant not found" });
+      }
+      let theme = await storage.getTheme(tenant.id);
+      if (!theme) {
+        theme = await storage.createTheme({ tenantId: tenant.id, ...req.body });
+      } else {
+        theme = await storage.updateTheme(tenant.id, req.body);
+      }
+      res.json(theme);
+    } catch (error) {
+      console.error("Error updating theme:", error);
+      res.status(500).json({ error: "Failed to update theme" });
+    }
+  });
+
   // Sections API
   app.get("/api/sections", async (req, res) => {
     try {
@@ -308,7 +364,7 @@ export async function registerRoutes(
 
   app.patch("/api/sections/:id", requireAdmin, async (req, res) => {
     try {
-      const section = await storage.updateSection(req.params.id, req.body);
+      const section = await storage.updateSection(req.params.id as string, req.body);
       if (!section) {
         return res.status(404).json({ error: "Section not found" });
       }
@@ -316,6 +372,17 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error updating section:", error);
       res.status(500).json({ error: "Failed to update section" });
+    }
+  });
+
+  app.patch("/api/sections", requireAdmin, async (req, res) => {
+    try {
+      const updates = req.body.sections as Array<{ id: string; isEnabled: boolean }>;
+      const sections = await storage.updateSections(updates);
+      res.json(sections);
+    } catch (error) {
+      console.error("Error updating sections:", error);
+      res.status(500).json({ error: "Failed to update sections" });
     }
   });
 
