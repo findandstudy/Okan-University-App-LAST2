@@ -36,6 +36,7 @@ const SECTION_TYPES = [
   { key: 'testimonials', label: 'Testimonials' },
   { key: 'faq', label: 'FAQ' },
   { key: 'contact', label: 'Contact Form' },
+  { key: 'chatbox', label: 'Chat Widget' },
   { key: 'custom', label: 'Custom Section' },
 ];
 

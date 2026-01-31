@@ -10,15 +10,21 @@ import { Contact } from '@/components/landing/Contact';
 import { Footer } from '@/components/landing/Footer';
 import { ChatWidget } from '@/components/ChatWidget';
 import TrackingScripts from '@/components/TrackingScripts';
-import type { Tenant } from '@shared/schema';
+import type { Tenant, Section } from '@shared/schema';
 
 export default function Landing() {
   const { data: tenant } = useQuery<Tenant>({
     queryKey: ['/api/tenant'],
   });
 
+  const { data: sections = [] } = useQuery<Section[]>({
+    queryKey: ['/api/sections'],
+  });
+
   const universityName = tenant?.universityName || 'University';
   const logoUrl = tenant?.logoUrl || undefined;
+
+  const isChatboxEnabled = sections.find(s => s.sectionKey === 'chatbox')?.isEnabled ?? true;
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -41,7 +47,7 @@ export default function Landing() {
         linkedinUrl={tenant?.linkedinUrl || undefined}
         youtubeUrl={tenant?.youtubeUrl || undefined}
       />
-      <ChatWidget />
+      {isChatboxEnabled && <ChatWidget />}
     </div>
   );
 }

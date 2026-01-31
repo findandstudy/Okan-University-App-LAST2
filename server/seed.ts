@@ -150,6 +150,7 @@ const defaultSections = [
   { tenantId: 'default', sectionKey: 'testimonials', displayOrder: 5, isEnabled: true },
   { tenantId: 'default', sectionKey: 'faq', displayOrder: 6, isEnabled: true },
   { tenantId: 'default', sectionKey: 'contact', displayOrder: 7, isEnabled: true },
+  { tenantId: 'default', sectionKey: 'chatbox', displayOrder: 8, isEnabled: true },
 ];
 
 const defaultTheme = {
