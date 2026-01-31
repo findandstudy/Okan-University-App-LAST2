@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'wouter';
 import { useI18n } from '@/lib/i18n';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
@@ -14,6 +14,11 @@ interface HeaderProps {
 export function Header({ universityName = 'University', logoUrl }: HeaderProps) {
   const { t, isRTL } = useI18n();
   const [isOpen, setIsOpen] = useState(false);
+  const [logoError, setLogoError] = useState(false);
+
+  useEffect(() => {
+    setLogoError(false);
+  }, [logoUrl]);
 
   const navItems = [
     { key: 'nav.home', href: '#hero' },
@@ -34,8 +39,13 @@ export function Header({ universityName = 'University', logoUrl }: HeaderProps) 
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container mx-auto flex h-16 items-center justify-between px-4">
         <div className="flex items-center gap-3">
-          {logoUrl ? (
-            <img src={logoUrl} alt={universityName} className="h-10 w-auto" />
+          {logoUrl && logoUrl.trim() !== '' && !logoError ? (
+            <img 
+              src={logoUrl} 
+              alt={universityName} 
+              className="h-10 w-auto"
+              onError={() => setLogoError(true)}
+            />
           ) : (
             <div className="flex items-center gap-2">
               <div className="rounded-lg bg-primary p-2">

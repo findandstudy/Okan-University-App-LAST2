@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { useI18n } from '@/lib/i18n';
 import { GraduationCap } from 'lucide-react';
 import { SiInstagram, SiFacebook, SiLinkedin, SiYoutube } from 'react-icons/si';
@@ -21,6 +22,11 @@ export function Footer({
 }: FooterProps) {
   const { t, isRTL } = useI18n();
   const currentYear = new Date().getFullYear();
+  const [logoError, setLogoError] = useState(false);
+
+  useEffect(() => {
+    setLogoError(false);
+  }, [logoUrl]);
 
   const socialLinks = [
     { icon: SiFacebook, href: facebookUrl, label: 'Facebook' },
@@ -42,8 +48,13 @@ export function Footer({
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
           <div className="md:col-span-2">
             <div className="flex items-center gap-2 mb-4">
-              {logoUrl ? (
-                <img src={logoUrl} alt={universityName} className="h-10 w-auto" />
+              {logoUrl && logoUrl.trim() !== '' && !logoError ? (
+                <img 
+                  src={logoUrl} 
+                  alt={universityName} 
+                  className="h-10 w-auto"
+                  onError={() => setLogoError(true)}
+                />
               ) : (
                 <>
                   <div className="rounded-lg bg-primary p-2">
