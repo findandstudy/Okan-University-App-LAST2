@@ -192,7 +192,7 @@ export default function Testimonials() {
       }
 
       const result = await response.json();
-      const photoUrl = `/api/object-storage/${result.objectPath}`;
+      const photoUrl = `/api/object-storage${result.objectPath}`;
       setFormData(prev => ({ ...prev, studentPhoto: photoUrl }));
       toast({ title: 'Photo uploaded successfully' });
     } catch (error) {
