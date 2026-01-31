@@ -4,9 +4,10 @@ import { SiInstagram, SiFacebook, SiLinkedin, SiYoutube } from 'react-icons/si';
 
 interface FooterProps {
   universityName?: string;
+  logoUrl?: string;
 }
 
-export function Footer({ universityName = 'University' }: FooterProps) {
+export function Footer({ universityName = 'University', logoUrl }: FooterProps) {
   const { t, isRTL } = useI18n();
   const currentYear = new Date().getFullYear();
 
@@ -30,10 +31,16 @@ export function Footer({ universityName = 'University' }: FooterProps) {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
           <div className="md:col-span-2">
             <div className="flex items-center gap-2 mb-4">
-              <div className="rounded-lg bg-primary p-2">
-                <GraduationCap className="h-5 w-5 text-primary-foreground" />
-              </div>
-              <span className="font-semibold text-lg">{universityName}</span>
+              {logoUrl ? (
+                <img src={logoUrl} alt={universityName} className="h-10 w-auto" />
+              ) : (
+                <>
+                  <div className="rounded-lg bg-primary p-2">
+                    <GraduationCap className="h-5 w-5 text-primary-foreground" />
+                  </div>
+                  <span className="font-semibold text-lg">{universityName}</span>
+                </>
+              )}
             </div>
             <p className="text-muted-foreground max-w-md mb-6">
               Your gateway to world-class education. We help students from around the globe achieve their academic dreams with personalized guidance and support.
