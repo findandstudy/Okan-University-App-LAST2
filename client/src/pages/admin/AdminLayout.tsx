@@ -32,6 +32,7 @@ import {
   ExternalLink,
   FormInput,
   MessageSquareQuote,
+  HelpCircle,
 } from 'lucide-react';
 import type { Tenant } from '@shared/schema';
 
@@ -48,6 +49,7 @@ const menuItems = [
   { title: 'Media', url: '/admin/media', icon: Image },
   { title: 'Programs', url: '/admin/programs', icon: GraduationCap },
   { title: 'Testimonials', url: '/admin/testimonials', icon: MessageSquareQuote },
+  { title: 'FAQ', url: '/admin/faq', icon: HelpCircle },
   { title: 'Applications', url: '/admin/applications', icon: FileText },
   { title: 'Integrations', url: '/admin/integrations', icon: Settings },
   { title: 'Email', url: '/admin/email', icon: Mail },

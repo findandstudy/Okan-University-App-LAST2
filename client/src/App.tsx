@@ -19,6 +19,7 @@ import Integrations from "@/pages/admin/Integrations";
 import Email from "@/pages/admin/Email";
 import Logs from "@/pages/admin/Logs";
 import Testimonials from "@/pages/admin/Testimonials";
+import FAQ from "@/pages/admin/FAQ";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -40,6 +41,7 @@ function Router() {
       <Route path="/admin/email" component={Email} />
       <Route path="/admin/logs" component={Logs} />
       <Route path="/admin/testimonials" component={Testimonials} />
+      <Route path="/admin/faq" component={FAQ} />
 
       <Route path="/:lang" component={Landing} />
       <Route path="/:lang/apply" component={Apply} />
