@@ -2,7 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { z } from "zod";
-import { insertProgramSchema, insertLeadSchema, insertApplicationSchema, insertMediaAssetSchema, insertTestimonialSchema, insertDocumentSchema } from "@shared/schema";
+import { insertProgramSchema, insertLeadSchema, insertApplicationSchema, insertMediaAssetSchema, insertTestimonialSchema, insertDocumentSchema, insertFaqItemSchema } from "@shared/schema";
 import session from "express-session";
 import MemoryStore from "memorystore";
 import multer from "multer";
@@ -678,6 +678,85 @@ Sitemap: https://okanuniversity.app/sitemap.xml`;
     } catch (error) {
       console.error("Error deleting testimonial:", error);
       res.status(500).json({ error: "Failed to delete testimonial" });
+    }
+  });
+
+  // FAQ Items
+  app.get("/api/faq", async (req, res) => {
+    try {
+      const tenantId = getTenantId(req);
+      const faqList = await storage.getFaqItems(tenantId);
+      res.json(faqList);
+    } catch (error) {
+      console.error("Error fetching FAQ items:", error);
+      res.status(500).json({ error: "Failed to fetch FAQ items" });
+    }
+  });
+
+  app.get("/api/faq/:id", async (req, res) => {
+    try {
+      const faq = await storage.getFaqItem(req.params.id as string);
+      if (!faq) {
+        return res.status(404).json({ error: "FAQ item not found" });
+      }
+      res.json(faq);
+    } catch (error) {
+      console.error("Error fetching FAQ item:", error);
+      res.status(500).json({ error: "Failed to fetch FAQ item" });
+    }
+  });
+
+  app.post("/api/faq", requireAdmin, async (req, res) => {
+    try {
+      const tenantId = getTenantId(req);
+      const parsed = insertFaqItemSchema.safeParse({ ...req.body, tenantId });
+      
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid FAQ data", details: parsed.error });
+      }
+      
+      const faq = await storage.createFaqItem(parsed.data);
+      res.json(faq);
+    } catch (error) {
+      console.error("Error creating FAQ item:", error);
+      res.status(500).json({ error: "Failed to create FAQ item" });
+    }
+  });
+
+  app.patch("/api/faq/:id", requireAdmin, async (req, res) => {
+    try {
+      const id = req.params.id as string;
+      const tenantId = getTenantId(req);
+      
+      const existing = await storage.getFaqItem(id);
+      if (!existing || existing.tenantId !== tenantId) {
+        return res.status(404).json({ error: "FAQ item not found" });
+      }
+      
+      const { tenantId: _, id: __, ...updateData } = req.body;
+      const faq = await storage.updateFaqItem(id, updateData);
+      res.json(faq);
+    } catch (error) {
+      console.error("Error updating FAQ item:", error);
+      res.status(500).json({ error: "Failed to update FAQ item" });
+    }
+  });
+
+  app.delete("/api/faq/:id", requireAdmin, async (req, res) => {
+    try {
+      const id = req.params.id as string;
+      const tenantId = getTenantId(req);
+      
+      const existing = await storage.getFaqItem(id);
+      if (!existing || existing.tenantId !== tenantId) {
+        return res.status(404).json({ error: "FAQ item not found" });
+      }
+      
+      const success = await storage.deleteFaqItem(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting FAQ item:", error);
+      res.status(500).json({ error: "Failed to delete FAQ item" });
     }
   });
 
