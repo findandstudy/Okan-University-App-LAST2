@@ -143,7 +143,7 @@ export default function Apply() {
       case 2:
         return !!formData.programId;
       case 3:
-        return true;
+        return !!(formData.documents.passport && formData.documents.diploma && formData.documents.transcript && formData.documents.photo);
       case 4:
         return true;
       default:
@@ -416,7 +416,7 @@ export default function Apply() {
                 {currentStep === 3 && (
                   <div className="space-y-4">
                     <p className="text-sm text-muted-foreground mb-4">
-                      Upload your documents for faster processing. You can also submit these later.
+                      Please upload all required documents to proceed with your application.
                     </p>
 
                     {[
@@ -425,18 +425,18 @@ export default function Apply() {
                       { key: 'transcript' as const, label: t('apply.transcript') },
                       { key: 'photo' as const, label: t('apply.photo') },
                     ].map((doc) => (
-                      <div key={doc.key} className="flex items-center gap-4 p-3 border rounded-lg bg-card">
-                        <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
-                          <FileText className="h-5 w-5 text-muted-foreground" />
+                      <div key={doc.key} className={`flex items-center gap-4 p-3 border rounded-lg bg-card ${!formData.documents[doc.key] ? 'border-destructive/50' : 'border-green-500/50'}`}>
+                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${formData.documents[doc.key] ? 'bg-green-100 dark:bg-green-900/30' : 'bg-muted'}`}>
+                          <FileText className={`h-5 w-5 ${formData.documents[doc.key] ? 'text-green-600' : 'text-muted-foreground'}`} />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="font-medium text-sm">{doc.label}</p>
+                          <p className="font-medium text-sm">{doc.label} <span className="text-destructive">*</span></p>
                           {formData.documents[doc.key] ? (
                             <p className="text-xs text-green-600 truncate">
                               {formData.documents[doc.key]?.name}
                             </p>
                           ) : (
-                            <p className="text-xs text-muted-foreground">Not uploaded</p>
+                            <p className="text-xs text-destructive">Required - Not uploaded</p>
                           )}
                         </div>
                         <label>
