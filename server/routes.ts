@@ -2,9 +2,10 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { z } from "zod";
-import { insertProgramSchema, insertLeadSchema, insertApplicationSchema } from "@shared/schema";
+import { insertProgramSchema, insertLeadSchema, insertApplicationSchema, insertMediaAssetSchema } from "@shared/schema";
 import session from "express-session";
 import MemoryStore from "memorystore";
+import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 
 const SessionStore = MemoryStore(session);
 
@@ -51,6 +52,9 @@ export async function registerRoutes(
       maxAge: 24 * 60 * 60 * 1000
     }
   }));
+
+  // Register Object Storage routes
+  registerObjectStorageRoutes(app);
 
   // Admin Authentication
   app.post("/api/admin/login", async (req, res) => {
@@ -430,6 +434,49 @@ Sitemap: https://okanuniversity.app/sitemap.xml`;
     
     res.header("Content-Type", "text/plain");
     res.send(robotsTxt);
+  });
+
+  // Media Assets API
+  app.get("/api/media", async (req, res) => {
+    try {
+      const tenantId = getTenantId(req);
+      const media = await storage.getMediaAssets(tenantId);
+      res.json(media);
+    } catch (error) {
+      console.error("Error fetching media:", error);
+      res.status(500).json({ error: "Failed to fetch media" });
+    }
+  });
+
+  app.post("/api/media", requireAdmin, async (req, res) => {
+    try {
+      const tenantId = getTenantId(req);
+      const parsed = insertMediaAssetSchema.safeParse({ ...req.body, tenantId });
+      
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid media data", details: parsed.error });
+      }
+      
+      const media = await storage.createMediaAsset(parsed.data);
+      res.json(media);
+    } catch (error) {
+      console.error("Error creating media:", error);
+      res.status(500).json({ error: "Failed to create media" });
+    }
+  });
+
+  app.delete("/api/media/:id", requireAdmin, async (req, res) => {
+    try {
+      const id = req.params.id as string;
+      const success = await storage.deleteMediaAsset(id);
+      if (!success) {
+        return res.status(404).json({ error: "Media not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting media:", error);
+      res.status(500).json({ error: "Failed to delete media" });
+    }
   });
 
   return httpServer;

@@ -16,6 +16,7 @@ import {
   type FaqItem, type InsertFaqItem,
   type Testimonial, type InsertTestimonial,
   type TrustBadge, type InsertTrustBadge,
+  type MediaAsset, type InsertMediaAsset,
 } from '@shared/schema';
 
 export interface IStorage {
@@ -56,6 +57,11 @@ export interface IStorage {
   getTheme(tenantId: string): Promise<TenantTheme | undefined>;
   createTheme(theme: InsertTenantTheme): Promise<TenantTheme>;
   updateTheme(tenantId: string, data: Partial<InsertTenantTheme>): Promise<TenantTheme | undefined>;
+
+  // Media Assets
+  getMediaAssets(tenantId: string): Promise<MediaAsset[]>;
+  createMediaAsset(asset: InsertMediaAsset): Promise<MediaAsset>;
+  deleteMediaAsset(id: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -196,6 +202,21 @@ export class DatabaseStorage implements IStorage {
   async updateTheme(tenantId: string, data: Partial<InsertTenantTheme>): Promise<TenantTheme | undefined> {
     const [updated] = await db.update(tenantThemes).set(data).where(eq(tenantThemes.tenantId, tenantId)).returning();
     return updated;
+  }
+
+  // Media Assets
+  async getMediaAssets(tenantId: string): Promise<MediaAsset[]> {
+    return db.select().from(mediaAssets).where(eq(mediaAssets.tenantId, tenantId)).orderBy(desc(mediaAssets.uploadedAt));
+  }
+
+  async createMediaAsset(asset: InsertMediaAsset): Promise<MediaAsset> {
+    const [created] = await db.insert(mediaAssets).values(asset).returning();
+    return created;
+  }
+
+  async deleteMediaAsset(id: string): Promise<boolean> {
+    const result = await db.delete(mediaAssets).where(eq(mediaAssets.id, id)).returning();
+    return result.length > 0;
   }
 }
 
