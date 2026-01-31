@@ -68,6 +68,13 @@ export interface IStorage {
   getMediaAssets(tenantId: string): Promise<MediaAsset[]>;
   createMediaAsset(asset: InsertMediaAsset): Promise<MediaAsset>;
   deleteMediaAsset(id: string): Promise<boolean>;
+
+  // Testimonials
+  getTestimonials(tenantId: string): Promise<Testimonial[]>;
+  getTestimonial(id: string): Promise<Testimonial | undefined>;
+  createTestimonial(testimonial: InsertTestimonial): Promise<Testimonial>;
+  updateTestimonial(id: string, data: Partial<InsertTestimonial>): Promise<Testimonial | undefined>;
+  deleteTestimonial(id: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -245,6 +252,31 @@ export class DatabaseStorage implements IStorage {
 
   async deleteMediaAsset(id: string): Promise<boolean> {
     const result = await db.delete(mediaAssets).where(eq(mediaAssets.id, id)).returning();
+    return result.length > 0;
+  }
+
+  // Testimonials
+  async getTestimonials(tenantId: string): Promise<Testimonial[]> {
+    return db.select().from(testimonials).where(eq(testimonials.tenantId, tenantId)).orderBy(testimonials.displayOrder);
+  }
+
+  async getTestimonial(id: string): Promise<Testimonial | undefined> {
+    const [testimonial] = await db.select().from(testimonials).where(eq(testimonials.id, id));
+    return testimonial;
+  }
+
+  async createTestimonial(testimonial: InsertTestimonial): Promise<Testimonial> {
+    const [created] = await db.insert(testimonials).values(testimonial).returning();
+    return created;
+  }
+
+  async updateTestimonial(id: string, data: Partial<InsertTestimonial>): Promise<Testimonial | undefined> {
+    const [updated] = await db.update(testimonials).set(data).where(eq(testimonials.id, id)).returning();
+    return updated;
+  }
+
+  async deleteTestimonial(id: string): Promise<boolean> {
+    const result = await db.delete(testimonials).where(eq(testimonials.id, id)).returning();
     return result.length > 0;
   }
 }

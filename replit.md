@@ -85,3 +85,15 @@ Preferred communication style: Simple, everyday language.
 - **Google Search Console**: Site verification meta tag stored and injected into landing page head
 - **TrackingScripts Component**: Dynamically injects GA and GSC codes into page head, with update and removal handling
 - **Object Storage**: Used for logo and favicon uploads via server-side upload endpoint (POST /api/upload with FormData) to avoid CORS issues with presigned URLs
+
+## Admin Features
+
+### Testimonials Management
+- Admin page at `/admin/testimonials` for managing student testimonials
+- CRUD operations: create, read, update, delete testimonials
+- Fields: student name, photo (uploadable), country, program name, rating (1-5 stars), content
+- Multi-language support for testimonial content (EN, AR, TR, FR, RU, FA)
+- Display order and enabled/disabled toggle
+- Photos uploaded via `/api/upload` endpoint and stored in object storage
+- Landing page fetches from `/api/testimonials` with fallback to default testimonials if none exist
+- Tenant-scoped: each tenant manages their own testimonials

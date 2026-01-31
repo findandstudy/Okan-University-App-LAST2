@@ -2,7 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { z } from "zod";
-import { insertProgramSchema, insertLeadSchema, insertApplicationSchema, insertMediaAssetSchema } from "@shared/schema";
+import { insertProgramSchema, insertLeadSchema, insertApplicationSchema, insertMediaAssetSchema, insertTestimonialSchema } from "@shared/schema";
 import session from "express-session";
 import MemoryStore from "memorystore";
 import multer from "multer";
@@ -584,6 +584,85 @@ Sitemap: https://okanuniversity.app/sitemap.xml`;
     } catch (error) {
       console.error("Error deleting media:", error);
       res.status(500).json({ error: "Failed to delete media" });
+    }
+  });
+
+  // ==================== TESTIMONIALS ====================
+  app.get("/api/testimonials", async (req, res) => {
+    try {
+      const tenantId = getTenantId(req);
+      const testimonialsList = await storage.getTestimonials(tenantId);
+      res.json(testimonialsList);
+    } catch (error) {
+      console.error("Error fetching testimonials:", error);
+      res.status(500).json({ error: "Failed to fetch testimonials" });
+    }
+  });
+
+  app.get("/api/testimonials/:id", async (req, res) => {
+    try {
+      const testimonial = await storage.getTestimonial(req.params.id as string);
+      if (!testimonial) {
+        return res.status(404).json({ error: "Testimonial not found" });
+      }
+      res.json(testimonial);
+    } catch (error) {
+      console.error("Error fetching testimonial:", error);
+      res.status(500).json({ error: "Failed to fetch testimonial" });
+    }
+  });
+
+  app.post("/api/testimonials", requireAdmin, async (req, res) => {
+    try {
+      const tenantId = getTenantId(req);
+      const parsed = insertTestimonialSchema.safeParse({ ...req.body, tenantId });
+      
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid testimonial data", details: parsed.error });
+      }
+      
+      const testimonial = await storage.createTestimonial(parsed.data);
+      res.json(testimonial);
+    } catch (error) {
+      console.error("Error creating testimonial:", error);
+      res.status(500).json({ error: "Failed to create testimonial" });
+    }
+  });
+
+  app.patch("/api/testimonials/:id", requireAdmin, async (req, res) => {
+    try {
+      const id = req.params.id as string;
+      const tenantId = getTenantId(req);
+      
+      const existing = await storage.getTestimonial(id);
+      if (!existing || existing.tenantId !== tenantId) {
+        return res.status(404).json({ error: "Testimonial not found" });
+      }
+      
+      const { tenantId: _, id: __, ...updateData } = req.body;
+      const testimonial = await storage.updateTestimonial(id, updateData);
+      res.json(testimonial);
+    } catch (error) {
+      console.error("Error updating testimonial:", error);
+      res.status(500).json({ error: "Failed to update testimonial" });
+    }
+  });
+
+  app.delete("/api/testimonials/:id", requireAdmin, async (req, res) => {
+    try {
+      const id = req.params.id as string;
+      const tenantId = getTenantId(req);
+      
+      const existing = await storage.getTestimonial(id);
+      if (!existing || existing.tenantId !== tenantId) {
+        return res.status(404).json({ error: "Testimonial not found" });
+      }
+      
+      const success = await storage.deleteTestimonial(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting testimonial:", error);
+      res.status(500).json({ error: "Failed to delete testimonial" });
     }
   });
 

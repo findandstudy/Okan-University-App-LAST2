@@ -1,35 +1,81 @@
 import { useI18n } from '@/lib/i18n';
+import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { Card, CardContent } from '@/components/ui/card';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Star, Quote } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
+import type { Testimonial, SupportedLanguage } from '@shared/schema';
 
 const defaultTestimonials = [
   {
-    name: 'AHMED HASSAN',
+    id: 'default-1',
+    studentName: 'AHMED HASSAN',
+    studentPhoto: null,
     country: 'Egypt',
-    program: 'Computer Engineering',
-    content: 'The application process was incredibly smooth. Within a week, I had my acceptance letter. The team supported me every step of the way.',
+    programName: 'Computer Engineering',
     rating: 5,
+    contentByLang: {
+      en: 'The application process was incredibly smooth. Within a week, I had my acceptance letter. The team supported me every step of the way.',
+    },
   },
   {
-    name: 'MARIA SANTOS',
+    id: 'default-2',
+    studentName: 'MARIA SANTOS',
+    studentPhoto: null,
     country: 'Brazil',
-    program: 'Business Administration',
-    content: 'I was worried about the visa process, but they handled everything. Now I am studying at my dream university with a 40% scholarship!',
+    programName: 'Business Administration',
     rating: 5,
+    contentByLang: {
+      en: 'I was worried about the visa process, but they handled everything. Now I am studying at my dream university with a 40% scholarship!',
+    },
   },
   {
-    name: 'OMAR KHALID',
+    id: 'default-3',
+    studentName: 'OMAR KHALID',
+    studentPhoto: null,
     country: 'Saudi Arabia',
-    program: 'Medicine',
-    content: 'The scholarship opportunity was amazing. The consultants were always available to answer my questions and guide me through the process.',
+    programName: 'Medicine',
     rating: 5,
+    contentByLang: {
+      en: 'The scholarship opportunity was amazing. The consultants were always available to answer my questions and guide me through the process.',
+    },
   },
 ];
 
 export function Testimonials() {
-  const { t, isRTL } = useI18n();
+  const { t, isRTL, language } = useI18n();
+
+  const { data: testimonials, isLoading } = useQuery<Testimonial[]>({
+    queryKey: ['/api/testimonials'],
+  });
+
+  const activeTestimonials = testimonials?.filter(t => t.isEnabled) || [];
+  const displayTestimonials = activeTestimonials.length > 0 ? activeTestimonials : defaultTestimonials;
+
+  const getContent = (testimonial: Testimonial | typeof defaultTestimonials[0]) => {
+    const content = testimonial.contentByLang as Record<string, string> | null;
+    if (!content) return '';
+    return content[language as SupportedLanguage] || content['en'] || Object.values(content)[0] || '';
+  };
+
+  if (isLoading) {
+    return (
+      <section id="testimonials" className="py-20 bg-muted/30">
+        <div className="container mx-auto px-4">
+          <div className="text-center mb-12">
+            <Skeleton className="h-10 w-64 mx-auto mb-4" />
+            <Skeleton className="h-6 w-96 mx-auto" />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {[1, 2, 3].map((i) => (
+              <Skeleton key={i} className="h-64 w-full" />
+            ))}
+          </div>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section id="testimonials" className="py-20 bg-muted/30">
@@ -48,9 +94,9 @@ export function Testimonials() {
         </motion.div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {defaultTestimonials.map((testimonial, index) => (
+          {displayTestimonials.map((testimonial, index) => (
             <motion.div
-              key={index}
+              key={testimonial.id}
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
@@ -59,7 +105,7 @@ export function Testimonials() {
               <Card className="h-full overflow-visible hover-elevate" data-testid={`testimonial-${index}`}>
                 <CardContent className="p-6">
                   <div className="flex items-center gap-1 mb-4">
-                    {[...Array(testimonial.rating)].map((_, i) => (
+                    {[...Array(testimonial.rating || 5)].map((_, i) => (
                       <Star key={i} className="h-4 w-4 fill-yellow-400 text-yellow-400" />
                     ))}
                   </div>
@@ -67,20 +113,23 @@ export function Testimonials() {
                   <div className="relative mb-6">
                     <Quote className="absolute -top-2 -left-2 h-8 w-8 text-primary/10" />
                     <p className={`text-muted-foreground relative z-10 ${isRTL ? 'text-right' : ''}`}>
-                      "{testimonial.content}"
+                      "{getContent(testimonial)}"
                     </p>
                   </div>
 
                   <div className="flex items-center gap-3 pt-4 border-t">
                     <Avatar>
+                      {testimonial.studentPhoto ? (
+                        <AvatarImage src={testimonial.studentPhoto} alt={testimonial.studentName} />
+                      ) : null}
                       <AvatarFallback className="bg-primary/10 text-primary font-semibold">
-                        {testimonial.name.split(' ').map(n => n[0]).join('')}
+                        {testimonial.studentName.split(' ').map(n => n[0]).join('')}
                       </AvatarFallback>
                     </Avatar>
                     <div className={isRTL ? 'text-right' : ''}>
-                      <p className="font-semibold text-sm">{testimonial.name}</p>
+                      <p className="font-semibold text-sm">{testimonial.studentName}</p>
                       <p className="text-xs text-muted-foreground">
-                        {testimonial.program} • {testimonial.country}
+                        {testimonial.programName}{testimonial.country ? ` • ${testimonial.country}` : ''}
                       </p>
                     </div>
                   </div>
