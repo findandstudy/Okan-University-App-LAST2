@@ -22,6 +22,7 @@ export const tenants = pgTable("tenants", {
   linkedinUrl: text("linkedin_url"),
   youtubeUrl: text("youtube_url"),
   contactFormEmbed: text("contact_form_embed"),
+  heroVideoUrl: text("hero_video_url"),
   isActive: boolean("is_active").default(true),
   createdAt: timestamp("created_at").defaultNow(),
 });

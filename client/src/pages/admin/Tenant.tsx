@@ -8,7 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { useUpload } from '@/hooks/use-upload';
-import { Globe, Upload, Loader2, X, Image as ImageIcon, Facebook, Instagram, Linkedin, Youtube } from 'lucide-react';
+import { Globe, Upload, Loader2, X, Image as ImageIcon, Facebook, Instagram, Linkedin, Youtube, Video } from 'lucide-react';
 import AdminLayout from './AdminLayout';
 import type { Tenant } from '@shared/schema';
 
@@ -145,6 +145,7 @@ export default function TenantPage() {
     instagramUrl: '',
     linkedinUrl: '',
     youtubeUrl: '',
+    heroVideoUrl: '',
   });
 
   const { data: tenant, isLoading } = useQuery<Tenant>({
@@ -162,6 +163,7 @@ export default function TenantPage() {
         instagramUrl: tenant.instagramUrl || '',
         linkedinUrl: tenant.linkedinUrl || '',
         youtubeUrl: tenant.youtubeUrl || '',
+        heroVideoUrl: tenant.heroVideoUrl || '',
       });
     }
   }, [tenant]);
@@ -340,6 +342,51 @@ export default function TenantPage() {
           </CardContent>
         </Card>
 
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Video className="h-5 w-5" />
+              Hero Video
+            </CardTitle>
+            <CardDescription>
+              Add a YouTube video URL for the Campus Tour video on the hero section
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <Label>YouTube Video URL</Label>
+              <div className="relative mt-1.5">
+                <Video className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  value={settings.heroVideoUrl}
+                  onChange={(e) =>
+                    setSettings({ ...settings, heroVideoUrl: e.target.value })
+                  }
+                  placeholder="https://www.youtube.com/watch?v=..."
+                  className="pl-10"
+                  data-testid="input-hero-video-url"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground mt-1.5">
+                Paste a YouTube video URL or embed link. The video will be displayed in the hero section.
+              </p>
+            </div>
+            {settings.heroVideoUrl && (
+              <div className="border rounded-lg overflow-hidden">
+                <div className="aspect-video">
+                  <iframe
+                    src={getYouTubeEmbedUrl(settings.heroVideoUrl)}
+                    className="w-full h-full"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                    title="Hero Video Preview"
+                  />
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         <div className="flex justify-end">
           <Button 
             onClick={handleSave} 
@@ -353,4 +400,21 @@ export default function TenantPage() {
       </div>
     </AdminLayout>
   );
+}
+
+function getYouTubeEmbedUrl(url: string): string {
+  if (!url) return '';
+  
+  let videoId = '';
+  
+  if (url.includes('youtube.com/watch')) {
+    const urlParams = new URL(url).searchParams;
+    videoId = urlParams.get('v') || '';
+  } else if (url.includes('youtu.be/')) {
+    videoId = url.split('youtu.be/')[1]?.split('?')[0] || '';
+  } else if (url.includes('youtube.com/embed/')) {
+    videoId = url.split('youtube.com/embed/')[1]?.split('?')[0] || '';
+  }
+  
+  return videoId ? `https://www.youtube.com/embed/${videoId}` : url;
 }

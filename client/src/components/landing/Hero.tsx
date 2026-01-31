@@ -1,8 +1,10 @@
 import { Link } from 'wouter';
+import { useQuery } from '@tanstack/react-query';
 import { useI18n } from '@/lib/i18n';
 import { Button } from '@/components/ui/button';
 import { ArrowRight, Play, CheckCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
+import type { Tenant } from '@shared/schema';
 
 interface HeroProps {
   title?: string;
@@ -11,8 +13,36 @@ interface HeroProps {
   backgroundImage?: string;
 }
 
+function getYouTubeEmbedUrl(url: string): string {
+  if (!url) return '';
+  
+  let videoId = '';
+  
+  if (url.includes('youtube.com/watch')) {
+    try {
+      const urlParams = new URL(url).searchParams;
+      videoId = urlParams.get('v') || '';
+    } catch {
+      return '';
+    }
+  } else if (url.includes('youtu.be/')) {
+    videoId = url.split('youtu.be/')[1]?.split('?')[0] || '';
+  } else if (url.includes('youtube.com/embed/')) {
+    videoId = url.split('youtube.com/embed/')[1]?.split('?')[0] || '';
+  }
+  
+  return videoId ? `https://www.youtube.com/embed/${videoId}` : '';
+}
+
 export function Hero({ title, subtitle, ctaLabel, backgroundImage }: HeroProps) {
   const { t, isRTL } = useI18n();
+  
+  const { data: tenant } = useQuery<Tenant>({
+    queryKey: ['/api/tenant'],
+  });
+
+  const heroVideoUrl = tenant?.heroVideoUrl || '';
+  const embedUrl = getYouTubeEmbedUrl(heroVideoUrl);
 
   const features = [
     'Scholarship opportunities up to 50%',
@@ -97,14 +127,26 @@ export function Hero({ title, subtitle, ctaLabel, backgroundImage }: HeroProps) 
             className="relative hidden lg:block"
           >
             <div className="relative rounded-2xl overflow-hidden shadow-2xl">
-              <div className="aspect-[4/3] bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
-                <div className="text-center p-8">
-                  <div className="w-32 h-32 mx-auto mb-6 rounded-full bg-primary/10 flex items-center justify-center">
-                    <Play className="h-12 w-12 text-primary" />
-                  </div>
-                  <p className="text-lg font-medium text-muted-foreground">Campus Tour Video</p>
+              {embedUrl ? (
+                <div className="aspect-[4/3]">
+                  <iframe
+                    src={embedUrl}
+                    className="w-full h-full"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                    title="Campus Tour Video"
+                  />
                 </div>
-              </div>
+              ) : (
+                <div className="aspect-[4/3] bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
+                  <div className="text-center p-8">
+                    <div className="w-32 h-32 mx-auto mb-6 rounded-full bg-primary/10 flex items-center justify-center">
+                      <Play className="h-12 w-12 text-primary" />
+                    </div>
+                    <p className="text-lg font-medium text-muted-foreground">Campus Tour Video</p>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="absolute -bottom-6 -left-6 bg-card rounded-xl shadow-lg p-4 border">
