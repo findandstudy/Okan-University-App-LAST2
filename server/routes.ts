@@ -34,8 +34,7 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   
-  const isProduction = process.env.NODE_ENV === 'production';
-  
+  // Trust proxy for Replit's HTTPS termination
   app.set('trust proxy', 1);
   
   app.use(session({
@@ -46,9 +45,9 @@ export async function registerRoutes(
       checkPeriod: 86400000
     }),
     cookie: {
-      secure: isProduction,
+      secure: 'auto',
       httpOnly: true,
-      sameSite: isProduction ? 'none' : 'lax',
+      sameSite: 'lax',
       maxAge: 24 * 60 * 60 * 1000
     }
   }));
@@ -70,14 +69,21 @@ export async function registerRoutes(
       req.session.adminId = admin.id;
       req.session.tenantId = admin.tenantId || undefined;
       
-      res.json({ 
-        success: true, 
-        admin: { 
-          id: admin.id, 
-          email: admin.email, 
-          name: admin.name,
-          role: admin.role
-        } 
+      // Explicitly save session to ensure cookie is set
+      req.session.save((err) => {
+        if (err) {
+          console.error("Session save error:", err);
+          return res.status(500).json({ error: "Session save failed" });
+        }
+        res.json({ 
+          success: true, 
+          admin: { 
+            id: admin.id, 
+            email: admin.email, 
+            name: admin.name,
+            role: admin.role
+          } 
+        });
       });
     } catch (error) {
       console.error("Login error:", error);

@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
+import { apiRequest } from '@/lib/queryClient';
 import { GraduationCap, Loader2, Lock, Mail } from 'lucide-react';
 
 export default function AdminLogin() {
@@ -18,16 +19,19 @@ export default function AdminLogin() {
     e.preventDefault();
     setIsLoading(true);
 
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-
-    if (email === 'admin@okanuniversity.app' && password === 'admin123') {
-      localStorage.setItem('adminAuth', 'true');
-      toast({
-        title: 'Welcome!',
-        description: 'You have successfully logged in.',
-      });
-      navigate('/admin');
-    } else {
+    try {
+      const response = await apiRequest('POST', '/api/admin/login', { email, password });
+      const data = await response.json();
+      
+      if (data.success) {
+        localStorage.setItem('adminAuth', JSON.stringify(data.admin));
+        toast({
+          title: 'Welcome!',
+          description: 'You have successfully logged in.',
+        });
+        navigate('/admin');
+      }
+    } catch (error) {
       toast({
         title: 'Login Failed',
         description: 'Invalid email or password.',
@@ -61,10 +65,10 @@ export default function AdminLogin() {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="admin@okanuniversity.app"
+                  placeholder="admin@okan.edu.tr"
                   className="pl-10"
                   required
-                  data-testid="input-admin-email"
+                  data-testid="input-email"
                 />
               </div>
             </div>
@@ -81,7 +85,7 @@ export default function AdminLogin() {
                   placeholder="••••••••"
                   className="pl-10"
                   required
-                  data-testid="input-admin-password"
+                  data-testid="input-password"
                 />
               </div>
             </div>
@@ -90,7 +94,7 @@ export default function AdminLogin() {
               type="submit"
               className="w-full"
               disabled={isLoading}
-              data-testid="button-admin-login"
+              data-testid="button-login"
             >
               {isLoading ? (
                 <>
@@ -105,7 +109,7 @@ export default function AdminLogin() {
 
           <div className="mt-6 p-4 bg-muted rounded-lg text-sm">
             <p className="font-medium mb-1">Demo Credentials:</p>
-            <p className="text-muted-foreground">Email: admin@okanuniversity.app</p>
+            <p className="text-muted-foreground">Email: admin@okan.edu.tr</p>
             <p className="text-muted-foreground">Password: admin123</p>
           </div>
         </CardContent>
