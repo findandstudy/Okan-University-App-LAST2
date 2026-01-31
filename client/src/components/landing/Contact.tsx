@@ -115,6 +115,11 @@ export function Contact() {
       label: 'WhatsApp',
       value: '+90 552 689 85 15',
     },
+    {
+      icon: Mail,
+      label: 'Email',
+      value: 'apply@okanuniversity.app',
+    },
   ];
 
   return (
