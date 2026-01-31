@@ -121,7 +121,36 @@ export default function Apply() {
         status: 'submitted',
       });
 
-      return applicationResponse.json();
+      const application = await applicationResponse.json();
+
+      // Upload documents
+      const documentTypes = ['passport', 'diploma', 'transcript', 'photo'] as const;
+      for (const docType of documentTypes) {
+        const file = data.documents[docType];
+        if (file) {
+          const formData = new FormData();
+          formData.append('file', file);
+          
+          const uploadResponse = await fetch('/api/upload', {
+            method: 'POST',
+            body: formData,
+          });
+          
+          if (uploadResponse.ok) {
+            const { url } = await uploadResponse.json();
+            
+            // Create document record linked to application
+            await apiRequest('POST', '/api/documents', {
+              applicationId: application.id,
+              documentType: docType,
+              fileUrl: url,
+              fileName: file.name,
+            });
+          }
+        }
+      }
+
+      return application;
     },
     onSuccess: () => {
       setIsSubmitted(true);

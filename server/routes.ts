@@ -2,7 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { z } from "zod";
-import { insertProgramSchema, insertLeadSchema, insertApplicationSchema, insertMediaAssetSchema, insertTestimonialSchema } from "@shared/schema";
+import { insertProgramSchema, insertLeadSchema, insertApplicationSchema, insertMediaAssetSchema, insertTestimonialSchema, insertDocumentSchema } from "@shared/schema";
 import session from "express-session";
 import MemoryStore from "memorystore";
 import multer from "multer";
@@ -361,6 +361,21 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error fetching documents:", error);
       res.status(500).json({ error: "Failed to fetch documents" });
+    }
+  });
+
+  // Create document record
+  app.post("/api/documents", async (req, res) => {
+    try {
+      const parsed = insertDocumentSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid document data", details: parsed.error });
+      }
+      const document = await storage.createDocument(parsed.data);
+      res.status(201).json(document);
+    } catch (error) {
+      console.error("Error creating document:", error);
+      res.status(500).json({ error: "Failed to create document" });
     }
   });
 

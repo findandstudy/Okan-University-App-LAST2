@@ -46,6 +46,7 @@ export interface IStorage {
 
   // Documents
   getDocumentsByApplication(applicationId: string): Promise<Document[]>;
+  createDocument(document: InsertDocument): Promise<Document>;
 
   // Admin Users
   getAdminById(id: string): Promise<AdminUser | undefined>;
@@ -172,6 +173,11 @@ export class DatabaseStorage implements IStorage {
   // Documents
   async getDocumentsByApplication(applicationId: string): Promise<Document[]> {
     return db.select().from(documents).where(eq(documents.applicationId, applicationId)).orderBy(desc(documents.uploadedAt));
+  }
+
+  async createDocument(document: InsertDocument): Promise<Document> {
+    const [created] = await db.insert(documents).values(document).returning();
+    return created;
   }
 
   // Admin Users
