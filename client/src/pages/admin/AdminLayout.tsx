@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useLocation, Link } from 'wouter';
+import { useQuery } from '@tanstack/react-query';
 import {
   Sidebar,
   SidebarContent,
@@ -30,6 +31,7 @@ import {
   LogOut,
   ExternalLink,
 } from 'lucide-react';
+import type { Tenant } from '@shared/schema';
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -50,6 +52,10 @@ const menuItems = [
 
 export default function AdminLayout({ children }: AdminLayoutProps) {
   const [location, navigate] = useLocation();
+
+  const { data: tenant } = useQuery<Tenant>({
+    queryKey: ['/api/tenant'],
+  });
 
   useEffect(() => {
     const isAuth = localStorage.getItem('adminAuth');
@@ -79,7 +85,9 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="font-semibold text-sm truncate">Admin Panel</p>
-                <p className="text-xs text-muted-foreground truncate">Okan University</p>
+                <p className="text-xs text-muted-foreground truncate" data-testid="text-sidebar-university-name">
+                  {tenant?.universityName || 'University'}
+                </p>
               </div>
             </div>
           </SidebarHeader>
