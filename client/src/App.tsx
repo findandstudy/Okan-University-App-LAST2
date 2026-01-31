@@ -1,9 +1,11 @@
 import { Switch, Route } from "wouter";
+import { useEffect } from "react";
 import { queryClient } from "./lib/queryClient";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { I18nProvider } from "@/lib/i18n";
+import type { Tenant as TenantType } from "@shared/schema";
 import Landing from "@/pages/Landing";
 import Apply from "@/pages/Apply";
 import AdminLogin from "@/pages/admin/AdminLogin";
@@ -51,11 +53,42 @@ function Router() {
   );
 }
 
+function TenantMetadata() {
+  const { data: tenant } = useQuery<TenantType>({
+    queryKey: ['/api/tenant'],
+  });
+
+  useEffect(() => {
+    if (tenant) {
+      // Update page title
+      if (tenant.universityName) {
+        document.title = tenant.universityName;
+        // Update OG title meta tag
+        const ogTitle = document.querySelector('meta[property="og:title"]');
+        if (ogTitle) {
+          ogTitle.setAttribute('content', tenant.universityName);
+        }
+      }
+      
+      // Update favicon
+      if (tenant.faviconUrl) {
+        const link = document.querySelector('link[rel="icon"]') as HTMLLinkElement;
+        if (link) {
+          link.href = tenant.faviconUrl;
+        }
+      }
+    }
+  }, [tenant]);
+
+  return null;
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <I18nProvider>
+          <TenantMetadata />
           <Toaster />
           <Router />
         </I18nProvider>
