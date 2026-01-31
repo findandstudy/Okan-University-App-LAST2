@@ -24,6 +24,7 @@ import Testimonials from "@/pages/admin/Testimonials";
 import FAQ from "@/pages/admin/FAQ";
 import HeroContent from "@/pages/admin/HeroContent";
 import WhyChooseUs from "@/pages/admin/WhyChooseUs";
+import ContactInfo from "@/pages/admin/ContactInfo";
 import EmbedPrograms from "@/pages/EmbedPrograms";
 import NotFound from "@/pages/not-found";
 
@@ -49,6 +50,7 @@ function Router() {
       <Route path="/admin/faq" component={FAQ} />
       <Route path="/admin/hero" component={HeroContent} />
       <Route path="/admin/why-choose-us" component={WhyChooseUs} />
+      <Route path="/admin/contact-info" component={ContactInfo} />
       
       <Route path="/embed/programs" component={EmbedPrograms} />
       <Route path="/embed/programs/:lang" component={EmbedPrograms} />

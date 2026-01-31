@@ -35,6 +35,7 @@ import {
   HelpCircle,
   Sparkles,
   BadgeCheck,
+  Phone,
 } from 'lucide-react';
 import type { Tenant } from '@shared/schema';
 
@@ -50,6 +51,7 @@ const menuItems = [
   { title: 'Why Choose Us', url: '/admin/why-choose-us', icon: BadgeCheck },
   { title: 'Sections', url: '/admin/sections', icon: LayoutList },
   { title: 'Contact Form', url: '/admin/contact-form', icon: FormInput },
+  { title: 'Contact Info', url: '/admin/contact-info', icon: Phone },
   { title: 'Media', url: '/admin/media', icon: Image },
   { title: 'Programs', url: '/admin/programs', icon: GraduationCap },
   { title: 'Testimonials', url: '/admin/testimonials', icon: MessageSquareQuote },

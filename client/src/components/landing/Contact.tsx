@@ -12,7 +12,7 @@ import { Mail, Phone, MapPin, Send, MessageCircle } from 'lucide-react';
 import type { Tenant } from '@shared/schema';
 
 export function Contact() {
-  const { t, isRTL } = useI18n();
+  const { t, isRTL, language } = useI18n();
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
@@ -99,28 +99,41 @@ export function Contact() {
     setIsSubmitting(false);
   };
 
-  const contactInfo = [
-    {
-      icon: Phone,
-      label: 'Phone',
-      value: '0 (216) 677 16 30',
-    },
-    {
-      icon: MapPin,
-      label: 'Address',
-      value: 'Istanbul Okan University Campus',
-    },
-    {
-      icon: MessageCircle,
-      label: 'WhatsApp',
-      value: '+90 552 689 85 15',
-    },
-    {
-      icon: Mail,
-      label: 'Email',
-      value: 'apply@okanuniversity.app',
-    },
+  const { data: sections = [] } = useQuery<any[]>({
+    queryKey: ['/api/sections'],
+  });
+
+  const contactSection = sections.find(s => s.sectionKey === 'contact');
+  const contactSettings = contactSection?.settings as {
+    sectionTitle?: Record<string, string>;
+    sectionSubtitle?: Record<string, string>;
+    items?: Array<{ icon: string; label: Record<string, string>; value: string }>;
+  } | undefined;
+
+  const currentLang = language as string;
+
+  const iconMap: Record<string, React.ComponentType<any>> = {
+    phone: Phone,
+    address: MapPin,
+    whatsapp: MessageCircle,
+    email: Mail,
+  };
+
+  const defaultContactInfo = [
+    { icon: Phone, label: 'Phone', value: '0 (216) 677 16 30' },
+    { icon: MapPin, label: 'Address', value: 'Istanbul Okan University Campus' },
+    { icon: MessageCircle, label: 'WhatsApp', value: '+90 552 689 85 15' },
+    { icon: Mail, label: 'Email', value: 'apply@okanuniversity.app' },
   ];
+
+  const contactInfo = contactSettings?.items?.map(item => ({
+    icon: iconMap[item.icon] || Phone,
+    label: item.label[currentLang] || item.label.en || item.icon,
+    value: item.value,
+  })) || defaultContactInfo;
+
+  const sectionTitle = contactSettings?.sectionTitle?.[currentLang] || contactSettings?.sectionTitle?.en || t('contact.title');
+  const sectionSubtitle = contactSettings?.sectionSubtitle?.[currentLang] || contactSettings?.sectionSubtitle?.en || 'Have questions? Reach out to our admissions team';
 
   return (
     <section id="contact" className="py-20 bg-muted/30">
@@ -132,9 +145,9 @@ export function Contact() {
           transition={{ duration: 0.5 }}
           className="text-center mb-12"
         >
-          <h2 className="text-3xl md:text-4xl font-bold mb-4">{t('contact.title')}</h2>
+          <h2 className="text-3xl md:text-4xl font-bold mb-4">{sectionTitle}</h2>
           <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-            Have questions? Reach out to our admissions team
+            {sectionSubtitle}
           </p>
         </motion.div>
 
