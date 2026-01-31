@@ -21,6 +21,7 @@ export const tenants = pgTable("tenants", {
   instagramUrl: text("instagram_url"),
   linkedinUrl: text("linkedin_url"),
   youtubeUrl: text("youtube_url"),
+  contactFormEmbed: text("contact_form_embed"),
   isActive: boolean("is_active").default(true),
   createdAt: timestamp("created_at").defaultNow(),
 });

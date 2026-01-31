@@ -30,6 +30,7 @@ import {
   Activity,
   LogOut,
   ExternalLink,
+  FormInput,
 } from 'lucide-react';
 import type { Tenant } from '@shared/schema';
 
@@ -42,6 +43,7 @@ const menuItems = [
   { title: 'Tenant', url: '/admin/tenant', icon: Building },
   { title: 'Theme', url: '/admin/theme', icon: Palette },
   { title: 'Sections', url: '/admin/sections', icon: LayoutList },
+  { title: 'Contact Form', url: '/admin/contact-form', icon: FormInput },
   { title: 'Media', url: '/admin/media', icon: Image },
   { title: 'Programs', url: '/admin/programs', icon: GraduationCap },
   { title: 'Applications', url: '/admin/applications', icon: FileText },

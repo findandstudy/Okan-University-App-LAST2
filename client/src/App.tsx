@@ -11,6 +11,7 @@ import Dashboard from "@/pages/admin/Dashboard";
 import Tenant from "@/pages/admin/Tenant";
 import Theme from "@/pages/admin/Theme";
 import Sections from "@/pages/admin/Sections";
+import ContactForm from "@/pages/admin/ContactForm";
 import Media from "@/pages/admin/Media";
 import Programs from "@/pages/admin/Programs";
 import Applications from "@/pages/admin/Applications";
@@ -30,6 +31,7 @@ function Router() {
       <Route path="/admin/tenant" component={Tenant} />
       <Route path="/admin/theme" component={Theme} />
       <Route path="/admin/sections" component={Sections} />
+      <Route path="/admin/contact-form" component={ContactForm} />
       <Route path="/admin/media" component={Media} />
       <Route path="/admin/programs" component={Programs} />
       <Route path="/admin/applications" component={Applications} />

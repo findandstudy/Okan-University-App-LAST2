@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useI18n } from '@/lib/i18n';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,6 +9,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { motion } from 'framer-motion';
 import { useToast } from '@/hooks/use-toast';
 import { Mail, Phone, MapPin, Send, MessageCircle } from 'lucide-react';
+import type { Tenant } from '@shared/schema';
 
 export function Contact() {
   const { t, isRTL } = useI18n();
@@ -18,6 +20,31 @@ export function Contact() {
     email: '',
     message: '',
   });
+  const embedContainerRef = useRef<HTMLDivElement>(null);
+
+  const { data: tenant } = useQuery<Tenant>({
+    queryKey: ['/api/tenant'],
+  });
+
+  useEffect(() => {
+    if (tenant?.contactFormEmbed && embedContainerRef.current) {
+      const container = embedContainerRef.current;
+      container.innerHTML = tenant.contactFormEmbed;
+      
+      const scripts = container.querySelectorAll('script');
+      scripts.forEach((oldScript) => {
+        const newScript = document.createElement('script');
+        if (oldScript.src) {
+          newScript.src = oldScript.src;
+          newScript.async = true;
+          newScript.defer = true;
+        } else {
+          newScript.textContent = oldScript.textContent;
+        }
+        oldScript.parentNode?.replaceChild(newScript, oldScript);
+      });
+    }
+  }, [tenant?.contactFormEmbed]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -82,61 +109,69 @@ export function Contact() {
           >
             <Card className="overflow-visible">
               <CardContent className="p-6">
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  <div>
-                    <Label htmlFor="name">{t('contact.name')}</Label>
-                    <Input
-                      id="name"
-                      value={formData.name}
-                      onChange={(e) =>
-                        setFormData({ ...formData, name: e.target.value.toUpperCase() })
-                      }
-                      required
-                      className="mt-1.5"
-                      data-testid="input-contact-name"
-                    />
-                  </div>
+                {tenant?.contactFormEmbed ? (
+                  <div 
+                    ref={embedContainerRef}
+                    className="embed-form-container [&_table]:w-full [&_input]:w-full [&_select]:w-full [&_input]:p-2 [&_input]:border [&_input]:rounded [&_select]:p-2 [&_select]:border [&_select]:rounded [&_label]:block [&_label]:mb-1 [&_label]:font-medium [&_td]:py-2 [&_.btn-primary]:bg-primary [&_.btn-primary]:text-primary-foreground [&_.btn-primary]:px-4 [&_.btn-primary]:py-2 [&_.btn-primary]:rounded [&_.btn-primary]:cursor-pointer [&_.btn-primary]:border-0"
+                    data-testid="embed-form-container"
+                  />
+                ) : (
+                  <form onSubmit={handleSubmit} className="space-y-4">
+                    <div>
+                      <Label htmlFor="name">{t('contact.name')}</Label>
+                      <Input
+                        id="name"
+                        value={formData.name}
+                        onChange={(e) =>
+                          setFormData({ ...formData, name: e.target.value.toUpperCase() })
+                        }
+                        required
+                        className="mt-1.5"
+                        data-testid="input-contact-name"
+                      />
+                    </div>
 
-                  <div>
-                    <Label htmlFor="email">{t('contact.email')}</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      value={formData.email}
-                      onChange={(e) =>
-                        setFormData({ ...formData, email: e.target.value })
-                      }
-                      required
-                      className="mt-1.5"
-                      data-testid="input-contact-email"
-                    />
-                  </div>
+                    <div>
+                      <Label htmlFor="email">{t('contact.email')}</Label>
+                      <Input
+                        id="email"
+                        type="email"
+                        value={formData.email}
+                        onChange={(e) =>
+                          setFormData({ ...formData, email: e.target.value })
+                        }
+                        required
+                        className="mt-1.5"
+                        data-testid="input-contact-email"
+                      />
+                    </div>
 
-                  <div>
-                    <Label htmlFor="message">{t('contact.message')}</Label>
-                    <Textarea
-                      id="message"
-                      value={formData.message}
-                      onChange={(e) =>
-                        setFormData({ ...formData, message: e.target.value })
-                      }
-                      required
-                      rows={4}
-                      className="mt-1.5 resize-none"
-                      data-testid="input-contact-message"
-                    />
-                  </div>
+                    <div>
+                      <Label htmlFor="message">{t('contact.message')}</Label>
+                      <Textarea
+                        id="message"
+                        value={formData.message}
+                        onChange={(e) =>
+                          setFormData({ ...formData, message: e.target.value })
+                        }
+                        required
+                        rows={4}
+                        className="mt-1.5 resize-none"
+                        data-testid="input-contact-message"
+                      />
+                    </div>
 
-                  <Button
-                    type="submit"
-                    className="w-full gap-2"
-                    disabled={isSubmitting}
-                    data-testid="button-contact-submit"
-                  >
-                    {isSubmitting ? 'Sending...' : t('contact.send')}
-                    <Send className="h-4 w-4" />
-                  </Button>
-                </form>
+                    <Button
+                      type="submit"
+                      className="w-full gap-2"
+                      disabled={isSubmitting}
+                      data-testid="button-contact-submit"
+                    >
+                      {isSubmitting ? 'Sending...' : t('contact.send')}
+                      <Send className="h-4 w-4" />
+                    </Button>
+                  </form>
+                )}
               </CardContent>
             </Card>
           </motion.div>
