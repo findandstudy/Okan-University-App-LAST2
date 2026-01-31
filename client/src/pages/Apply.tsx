@@ -125,28 +125,40 @@ export default function Apply() {
 
       // Upload documents
       const documentTypes = ['passport', 'diploma', 'transcript', 'photo'] as const;
+      console.log('Starting document upload, documents:', data.documents);
+      
       for (const docType of documentTypes) {
         const file = data.documents[docType];
+        console.log(`Processing ${docType}:`, file ? file.name : 'no file');
+        
         if (file) {
-          const formData = new globalThis.FormData();
-          formData.append('file', file);
-          
-          const uploadResponse = await fetch('/api/upload', {
-            method: 'POST',
-            body: formData,
-          });
-          
-          if (uploadResponse.ok) {
-            const uploadResult = await uploadResponse.json();
-            const fileUrl = `/api/object-storage${uploadResult.objectPath}`;
+          try {
+            const formData = new globalThis.FormData();
+            formData.append('file', file);
             
-            // Create document record linked to application
-            await apiRequest('POST', '/api/documents', {
-              applicationId: application.id,
-              documentType: docType,
-              fileUrl: fileUrl,
-              fileName: file.name,
+            const uploadResponse = await fetch('/api/upload', {
+              method: 'POST',
+              body: formData,
             });
+            
+            if (uploadResponse.ok) {
+              const uploadResult = await uploadResponse.json();
+              const fileUrl = `/api/object-storage${uploadResult.objectPath}`;
+              console.log(`Uploaded ${docType}, creating document record:`, { applicationId: application.id, docType, fileUrl });
+              
+              // Create document record linked to application
+              const docResponse = await apiRequest('POST', '/api/documents', {
+                applicationId: application.id,
+                documentType: docType,
+                fileUrl: fileUrl,
+                fileName: file.name,
+              });
+              console.log(`Document record created for ${docType}:`, await docResponse.json());
+            } else {
+              console.error(`Failed to upload ${docType}:`, await uploadResponse.text());
+            }
+          } catch (error) {
+            console.error(`Error uploading ${docType}:`, error);
           }
         }
       }

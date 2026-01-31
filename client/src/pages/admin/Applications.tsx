@@ -448,18 +448,20 @@ export default function Applications() {
                       </div>
                     </>
                   )}
-                  {selectedApplication.applicantData && (() => {
+                  {(() => {
+                    if (!selectedApplication.applicantData || typeof selectedApplication.applicantData !== 'object') {
+                      return null;
+                    }
                     const data = selectedApplication.applicantData as Record<string, string | number | boolean | null>;
-                    return Object.keys(data).map((key) => {
-                      const value = data[key];
-                      const displayValue = value != null ? String(value) : '-';
-                      return (
+                    const excludeFields = ['fullName', 'email', 'phone', 'countryCode'];
+                    return Object.keys(data)
+                      .filter(key => !excludeFields.includes(key))
+                      .map((key) => (
                         <div key={key} className="flex justify-between">
                           <dt className="text-muted-foreground capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</dt>
-                          <dd className="font-medium">{displayValue}</dd>
+                          <dd className="font-medium">{data[key] != null ? String(data[key]) : '-'}</dd>
                         </div>
-                      );
-                    });
+                      ));
                   })()}
                 </dl>
               </div>
