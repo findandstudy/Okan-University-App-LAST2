@@ -50,18 +50,18 @@ const menuItems = [
   { title: 'Theme', url: '/admin/theme', icon: Palette },
   { title: 'Hero Content', url: '/admin/hero', icon: Sparkles },
   { title: 'Why Choose Us', url: '/admin/why-choose-us', icon: BadgeCheck },
+  { title: 'Programs', url: '/admin/programs', icon: GraduationCap },
+  { title: 'Testimonials', url: '/admin/testimonials', icon: MessageSquareQuote },
+  { title: 'FAQ', url: '/admin/faq', icon: HelpCircle },
   { title: 'Sections', url: '/admin/sections', icon: LayoutList },
   { title: 'Contact Form', url: '/admin/contact-form', icon: FormInput },
   { title: 'Contact Info', url: '/admin/contact-info', icon: Phone },
   { title: 'Footer', url: '/admin/footer', icon: PanelBottom },
-  { title: 'Media', url: '/admin/media', icon: Image },
-  { title: 'Programs', url: '/admin/programs', icon: GraduationCap },
-  { title: 'Testimonials', url: '/admin/testimonials', icon: MessageSquareQuote },
-  { title: 'FAQ', url: '/admin/faq', icon: HelpCircle },
   { title: 'Applications', url: '/admin/applications', icon: FileText },
   { title: 'Integrations', url: '/admin/integrations', icon: Settings },
   { title: 'Email', url: '/admin/email', icon: Mail },
   { title: 'Logs', url: '/admin/logs', icon: Activity },
+  { title: 'Media', url: '/admin/media', icon: Image },
 ];
 
 export default function AdminLayout({ children }: AdminLayoutProps) {
