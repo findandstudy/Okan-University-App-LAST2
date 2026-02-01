@@ -214,6 +214,7 @@ export default function ProgramFilters() {
             </p>
           </div>
           <Button
+            type="button"
             onClick={handleSave}
             disabled={saveMutation.isPending || !isReady}
             data-testid="button-save-filters"
@@ -270,6 +271,7 @@ export default function ProgramFilters() {
                     data-testid="input-new-degree"
                   />
                   <Button 
+                    type="button"
                     onClick={addDegree} 
                     size="icon"
                     disabled={saveMutation.isPending || !newDegree.trim()}
@@ -302,6 +304,7 @@ export default function ProgramFilters() {
                             data-testid="input-edit-degree"
                           />
                           <Button
+                            type="button"
                             variant="ghost"
                             size="icon"
                             onClick={saveEditDegree}
@@ -311,6 +314,7 @@ export default function ProgramFilters() {
                             <Check className="h-4 w-4" />
                           </Button>
                           <Button
+                            type="button"
                             variant="ghost"
                             size="icon"
                             onClick={cancelEditDegree}
@@ -325,6 +329,7 @@ export default function ProgramFilters() {
                           <span>{degree}</span>
                           <div className="flex items-center gap-1">
                             <Button
+                              type="button"
                               variant="ghost"
                               size="icon"
                               onClick={() => startEditDegree(degree)}
@@ -335,6 +340,7 @@ export default function ProgramFilters() {
                               <Pencil className="h-4 w-4 text-muted-foreground" />
                             </Button>
                             <Button
+                              type="button"
                               variant="ghost"
                               size="icon"
                               onClick={() => removeDegree(degree)}
@@ -378,6 +384,7 @@ export default function ProgramFilters() {
                     data-testid="input-new-language"
                   />
                   <Button 
+                    type="button"
                     onClick={addLanguage} 
                     size="icon"
                     disabled={saveMutation.isPending || !newLanguage.trim()}
@@ -410,6 +417,7 @@ export default function ProgramFilters() {
                             data-testid="input-edit-language"
                           />
                           <Button
+                            type="button"
                             variant="ghost"
                             size="icon"
                             onClick={saveEditLanguage}
@@ -419,6 +427,7 @@ export default function ProgramFilters() {
                             <Check className="h-4 w-4" />
                           </Button>
                           <Button
+                            type="button"
                             variant="ghost"
                             size="icon"
                             onClick={cancelEditLanguage}
@@ -433,6 +442,7 @@ export default function ProgramFilters() {
                           <span>{language}</span>
                           <div className="flex items-center gap-1">
                             <Button
+                              type="button"
                               variant="ghost"
                               size="icon"
                               onClick={() => startEditLanguage(language)}
@@ -443,6 +453,7 @@ export default function ProgramFilters() {
                               <Pencil className="h-4 w-4 text-muted-foreground" />
                             </Button>
                             <Button
+                              type="button"
                               variant="ghost"
                               size="icon"
                               onClick={() => removeLanguage(language)}
