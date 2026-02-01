@@ -42,6 +42,8 @@ export function ProgramFinder() {
   const [languageFilter, setLanguageFilter] = useState('All');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [sortBy, setSortBy] = useState('default');
+  const [showAll, setShowAll] = useState(false);
+  const INITIAL_DISPLAY_COUNT = 6;
 
   const { data: programs = [], isLoading } = useQuery<Program[]>({
     queryKey: ['/api/programs'],
@@ -89,6 +91,9 @@ export function ProgramFinder() {
 
     return result;
   }, [programs, searchQuery, degreeFilter, languageFilter, sortBy]);
+
+  const displayedPrograms = showAll ? filteredPrograms : filteredPrograms.slice(0, INITIAL_DISPLAY_COUNT);
+  const hasMorePrograms = filteredPrograms.length > INITIAL_DISPLAY_COUNT;
 
   const formatCurrency = (amount: string | number) => {
     const num = typeof amount === 'string' ? parseFloat(amount) : amount;
@@ -229,8 +234,9 @@ export function ProgramFinder() {
             <p className="text-muted-foreground">Try adjusting your search filters</p>
           </div>
         ) : viewMode === 'grid' ? (
+          <>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredPrograms.map((program, index) => (
+            {displayedPrograms.map((program, index) => (
               <motion.div
                 key={program.id}
                 initial={{ opacity: 0, y: 20 }}
@@ -291,9 +297,23 @@ export function ProgramFinder() {
               </motion.div>
             ))}
           </div>
+          {hasMorePrograms && !showAll && (
+            <div className="text-center mt-8">
+              <Button 
+                variant="outline" 
+                size="lg"
+                onClick={() => setShowAll(true)}
+                data-testid="button-show-more-programs"
+              >
+                Show More ({filteredPrograms.length - INITIAL_DISPLAY_COUNT} more programs)
+              </Button>
+            </div>
+          )}
+          </>
         ) : (
+          <>
           <div className="space-y-3">
-            {filteredPrograms.map((program, index) => (
+            {displayedPrograms.map((program, index) => (
               <motion.div
                 key={program.id}
                 initial={{ opacity: 0, x: -20 }}
@@ -344,6 +364,19 @@ export function ProgramFinder() {
               </motion.div>
             ))}
           </div>
+          {hasMorePrograms && !showAll && (
+            <div className="text-center mt-8">
+              <Button 
+                variant="outline" 
+                size="lg"
+                onClick={() => setShowAll(true)}
+                data-testid="button-show-more-programs-list"
+              >
+                Show More ({filteredPrograms.length - INITIAL_DISPLAY_COUNT} more programs)
+              </Button>
+            </div>
+          )}
+          </>
         )}
       </div>
     </section>
