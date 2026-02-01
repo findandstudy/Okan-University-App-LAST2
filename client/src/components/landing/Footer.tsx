@@ -76,7 +76,7 @@ export function Footer({
                 <img 
                   src={logoUrl} 
                   alt={universityName} 
-                  className="h-12 w-auto"
+                  className="h-[3.75rem] w-auto"
                   onError={() => setLogoError(true)}
                 />
               ) : (

@@ -100,7 +100,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                 <img 
                   src={tenant.logoUrl} 
                   alt={tenant?.universityName || 'Logo'} 
-                  className="h-10 w-auto max-w-[140px] object-contain"
+                  className="h-[3.125rem] w-auto max-w-[175px] object-contain"
                 />
               ) : (
                 <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">

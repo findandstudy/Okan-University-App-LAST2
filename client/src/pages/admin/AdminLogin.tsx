@@ -60,7 +60,7 @@ export default function AdminLogin() {
             <img 
               src={logoUrl} 
               alt={universityName} 
-              className="mx-auto h-20 w-auto mb-4"
+              className="mx-auto h-[6.25rem] w-auto mb-4"
               onError={() => setLogoError(true)}
             />
           ) : (

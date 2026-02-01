@@ -83,7 +83,7 @@ export function Header({ universityName = 'University', logoUrl }: HeaderProps) 
             <img 
               src={displayLogoUrl} 
               alt={displayName} 
-              className="h-12 w-auto"
+              className="h-[3.75rem] w-auto"
               onError={() => setLogoError(true)}
             />
           ) : (
