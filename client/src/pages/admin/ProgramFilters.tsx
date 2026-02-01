@@ -5,8 +5,9 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
-import { Plus, Trash2, Loader2, GraduationCap, Languages, Pencil, Check, X } from 'lucide-react';
+import { Plus, Trash2, Loader2, GraduationCap, Languages, Pencil, Check, X, AlertCircle } from 'lucide-react';
 import AdminLayout from './AdminLayout';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 interface Section {
   id: string;
@@ -31,7 +32,7 @@ export default function ProgramFilters() {
   const [editDegreeValue, setEditDegreeValue] = useState('');
   const [editLanguageValue, setEditLanguageValue] = useState('');
 
-  const { data: sections = [] } = useQuery<Section[]>({
+  const { data: sections = [], isLoading: sectionsLoading, error: sectionsError } = useQuery<Section[]>({
     queryKey: ['/api/sections'],
   });
 
@@ -51,26 +52,32 @@ export default function ProgramFilters() {
   const saveMutation = useMutation({
     mutationFn: async (options: { degreeOptions: string[]; languageOptions: string[] }) => {
       if (!programFinderSection) {
-        throw new Error('Program finder section not found');
+        throw new Error('Program finder section not found. Please wait for page to load.');
       }
-      await apiRequest('PATCH', `/api/sections/${programFinderSection.id}`, {
+      const response = await apiRequest('PATCH', `/api/sections/${programFinderSection.id}`, {
         settings: {
           ...programFinderSection.settings,
           degreeOptions: options.degreeOptions,
           languageOptions: options.languageOptions,
         },
       });
+      return response;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/sections'] });
       toast({ title: 'Filter options saved successfully' });
     },
-    onError: () => {
-      toast({ title: 'Failed to save filter options', variant: 'destructive' });
+    onError: (error: Error) => {
+      console.error('Save error:', error);
+      toast({ title: error.message || 'Failed to save filter options', variant: 'destructive' });
     },
   });
 
   const handleSave = () => {
+    if (!programFinderSection) {
+      toast({ title: 'Please wait for page to load', variant: 'destructive' });
+      return;
+    }
     saveMutation.mutate({ degreeOptions, languageOptions });
   };
 
@@ -84,6 +91,10 @@ export default function ProgramFilters() {
       toast({ title: 'This degree already exists', variant: 'destructive' });
       return;
     }
+    if (!programFinderSection) {
+      toast({ title: 'Please wait for page to load', variant: 'destructive' });
+      return;
+    }
     const updated = [...degreeOptions, trimmed];
     setDegreeOptions(updated);
     setNewDegree('');
@@ -91,6 +102,10 @@ export default function ProgramFilters() {
   };
 
   const removeDegree = (degree: string) => {
+    if (!programFinderSection) {
+      toast({ title: 'Please wait for page to load', variant: 'destructive' });
+      return;
+    }
     const updated = degreeOptions.filter(d => d !== degree);
     setDegreeOptions(updated);
     saveMutation.mutate({ degreeOptions: updated, languageOptions });
@@ -109,6 +124,10 @@ export default function ProgramFilters() {
     }
     if (trimmed !== editingDegree && degreeOptions.includes(trimmed)) {
       toast({ title: 'This degree already exists', variant: 'destructive' });
+      return;
+    }
+    if (!programFinderSection) {
+      toast({ title: 'Please wait for page to load', variant: 'destructive' });
       return;
     }
     const updated = degreeOptions.map(d => d === editingDegree ? trimmed : d);
@@ -132,6 +151,10 @@ export default function ProgramFilters() {
       toast({ title: 'This language already exists', variant: 'destructive' });
       return;
     }
+    if (!programFinderSection) {
+      toast({ title: 'Please wait for page to load', variant: 'destructive' });
+      return;
+    }
     const updated = [...languageOptions, trimmed];
     setLanguageOptions(updated);
     setNewLanguage('');
@@ -139,6 +162,10 @@ export default function ProgramFilters() {
   };
 
   const removeLanguage = (language: string) => {
+    if (!programFinderSection) {
+      toast({ title: 'Please wait for page to load', variant: 'destructive' });
+      return;
+    }
     const updated = languageOptions.filter(l => l !== language);
     setLanguageOptions(updated);
     saveMutation.mutate({ degreeOptions, languageOptions: updated });
@@ -159,6 +186,10 @@ export default function ProgramFilters() {
       toast({ title: 'This language already exists', variant: 'destructive' });
       return;
     }
+    if (!programFinderSection) {
+      toast({ title: 'Please wait for page to load', variant: 'destructive' });
+      return;
+    }
     const updated = languageOptions.map(l => l === editingLanguage ? trimmed : l);
     setLanguageOptions(updated);
     setEditingLanguage(null);
@@ -169,6 +200,8 @@ export default function ProgramFilters() {
     setEditingLanguage(null);
     setEditLanguageValue('');
   };
+
+  const isReady = !sectionsLoading && programFinderSection;
 
   return (
     <AdminLayout>
@@ -182,7 +215,7 @@ export default function ProgramFilters() {
           </div>
           <Button
             onClick={handleSave}
-            disabled={saveMutation.isPending}
+            disabled={saveMutation.isPending || !isReady}
             data-testid="button-save-filters"
           >
             {saveMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
@@ -190,211 +223,250 @@ export default function ProgramFilters() {
           </Button>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <GraduationCap className="h-5 w-5" />
-                Degree Options
-              </CardTitle>
-              <CardDescription>
-                These options appear in the education level filter dropdown
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Add new degree..."
-                  value={newDegree}
-                  onChange={(e) => setNewDegree(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && addDegree()}
-                  data-testid="input-new-degree"
-                />
-                <Button 
-                  onClick={addDegree} 
-                  size="icon"
-                  disabled={saveMutation.isPending}
-                  data-testid="button-add-degree"
-                >
-                  <Plus className="h-4 w-4" />
-                </Button>
-              </div>
-              <div className="space-y-2">
-                {degreeOptions.map((degree) => (
-                  <div
-                    key={degree}
-                    className="flex items-center justify-between p-3 bg-muted/50 rounded-lg"
-                    data-testid={`degree-option-${degree}`}
-                  >
-                    {editingDegree === degree ? (
-                      <div className="flex items-center gap-2 flex-1 mr-2">
-                        <Input
-                          value={editDegreeValue}
-                          onChange={(e) => setEditDegreeValue(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') saveEditDegree();
-                            if (e.key === 'Escape') cancelEditDegree();
-                          }}
-                          autoFocus
-                          data-testid="input-edit-degree"
-                        />
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={saveEditDegree}
-                          className="h-8 w-8 text-green-600"
-                          data-testid="button-save-edit-degree"
-                        >
-                          <Check className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={cancelEditDegree}
-                          className="h-8 w-8"
-                          data-testid="button-cancel-edit-degree"
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    ) : (
-                      <>
-                        <span>{degree}</span>
-                        <div className="flex items-center gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => startEditDegree(degree)}
-                            className="h-8 w-8"
-                            data-testid={`button-edit-degree-${degree}`}
-                          >
-                            <Pencil className="h-4 w-4 text-muted-foreground" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => removeDegree(degree)}
-                            className="h-8 w-8"
-                            data-testid={`button-delete-degree-${degree}`}
-                          >
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                ))}
-                {degreeOptions.length === 0 && (
-                  <p className="text-muted-foreground text-center py-4">
-                    No degree options. Add some above.
-                  </p>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+        {sectionsLoading && (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            <span className="ml-2 text-muted-foreground">Loading...</span>
+          </div>
+        )}
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Languages className="h-5 w-5" />
-                Language Options
-              </CardTitle>
-              <CardDescription>
-                These options appear in the language filter dropdown
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Add new language..."
-                  value={newLanguage}
-                  onChange={(e) => setNewLanguage(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && addLanguage()}
-                  data-testid="input-new-language"
-                />
-                <Button 
-                  onClick={addLanguage} 
-                  size="icon"
-                  disabled={saveMutation.isPending}
-                  data-testid="button-add-language"
-                >
-                  <Plus className="h-4 w-4" />
-                </Button>
-              </div>
-              <div className="space-y-2">
-                {languageOptions.map((language) => (
-                  <div
-                    key={language}
-                    className="flex items-center justify-between p-3 bg-muted/50 rounded-lg"
-                    data-testid={`language-option-${language}`}
+        {sectionsError && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              Failed to load sections. Please refresh the page.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {!sectionsLoading && !programFinderSection && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              Program finder section not found. Please contact support.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {isReady && (
+          <div className="grid md:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <GraduationCap className="h-5 w-5" />
+                  Degree Options
+                </CardTitle>
+                <CardDescription>
+                  These options appear in the education level filter dropdown
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Add new degree..."
+                    value={newDegree}
+                    onChange={(e) => setNewDegree(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && addDegree()}
+                    data-testid="input-new-degree"
+                  />
+                  <Button 
+                    onClick={addDegree} 
+                    size="icon"
+                    disabled={saveMutation.isPending || !newDegree.trim()}
+                    data-testid="button-add-degree"
                   >
-                    {editingLanguage === language ? (
-                      <div className="flex items-center gap-2 flex-1 mr-2">
-                        <Input
-                          value={editLanguageValue}
-                          onChange={(e) => setEditLanguageValue(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') saveEditLanguage();
-                            if (e.key === 'Escape') cancelEditLanguage();
-                          }}
-                          autoFocus
-                          data-testid="input-edit-language"
-                        />
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={saveEditLanguage}
-                          className="h-8 w-8 text-green-600"
-                          data-testid="button-save-edit-language"
-                        >
-                          <Check className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={cancelEditLanguage}
-                          className="h-8 w-8"
-                          data-testid="button-cancel-edit-language"
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
+                    {saveMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
-                      <>
-                        <span>{language}</span>
-                        <div className="flex items-center gap-1">
+                      <Plus className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+                <div className="space-y-2">
+                  {degreeOptions.map((degree) => (
+                    <div
+                      key={degree}
+                      className="flex items-center justify-between p-3 bg-muted/50 rounded-lg"
+                      data-testid={`degree-option-${degree}`}
+                    >
+                      {editingDegree === degree ? (
+                        <div className="flex items-center gap-2 flex-1 mr-2">
+                          <Input
+                            value={editDegreeValue}
+                            onChange={(e) => setEditDegreeValue(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') saveEditDegree();
+                              if (e.key === 'Escape') cancelEditDegree();
+                            }}
+                            autoFocus
+                            data-testid="input-edit-degree"
+                          />
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() => startEditLanguage(language)}
-                            className="h-8 w-8"
-                            data-testid={`button-edit-language-${language}`}
+                            onClick={saveEditDegree}
+                            className="h-8 w-8 text-green-600"
+                            data-testid="button-save-edit-degree"
                           >
-                            <Pencil className="h-4 w-4 text-muted-foreground" />
+                            <Check className="h-4 w-4" />
                           </Button>
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() => removeLanguage(language)}
+                            onClick={cancelEditDegree}
                             className="h-8 w-8"
-                            data-testid={`button-delete-language-${language}`}
+                            data-testid="button-cancel-edit-degree"
                           >
-                            <Trash2 className="h-4 w-4 text-destructive" />
+                            <X className="h-4 w-4" />
                           </Button>
                         </div>
-                      </>
+                      ) : (
+                        <>
+                          <span>{degree}</span>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => startEditDegree(degree)}
+                              className="h-8 w-8"
+                              disabled={saveMutation.isPending}
+                              data-testid={`button-edit-degree-${degree}`}
+                            >
+                              <Pencil className="h-4 w-4 text-muted-foreground" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => removeDegree(degree)}
+                              className="h-8 w-8"
+                              disabled={saveMutation.isPending}
+                              data-testid={`button-delete-degree-${degree}`}
+                            >
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                  {degreeOptions.length === 0 && (
+                    <p className="text-muted-foreground text-center py-4">
+                      No degree options. Add some above.
+                    </p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Languages className="h-5 w-5" />
+                  Language Options
+                </CardTitle>
+                <CardDescription>
+                  These options appear in the language filter dropdown
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Add new language..."
+                    value={newLanguage}
+                    onChange={(e) => setNewLanguage(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && addLanguage()}
+                    data-testid="input-new-language"
+                  />
+                  <Button 
+                    onClick={addLanguage} 
+                    size="icon"
+                    disabled={saveMutation.isPending || !newLanguage.trim()}
+                    data-testid="button-add-language"
+                  >
+                    {saveMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Plus className="h-4 w-4" />
                     )}
-                  </div>
-                ))}
-                {languageOptions.length === 0 && (
-                  <p className="text-muted-foreground text-center py-4">
-                    No language options. Add some above.
-                  </p>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+                  </Button>
+                </div>
+                <div className="space-y-2">
+                  {languageOptions.map((language) => (
+                    <div
+                      key={language}
+                      className="flex items-center justify-between p-3 bg-muted/50 rounded-lg"
+                      data-testid={`language-option-${language}`}
+                    >
+                      {editingLanguage === language ? (
+                        <div className="flex items-center gap-2 flex-1 mr-2">
+                          <Input
+                            value={editLanguageValue}
+                            onChange={(e) => setEditLanguageValue(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') saveEditLanguage();
+                              if (e.key === 'Escape') cancelEditLanguage();
+                            }}
+                            autoFocus
+                            data-testid="input-edit-language"
+                          />
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={saveEditLanguage}
+                            className="h-8 w-8 text-green-600"
+                            data-testid="button-save-edit-language"
+                          >
+                            <Check className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={cancelEditLanguage}
+                            className="h-8 w-8"
+                            data-testid="button-cancel-edit-language"
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <>
+                          <span>{language}</span>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => startEditLanguage(language)}
+                              className="h-8 w-8"
+                              disabled={saveMutation.isPending}
+                              data-testid={`button-edit-language-${language}`}
+                            >
+                              <Pencil className="h-4 w-4 text-muted-foreground" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => removeLanguage(language)}
+                              className="h-8 w-8"
+                              disabled={saveMutation.isPending}
+                              data-testid={`button-delete-language-${language}`}
+                            >
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                  {languageOptions.length === 0 && (
+                    <p className="text-muted-foreground text-center py-4">
+                      No language options. Add some above.
+                    </p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
       </div>
     </AdminLayout>
   );
