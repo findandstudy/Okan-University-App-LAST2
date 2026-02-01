@@ -306,10 +306,7 @@ export function ProgramFinder() {
                 data-testid="button-show-more-programs"
               >
                 <span className="font-medium text-foreground">
-                  {showAll 
-                    ? 'Show Less'
-                    : `Show More (${filteredPrograms.length - INITIAL_DISPLAY_COUNT} more programs)`
-                  }
+                  {showAll ? 'Show Less' : 'Show More'}
                 </span>
                 {showAll ? (
                   <ChevronUp className="h-5 w-5 text-primary transition-transform group-hover:-translate-y-0.5" />
@@ -383,10 +380,7 @@ export function ProgramFinder() {
                 data-testid="button-show-more-programs-list"
               >
                 <span className="font-medium text-foreground">
-                  {showAll 
-                    ? 'Show Less'
-                    : `Show More (${filteredPrograms.length - INITIAL_DISPLAY_COUNT} more programs)`
-                  }
+                  {showAll ? 'Show Less' : 'Show More'}
                 </span>
                 {showAll ? (
                   <ChevronUp className="h-5 w-5 text-primary transition-transform group-hover:-translate-y-0.5" />

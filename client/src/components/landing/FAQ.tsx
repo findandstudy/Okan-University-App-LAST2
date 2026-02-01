@@ -244,10 +244,7 @@ export function FAQ() {
                     data-testid="button-show-more-faq"
                   >
                     <span className="font-medium text-foreground">
-                      {showAll 
-                        ? 'Show Less'
-                        : `Show More (${displayFaqs ? remainingCount : remainingDefaultCount})`
-                      }
+                      {showAll ? 'Show Less' : 'Show More'}
                     </span>
                     {showAll ? (
                       <ChevronUp className="h-5 w-5 text-primary transition-transform group-hover:-translate-y-0.5" />
