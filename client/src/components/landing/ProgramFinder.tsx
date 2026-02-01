@@ -18,8 +18,17 @@ import { motion } from 'framer-motion';
 import { Search, GraduationCap, Languages, DollarSign, ArrowRight, LayoutGrid, List, ArrowUpDown } from 'lucide-react';
 import type { Program } from '@shared/schema';
 
-const DEGREE_OPTIONS = ['All', 'Bachelor', 'Master', 'PhD', 'Associate', 'Certificate'];
-const LANGUAGE_OPTIONS = ['All', 'English', 'Turkish', 'Arabic', 'French'];
+interface Section {
+  id: string;
+  sectionKey: string;
+  settings: {
+    degreeOptions?: string[];
+    languageOptions?: string[];
+  } | null;
+}
+
+const DEFAULT_DEGREE_OPTIONS = ['Bachelor', 'Master', 'PhD', 'Associate', 'Certificate'];
+const DEFAULT_LANGUAGE_OPTIONS = ['English', 'Turkish', 'Arabic', 'French'];
 const SORT_OPTIONS = [
   { value: 'default', label: 'Default' },
   { value: 'price_asc', label: 'Price: Low to High' },
@@ -37,6 +46,14 @@ export function ProgramFinder() {
   const { data: programs = [], isLoading } = useQuery<Program[]>({
     queryKey: ['/api/programs'],
   });
+
+  const { data: sections = [] } = useQuery<Section[]>({
+    queryKey: ['/api/sections'],
+  });
+
+  const programFinderSection = sections.find(s => s.sectionKey === 'program_finder');
+  const degreeOptions = ['All', ...(programFinderSection?.settings?.degreeOptions || DEFAULT_DEGREE_OPTIONS)];
+  const languageOptions = ['All', ...(programFinderSection?.settings?.languageOptions || DEFAULT_LANGUAGE_OPTIONS)];
 
   const filteredPrograms = useMemo(() => {
     let result = programs.filter((program) => {
@@ -126,7 +143,7 @@ export function ProgramFinder() {
                 </div>
               </SelectTrigger>
               <SelectContent>
-                {DEGREE_OPTIONS.map((degree) => (
+                {degreeOptions.map((degree: string) => (
                   <SelectItem key={degree} value={degree}>
                     {degree === 'All' ? t('programs.all') : degree}
                   </SelectItem>
@@ -142,7 +159,7 @@ export function ProgramFinder() {
                 </div>
               </SelectTrigger>
               <SelectContent>
-                {LANGUAGE_OPTIONS.map((lang) => (
+                {languageOptions.map((lang: string) => (
                   <SelectItem key={lang} value={lang}>
                     {lang === 'All' ? t('programs.all') : lang}
                   </SelectItem>

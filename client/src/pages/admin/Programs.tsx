@@ -35,8 +35,17 @@ import { Plus, Pencil, Trash2, Upload, Download, Loader2, ArrowUpDown, ArrowUp, 
 import type { Program } from '@shared/schema';
 import AdminLayout from './AdminLayout';
 
-const DEGREE_OPTIONS = ['Bachelor', 'Master', 'PhD', 'Associate', 'Certificate'];
-const LANGUAGE_OPTIONS = ['English', 'Turkish', 'Arabic', 'French', 'German'];
+interface Section {
+  id: string;
+  sectionKey: string;
+  settings: {
+    degreeOptions?: string[];
+    languageOptions?: string[];
+  } | null;
+}
+
+const DEFAULT_DEGREE_OPTIONS = ['Bachelor', 'Master', 'PhD', 'Associate', 'Certificate'];
+const DEFAULT_LANGUAGE_OPTIONS = ['English', 'Turkish', 'Arabic', 'French', 'German'];
 
 type SortField = 'programName' | 'degree' | 'language' | 'tuitionFee' | 'discountedFee';
 type SortDirection = 'asc' | 'desc';
@@ -75,6 +84,14 @@ export default function Programs() {
   const { data: programs = [], isLoading } = useQuery<Program[]>({
     queryKey: ['/api/programs'],
   });
+
+  const { data: sections = [] } = useQuery<Section[]>({
+    queryKey: ['/api/sections'],
+  });
+
+  const programFinderSection = sections.find(s => s.sectionKey === 'program_finder');
+  const DEGREE_OPTIONS = programFinderSection?.settings?.degreeOptions || DEFAULT_DEGREE_OPTIONS;
+  const LANGUAGE_OPTIONS = programFinderSection?.settings?.languageOptions || DEFAULT_LANGUAGE_OPTIONS;
 
   const createMutation = useMutation({
     mutationFn: async (data: ProgramForm) => {

@@ -37,6 +37,7 @@ import {
   BadgeCheck,
   Phone,
   PanelBottom,
+  Filter,
 } from 'lucide-react';
 import type { Tenant } from '@shared/schema';
 
@@ -51,6 +52,7 @@ const menuItems = [
   { title: 'Hero Content', url: '/admin/hero', icon: Sparkles },
   { title: 'Why Choose Us', url: '/admin/why-choose-us', icon: BadgeCheck },
   { title: 'Programs', url: '/admin/programs', icon: GraduationCap },
+  { title: 'Program Filters', url: '/admin/program-filters', icon: Filter },
   { title: 'Testimonials', url: '/admin/testimonials', icon: MessageSquareQuote },
   { title: 'FAQ', url: '/admin/faq', icon: HelpCircle },
   { title: 'Sections', url: '/admin/sections', icon: LayoutList },

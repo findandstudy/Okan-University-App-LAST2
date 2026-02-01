@@ -26,6 +26,7 @@ import HeroContent from "@/pages/admin/HeroContent";
 import WhyChooseUs from "@/pages/admin/WhyChooseUs";
 import ContactInfo from "@/pages/admin/ContactInfo";
 import FooterContent from "@/pages/admin/FooterContent";
+import ProgramFilters from "@/pages/admin/ProgramFilters";
 import EmbedPrograms from "@/pages/EmbedPrograms";
 import NotFound from "@/pages/not-found";
 
@@ -53,6 +54,7 @@ function Router() {
       <Route path="/admin/why-choose-us" component={WhyChooseUs} />
       <Route path="/admin/contact-info" component={ContactInfo} />
       <Route path="/admin/footer" component={FooterContent} />
+      <Route path="/admin/program-filters" component={ProgramFilters} />
       
       <Route path="/embed/programs" component={EmbedPrograms} />
       <Route path="/embed/programs/:lang" component={EmbedPrograms} />
