@@ -359,6 +359,7 @@ export default function Programs() {
           <div className="flex gap-2 flex-wrap">
             {selectedIds.size > 0 && (
               <Button 
+                type="button"
                 variant="destructive" 
                 size="sm"
                 onClick={handleBulkDelete}
@@ -373,7 +374,7 @@ export default function Programs() {
                 Delete ({selectedIds.size})
               </Button>
             )}
-            <Button variant="outline" size="sm" onClick={downloadTemplate}>
+            <Button type="button" variant="outline" size="sm" onClick={downloadTemplate}>
               <Download className="h-4 w-4 mr-2" />
               CSV Template
             </Button>
@@ -387,6 +388,7 @@ export default function Programs() {
                 disabled={isImporting}
               />
               <Button 
+                type="button"
                 variant="outline" 
                 size="sm" 
                 disabled={isImporting}
