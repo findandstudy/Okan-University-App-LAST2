@@ -70,6 +70,7 @@ export default function Programs() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [sortField, setSortField] = useState<SortField>('programName');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const [isImporting, setIsImporting] = useState(false);
 
   const { data: programs = [], isLoading } = useQuery<Program[]>({
     queryKey: ['/api/programs'],
@@ -263,6 +264,72 @@ export default function Programs() {
     a.click();
   };
 
+  const handleDelete = (program: Program) => {
+    if (confirm(`Are you sure you want to delete "${program.programName}"?`)) {
+      deleteMutation.mutate(program.id);
+    }
+  };
+
+  const handleImportCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsImporting(true);
+    try {
+      const text = await file.text();
+      const lines = text.split('\n').filter(line => line.trim());
+      const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+      
+      const programNameIdx = headers.findIndex(h => h === 'program_name');
+      const degreeIdx = headers.findIndex(h => h === 'degree');
+      const languageIdx = headers.findIndex(h => h === 'language');
+      const tuitionFeeIdx = headers.findIndex(h => h === 'tuition_fee');
+      const discountedFeeIdx = headers.findIndex(h => h === 'discounted_fee');
+      const externalIdIdx = headers.findIndex(h => h === 'external_program_id');
+
+      if (programNameIdx === -1 || degreeIdx === -1 || languageIdx === -1 || tuitionFeeIdx === -1) {
+        toast({ title: 'Invalid CSV format. Required columns: program_name, degree, language, tuition_fee', variant: 'destructive' });
+        setIsImporting(false);
+        return;
+      }
+
+      let successCount = 0;
+      let errorCount = 0;
+
+      for (let i = 1; i < lines.length; i++) {
+        const values = lines[i].split(',').map(v => v.trim());
+        if (values.length < 4) continue;
+
+        try {
+          await apiRequest('POST', '/api/programs', {
+            tenantId: 'default',
+            universityName: 'Okan University',
+            programName: values[programNameIdx],
+            degree: values[degreeIdx],
+            language: values[languageIdx],
+            tuitionFee: values[tuitionFeeIdx],
+            discountedFee: discountedFeeIdx !== -1 ? values[discountedFeeIdx] || null : null,
+            externalProgramId: externalIdIdx !== -1 ? values[externalIdIdx] || '' : '',
+          });
+          successCount++;
+        } catch {
+          errorCount++;
+        }
+      }
+
+      queryClient.invalidateQueries({ queryKey: ['/api/programs'] });
+      toast({ 
+        title: `Import complete: ${successCount} added, ${errorCount} failed`,
+        variant: errorCount > 0 ? 'destructive' : 'default'
+      });
+    } catch {
+      toast({ title: 'Failed to import CSV', variant: 'destructive' });
+    } finally {
+      setIsImporting(false);
+      e.target.value = '';
+    }
+  };
+
   return (
     <AdminLayout>
       <div className="p-6 space-y-6">
@@ -293,10 +360,25 @@ export default function Programs() {
               <Download className="h-4 w-4 mr-2" />
               CSV Template
             </Button>
-            <Button variant="outline" size="sm">
-              <Upload className="h-4 w-4 mr-2" />
-              Import CSV
-            </Button>
+            <label>
+              <input
+                type="file"
+                accept=".csv"
+                className="hidden"
+                onChange={handleImportCSV}
+                disabled={isImporting}
+              />
+              <Button variant="outline" size="sm" asChild disabled={isImporting}>
+                <span>
+                  {isImporting ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Upload className="h-4 w-4 mr-2" />
+                  )}
+                  Import CSV
+                </span>
+              </Button>
+            </label>
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
               <DialogTrigger asChild>
                 <Button size="sm" data-testid="button-add-program">
@@ -558,7 +640,7 @@ export default function Programs() {
                             <Button
                               variant="ghost"
                               size="icon"
-                              onClick={() => deleteMutation.mutate(program.id)}
+                              onClick={() => handleDelete(program)}
                               disabled={deleteMutation.isPending}
                               data-testid={`button-delete-program-${program.id}`}
                             >
