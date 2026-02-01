@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useI18n } from '@/lib/i18n';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
@@ -8,6 +9,7 @@ import {
   AccordionTrigger,
 } from '@/components/ui/accordion';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import type { FaqItem, SupportedLanguage } from '@shared/schema';
 
 const defaultFAQs = [
@@ -121,8 +123,11 @@ const defaultFAQs = [
   },
 ];
 
+const INITIAL_FAQ_COUNT = 5;
+
 export function FAQ() {
   const { t, isRTL, language } = useI18n();
+  const [showAll, setShowAll] = useState(false);
 
   const { data: faqItems = [], isLoading } = useQuery<FaqItem[]>({
     queryKey: ['/api/faq'],
@@ -150,7 +155,14 @@ export function FAQ() {
     return faq.answer[language as SupportedLanguage] || faq.answer.en;
   };
 
-  const displayFaqs = enabledFaqs.length > 0 ? enabledFaqs : null;
+  const allFaqs = enabledFaqs.length > 0 ? enabledFaqs : null;
+  const displayFaqs = allFaqs ? (showAll ? allFaqs : allFaqs.slice(0, INITIAL_FAQ_COUNT)) : null;
+  const hasMoreFaqs = allFaqs ? allFaqs.length > INITIAL_FAQ_COUNT : false;
+  const remainingCount = allFaqs ? allFaqs.length - INITIAL_FAQ_COUNT : 0;
+
+  const displayDefaultFaqs = showAll ? defaultFAQs : defaultFAQs.slice(0, INITIAL_FAQ_COUNT);
+  const hasMoreDefaultFaqs = defaultFAQs.length > INITIAL_FAQ_COUNT;
+  const remainingDefaultCount = defaultFAQs.length - INITIAL_FAQ_COUNT;
 
   return (
     <section id="faq" className="py-20">
@@ -182,41 +194,70 @@ export function FAQ() {
               ))}
             </div>
           ) : (
-            <Accordion type="single" collapsible className="space-y-4">
-              {displayFaqs ? (
-                displayFaqs.map((faq, index) => (
-                  <AccordionItem
-                    key={faq.id}
-                    value={`item-${faq.id}`}
-                    className="bg-card border rounded-xl px-6 shadow-sm"
-                    data-testid={`faq-item-${index}`}
+            <>
+              <Accordion type="single" collapsible className="space-y-4">
+                {displayFaqs ? (
+                  displayFaqs.map((faq, index) => (
+                    <AccordionItem
+                      key={faq.id}
+                      value={`item-${faq.id}`}
+                      className="bg-card border rounded-xl px-6 shadow-sm"
+                      data-testid={`faq-item-${index}`}
+                    >
+                      <AccordionTrigger className={`text-left hover:no-underline ${isRTL ? 'text-right' : ''}`}>
+                        <span className="font-medium">{getQuestion(faq)}</span>
+                      </AccordionTrigger>
+                      <AccordionContent className="text-muted-foreground">
+                        {getAnswer(faq)}
+                      </AccordionContent>
+                    </AccordionItem>
+                  ))
+                ) : (
+                  displayDefaultFaqs.map((faq, index) => (
+                    <AccordionItem
+                      key={index}
+                      value={`item-${index}`}
+                      className="bg-card border rounded-xl px-6 shadow-sm"
+                      data-testid={`faq-item-${index}`}
+                    >
+                      <AccordionTrigger className={`text-left hover:no-underline ${isRTL ? 'text-right' : ''}`}>
+                        <span className="font-medium">{getDefaultQuestion(faq)}</span>
+                      </AccordionTrigger>
+                      <AccordionContent className="text-muted-foreground">
+                        {getDefaultAnswer(faq)}
+                      </AccordionContent>
+                    </AccordionItem>
+                  ))
+                )}
+              </Accordion>
+
+              {((displayFaqs && hasMoreFaqs) || (!displayFaqs && hasMoreDefaultFaqs)) && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="flex justify-center mt-8"
+                >
+                  <button
+                    type="button"
+                    onClick={() => setShowAll(!showAll)}
+                    className="group flex items-center gap-3 px-8 py-3 rounded-full border-2 border-primary/20 bg-background hover:border-primary/40 hover:bg-primary/5 transition-all duration-300"
+                    data-testid="button-show-more-faq"
                   >
-                    <AccordionTrigger className={`text-left hover:no-underline ${isRTL ? 'text-right' : ''}`}>
-                      <span className="font-medium">{getQuestion(faq)}</span>
-                    </AccordionTrigger>
-                    <AccordionContent className="text-muted-foreground">
-                      {getAnswer(faq)}
-                    </AccordionContent>
-                  </AccordionItem>
-                ))
-              ) : (
-                defaultFAQs.map((faq, index) => (
-                  <AccordionItem
-                    key={index}
-                    value={`item-${index}`}
-                    className="bg-card border rounded-xl px-6 shadow-sm"
-                    data-testid={`faq-item-${index}`}
-                  >
-                    <AccordionTrigger className={`text-left hover:no-underline ${isRTL ? 'text-right' : ''}`}>
-                      <span className="font-medium">{getDefaultQuestion(faq)}</span>
-                    </AccordionTrigger>
-                    <AccordionContent className="text-muted-foreground">
-                      {getDefaultAnswer(faq)}
-                    </AccordionContent>
-                  </AccordionItem>
-                ))
+                    <span className="font-medium text-foreground">
+                      {showAll 
+                        ? t('common.showLess') || 'Show Less'
+                        : `${t('common.showMore') || 'Show More'} (${displayFaqs ? remainingCount : remainingDefaultCount})`
+                      }
+                    </span>
+                    {showAll ? (
+                      <ChevronUp className="h-5 w-5 text-primary transition-transform group-hover:-translate-y-0.5" />
+                    ) : (
+                      <ChevronDown className="h-5 w-5 text-primary transition-transform group-hover:translate-y-0.5" />
+                    )}
+                  </button>
+                </motion.div>
               )}
-            </Accordion>
+            </>
           )}
         </motion.div>
       </div>

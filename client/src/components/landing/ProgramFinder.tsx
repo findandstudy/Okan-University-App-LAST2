@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { motion } from 'framer-motion';
-import { Search, GraduationCap, Languages, DollarSign, ArrowRight, LayoutGrid, List, ArrowUpDown } from 'lucide-react';
+import { Search, GraduationCap, Languages, DollarSign, ArrowRight, LayoutGrid, List, ArrowUpDown, ChevronDown, ChevronUp } from 'lucide-react';
 import type { Program } from '@shared/schema';
 
 interface Section {
@@ -297,16 +297,26 @@ export function ProgramFinder() {
               </motion.div>
             ))}
           </div>
-          {hasMorePrograms && !showAll && (
-            <div className="text-center mt-8">
-              <Button 
-                variant="outline" 
-                size="lg"
-                onClick={() => setShowAll(true)}
+          {hasMorePrograms && (
+            <div className="flex justify-center mt-10">
+              <button
+                type="button"
+                onClick={() => setShowAll(!showAll)}
+                className="group flex items-center gap-3 px-8 py-3 rounded-full border-2 border-primary/20 bg-background hover:border-primary/40 hover:bg-primary/5 transition-all duration-300"
                 data-testid="button-show-more-programs"
               >
-                Show More ({filteredPrograms.length - INITIAL_DISPLAY_COUNT} more programs)
-              </Button>
+                <span className="font-medium text-foreground">
+                  {showAll 
+                    ? t('common.showLess') || 'Show Less'
+                    : `${t('common.showMore') || 'Show More'} (${filteredPrograms.length - INITIAL_DISPLAY_COUNT} ${t('programs.morePrograms') || 'more programs'})`
+                  }
+                </span>
+                {showAll ? (
+                  <ChevronUp className="h-5 w-5 text-primary transition-transform group-hover:-translate-y-0.5" />
+                ) : (
+                  <ChevronDown className="h-5 w-5 text-primary transition-transform group-hover:translate-y-0.5" />
+                )}
+              </button>
             </div>
           )}
           </>
@@ -364,16 +374,26 @@ export function ProgramFinder() {
               </motion.div>
             ))}
           </div>
-          {hasMorePrograms && !showAll && (
-            <div className="text-center mt-8">
-              <Button 
-                variant="outline" 
-                size="lg"
-                onClick={() => setShowAll(true)}
+          {hasMorePrograms && (
+            <div className="flex justify-center mt-10">
+              <button
+                type="button"
+                onClick={() => setShowAll(!showAll)}
+                className="group flex items-center gap-3 px-8 py-3 rounded-full border-2 border-primary/20 bg-background hover:border-primary/40 hover:bg-primary/5 transition-all duration-300"
                 data-testid="button-show-more-programs-list"
               >
-                Show More ({filteredPrograms.length - INITIAL_DISPLAY_COUNT} more programs)
-              </Button>
+                <span className="font-medium text-foreground">
+                  {showAll 
+                    ? t('common.showLess') || 'Show Less'
+                    : `${t('common.showMore') || 'Show More'} (${filteredPrograms.length - INITIAL_DISPLAY_COUNT} ${t('programs.morePrograms') || 'more programs'})`
+                  }
+                </span>
+                {showAll ? (
+                  <ChevronUp className="h-5 w-5 text-primary transition-transform group-hover:-translate-y-0.5" />
+                ) : (
+                  <ChevronDown className="h-5 w-5 text-primary transition-transform group-hover:translate-y-0.5" />
+                )}
+              </button>
             </div>
           )}
           </>
