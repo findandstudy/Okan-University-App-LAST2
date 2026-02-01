@@ -813,5 +813,80 @@ Sitemap: https://okanuniversity.app/sitemap.xml`;
     }
   });
 
+  // Email Templates
+  app.get("/api/email-templates", requireAdmin, async (req, res) => {
+    try {
+      const tenantId = getTenantId(req);
+      const templates = await storage.getEmailTemplates(tenantId);
+      res.json(templates);
+    } catch (error) {
+      console.error("Error fetching email templates:", error);
+      res.status(500).json({ error: "Failed to fetch email templates" });
+    }
+  });
+
+  app.get("/api/email-templates/:id", requireAdmin, async (req, res) => {
+    try {
+      const id = req.params.id as string;
+      const template = await storage.getEmailTemplate(id);
+      if (!template) {
+        return res.status(404).json({ error: "Email template not found" });
+      }
+      res.json(template);
+    } catch (error) {
+      console.error("Error fetching email template:", error);
+      res.status(500).json({ error: "Failed to fetch email template" });
+    }
+  });
+
+  app.post("/api/email-templates", requireAdmin, async (req, res) => {
+    try {
+      const tenantId = getTenantId(req);
+      const data = { ...req.body, tenantId };
+      const template = await storage.createEmailTemplate(data);
+      res.json(template);
+    } catch (error) {
+      console.error("Error creating email template:", error);
+      res.status(500).json({ error: "Failed to create email template" });
+    }
+  });
+
+  app.patch("/api/email-templates/:id", requireAdmin, async (req, res) => {
+    try {
+      const id = req.params.id as string;
+      const tenantId = getTenantId(req);
+      
+      const existing = await storage.getEmailTemplate(id);
+      if (!existing || existing.tenantId !== tenantId) {
+        return res.status(404).json({ error: "Email template not found" });
+      }
+      
+      const { tenantId: _, id: __, ...updateData } = req.body;
+      const template = await storage.updateEmailTemplate(id, updateData);
+      res.json(template);
+    } catch (error) {
+      console.error("Error updating email template:", error);
+      res.status(500).json({ error: "Failed to update email template" });
+    }
+  });
+
+  app.delete("/api/email-templates/:id", requireAdmin, async (req, res) => {
+    try {
+      const id = req.params.id as string;
+      const tenantId = getTenantId(req);
+      
+      const existing = await storage.getEmailTemplate(id);
+      if (!existing || existing.tenantId !== tenantId) {
+        return res.status(404).json({ error: "Email template not found" });
+      }
+      
+      const success = await storage.deleteEmailTemplate(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting email template:", error);
+      res.status(500).json({ error: "Failed to delete email template" });
+    }
+  });
+
   return httpServer;
 }
