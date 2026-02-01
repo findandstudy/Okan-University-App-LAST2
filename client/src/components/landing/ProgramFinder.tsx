@@ -307,8 +307,8 @@ export function ProgramFinder() {
               >
                 <span className="font-medium text-foreground">
                   {showAll 
-                    ? t('common.showLess') || 'Show Less'
-                    : `${t('common.showMore') || 'Show More'} (${filteredPrograms.length - INITIAL_DISPLAY_COUNT} ${t('programs.morePrograms') || 'more programs'})`
+                    ? 'Show Less'
+                    : `Show More (${filteredPrograms.length - INITIAL_DISPLAY_COUNT} more programs)`
                   }
                 </span>
                 {showAll ? (
@@ -384,8 +384,8 @@ export function ProgramFinder() {
               >
                 <span className="font-medium text-foreground">
                   {showAll 
-                    ? t('common.showLess') || 'Show Less'
-                    : `${t('common.showMore') || 'Show More'} (${filteredPrograms.length - INITIAL_DISPLAY_COUNT} ${t('programs.morePrograms') || 'more programs'})`
+                    ? 'Show Less'
+                    : `Show More (${filteredPrograms.length - INITIAL_DISPLAY_COUNT} more programs)`
                   }
                 </span>
                 {showAll ? (

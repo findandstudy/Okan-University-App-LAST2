@@ -245,8 +245,8 @@ export function FAQ() {
                   >
                     <span className="font-medium text-foreground">
                       {showAll 
-                        ? t('common.showLess') || 'Show Less'
-                        : `${t('common.showMore') || 'Show More'} (${displayFaqs ? remainingCount : remainingDefaultCount})`
+                        ? 'Show Less'
+                        : `Show More (${displayFaqs ? remainingCount : remainingDefaultCount})`
                       }
                     </span>
                     {showAll ? (
