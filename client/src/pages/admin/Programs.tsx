@@ -360,25 +360,29 @@ export default function Programs() {
               <Download className="h-4 w-4 mr-2" />
               CSV Template
             </Button>
-            <label>
+            <>
               <input
                 type="file"
                 accept=".csv"
                 className="hidden"
+                id="csv-import"
                 onChange={handleImportCSV}
                 disabled={isImporting}
               />
-              <Button variant="outline" size="sm" asChild disabled={isImporting}>
-                <span>
-                  {isImporting ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <Upload className="h-4 w-4 mr-2" />
-                  )}
-                  Import CSV
-                </span>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                disabled={isImporting}
+                onClick={() => document.getElementById('csv-import')?.click()}
+              >
+                {isImporting ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Upload className="h-4 w-4 mr-2" />
+                )}
+                Import CSV
               </Button>
-            </label>
+            </>
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
               <DialogTrigger asChild>
                 <Button size="sm" data-testid="button-add-program">
