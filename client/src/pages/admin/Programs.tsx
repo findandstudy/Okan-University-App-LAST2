@@ -31,7 +31,8 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
-import { Plus, Pencil, Trash2, Upload, Download, Loader2, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { Plus, Pencil, Trash2, Upload, Download, Loader2, ArrowUpDown, ArrowUp, ArrowDown, Power, PowerOff } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
 import type { Program } from '@shared/schema';
 import AdminLayout from './AdminLayout';
 
@@ -147,15 +148,55 @@ export default function Programs() {
 
   const bulkDeleteMutation = useMutation({
     mutationFn: async (ids: string[]) => {
-      await Promise.all(ids.map(id => apiRequest('DELETE', `/api/programs/${id}`)));
+      const results = await Promise.allSettled(ids.map(id => apiRequest('DELETE', `/api/programs/${id}`)));
+      const failed = results.filter(r => r.status === 'rejected').length;
+      if (failed > 0) {
+        throw new Error(`${failed} program(s) failed to delete`);
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/programs'] });
       setSelectedIds(new Set());
       toast({ title: 'Programs deleted successfully' });
     },
+    onError: (error: Error) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/programs'] });
+      toast({ title: error.message || 'Failed to delete programs. Please login again.', variant: 'destructive' });
+    },
+  });
+
+  const toggleActiveMutation = useMutation({
+    mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => {
+      const response = await apiRequest('PATCH', `/api/programs/${id}`, { isActive });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/programs'] });
+      toast({ title: 'Program status updated' });
+    },
     onError: () => {
-      toast({ title: 'Failed to delete programs', variant: 'destructive' });
+      toast({ title: 'Failed to update status. Please login again.', variant: 'destructive' });
+    },
+  });
+
+  const bulkToggleActiveMutation = useMutation({
+    mutationFn: async ({ ids, isActive }: { ids: string[]; isActive: boolean }) => {
+      const results = await Promise.allSettled(
+        ids.map(id => apiRequest('PATCH', `/api/programs/${id}`, { isActive }))
+      );
+      const failed = results.filter(r => r.status === 'rejected').length;
+      if (failed > 0) {
+        throw new Error(`${failed} program(s) failed to update`);
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/programs'] });
+      setSelectedIds(new Set());
+      toast({ title: 'Programs updated successfully' });
+    },
+    onError: (error: Error) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/programs'] });
+      toast({ title: error.message || 'Failed to update programs. Please login again.', variant: 'destructive' });
     },
   });
 
@@ -231,6 +272,21 @@ export default function Programs() {
     if (confirm(`Are you sure you want to delete ${selectedIds.size} program(s)?`)) {
       bulkDeleteMutation.mutate(Array.from(selectedIds));
     }
+  };
+
+  const handleBulkActivate = () => {
+    if (selectedIds.size === 0) return;
+    bulkToggleActiveMutation.mutate({ ids: Array.from(selectedIds), isActive: true });
+  };
+
+  const handleBulkDeactivate = () => {
+    if (selectedIds.size === 0) return;
+    bulkToggleActiveMutation.mutate({ ids: Array.from(selectedIds), isActive: false });
+  };
+
+  const handleToggleActive = (program: Program) => {
+    const currentStatus = program.isActive ?? true;
+    toggleActiveMutation.mutate({ id: program.id, isActive: !currentStatus });
   };
 
   const handleCloseDialog = () => {
@@ -358,21 +414,53 @@ export default function Programs() {
 
           <div className="flex gap-2 flex-wrap">
             {selectedIds.size > 0 && (
-              <Button 
-                type="button"
-                variant="destructive" 
-                size="sm"
-                onClick={handleBulkDelete}
-                disabled={bulkDeleteMutation.isPending}
-                data-testid="button-bulk-delete-programs"
-              >
-                {bulkDeleteMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <Trash2 className="h-4 w-4 mr-2" />
-                )}
-                Delete ({selectedIds.size})
-              </Button>
+              <>
+                <Button 
+                  type="button"
+                  variant="default" 
+                  size="sm"
+                  onClick={handleBulkActivate}
+                  disabled={bulkToggleActiveMutation.isPending}
+                  data-testid="button-bulk-activate-programs"
+                >
+                  {bulkToggleActiveMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Power className="h-4 w-4 mr-2" />
+                  )}
+                  Activate ({selectedIds.size})
+                </Button>
+                <Button 
+                  type="button"
+                  variant="outline" 
+                  size="sm"
+                  onClick={handleBulkDeactivate}
+                  disabled={bulkToggleActiveMutation.isPending}
+                  data-testid="button-bulk-deactivate-programs"
+                >
+                  {bulkToggleActiveMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <PowerOff className="h-4 w-4 mr-2" />
+                  )}
+                  Deactivate ({selectedIds.size})
+                </Button>
+                <Button 
+                  type="button"
+                  variant="destructive" 
+                  size="sm"
+                  onClick={handleBulkDelete}
+                  disabled={bulkDeleteMutation.isPending}
+                  data-testid="button-bulk-delete-programs"
+                >
+                  {bulkDeleteMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-4 w-4 mr-2" />
+                  )}
+                  Delete ({selectedIds.size})
+                </Button>
+              </>
             )}
             <Button type="button" variant="outline" size="sm" onClick={downloadTemplate}>
               <Download className="h-4 w-4 mr-2" />
@@ -624,7 +712,8 @@ export default function Programs() {
                           Discounted <SortIcon field="discountedFee" />
                         </button>
                       </TableHead>
-                      <TableHead className="w-24">Actions</TableHead>
+                      <TableHead className="w-20 text-center">Status</TableHead>
+                      <TableHead className="w-20">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -650,9 +739,18 @@ export default function Programs() {
                             ? formatCurrency(program.discountedFee)
                             : '-'}
                         </TableCell>
+                        <TableCell className="text-center">
+                          <Switch
+                            checked={program.isActive ?? true}
+                            onCheckedChange={() => handleToggleActive(program)}
+                            disabled={toggleActiveMutation.isPending}
+                            data-testid={`switch-program-active-${program.id}`}
+                          />
+                        </TableCell>
                         <TableCell>
                           <div className="flex gap-1">
                             <Button
+                              type="button"
                               variant="ghost"
                               size="icon"
                               onClick={() => handleEdit(program)}
@@ -661,6 +759,7 @@ export default function Programs() {
                               <Pencil className="h-4 w-4" />
                             </Button>
                             <Button
+                              type="button"
                               variant="ghost"
                               size="icon"
                               onClick={() => handleDelete(program)}
