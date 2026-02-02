@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocation, Link } from 'wouter';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -6,7 +6,6 @@ import {
   SidebarContent,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
@@ -17,6 +16,7 @@ import {
 } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
   LayoutDashboard,
   Building,
@@ -35,10 +35,14 @@ import {
   HelpCircle,
   Sparkles,
   BadgeCheck,
-  Phone,
   PanelBottom,
   Filter,
   Search,
+  ChevronDown,
+  Globe,
+  Users,
+  Wrench,
+  type LucideIcon,
 } from 'lucide-react';
 import type { Tenant } from '@shared/schema';
 
@@ -46,30 +50,82 @@ interface AdminLayoutProps {
   children: React.ReactNode;
 }
 
-const menuItems = [
-  { title: 'Dashboard', url: '/admin', icon: LayoutDashboard },
-  { title: 'Tenant', url: '/admin/tenant', icon: Building },
-  { title: 'Theme', url: '/admin/theme', icon: Palette },
-  { title: 'SEO Settings', url: '/admin/seo', icon: Search },
-  { title: 'Hero Content', url: '/admin/hero', icon: Sparkles },
-  { title: 'Why Choose Us', url: '/admin/why-choose-us', icon: BadgeCheck },
-  { title: 'Programs', url: '/admin/programs', icon: GraduationCap },
-  { title: 'Program Filters', url: '/admin/program-filters', icon: Filter },
-  { title: 'Testimonials', url: '/admin/testimonials', icon: MessageSquareQuote },
-  { title: 'FAQ', url: '/admin/faq', icon: HelpCircle },
-  { title: 'Sections', url: '/admin/sections', icon: LayoutList },
-  { title: 'Contact Form', url: '/admin/contact-form', icon: FormInput },
-  { title: 'Contact Info', url: '/admin/contact-info', icon: Phone },
-  { title: 'Footer', url: '/admin/footer', icon: PanelBottom },
-  { title: 'Applications', url: '/admin/applications', icon: FileText },
-  { title: 'Integrations', url: '/admin/integrations', icon: Settings },
-  { title: 'Email', url: '/admin/email', icon: Mail },
-  { title: 'Logs', url: '/admin/logs', icon: Activity },
-  { title: 'Media', url: '/admin/media', icon: Image },
+interface MenuItem {
+  title: string;
+  url: string;
+  icon: LucideIcon;
+}
+
+interface MenuGroup {
+  title: string;
+  icon: LucideIcon;
+  items: MenuItem[];
+}
+
+const menuGroups: MenuGroup[] = [
+  {
+    title: 'Website Content',
+    icon: Globe,
+    items: [
+      { title: 'Hero Content', url: '/admin/hero', icon: Sparkles },
+      { title: 'Why Choose Us', url: '/admin/why-choose-us', icon: BadgeCheck },
+      { title: 'Programs', url: '/admin/programs', icon: GraduationCap },
+      { title: 'Program Filters', url: '/admin/program-filters', icon: Filter },
+      { title: 'Testimonials', url: '/admin/testimonials', icon: MessageSquareQuote },
+      { title: 'FAQ', url: '/admin/faq', icon: HelpCircle },
+      { title: 'Page Sections', url: '/admin/sections', icon: LayoutList },
+      { title: 'Footer', url: '/admin/footer', icon: PanelBottom },
+    ],
+  },
+  {
+    title: 'Settings',
+    icon: Settings,
+    items: [
+      { title: 'Tenant', url: '/admin/tenant', icon: Building },
+      { title: 'Theme', url: '/admin/theme', icon: Palette },
+      { title: 'SEO Settings', url: '/admin/seo', icon: Search },
+      { title: 'Integrations', url: '/admin/integrations', icon: Settings },
+      { title: 'Email', url: '/admin/email', icon: Mail },
+    ],
+  },
+  {
+    title: 'Leads',
+    icon: Users,
+    items: [
+      { title: 'Contact Form', url: '/admin/contact-form', icon: FormInput },
+      { title: 'Applications', url: '/admin/applications', icon: FileText },
+    ],
+  },
+  {
+    title: 'System',
+    icon: Wrench,
+    items: [
+      { title: 'Logs', url: '/admin/logs', icon: Activity },
+      { title: 'Media', url: '/admin/media', icon: Image },
+    ],
+  },
 ];
+
+const STORAGE_KEY = 'admin-sidebar-expanded-groups';
+
+function getInitialExpandedState(): Record<string, boolean> {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      return JSON.parse(stored);
+    }
+  } catch {
+    // Ignore parse errors
+  }
+  return menuGroups.reduce((acc, group) => {
+    acc[group.title] = true;
+    return acc;
+  }, {} as Record<string, boolean>);
+}
 
 export default function AdminLayout({ children }: AdminLayoutProps) {
   const [location, navigate] = useLocation();
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(getInitialExpandedState);
 
   const { data: tenant } = useQuery<Tenant>({
     queryKey: ['/api/tenant'],
@@ -82,9 +138,26 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     }
   }, [location, navigate]);
 
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(expandedGroups));
+  }, [expandedGroups]);
+
   const handleLogout = () => {
     localStorage.removeItem('adminAuth');
     navigate('/admin/login');
+  };
+
+  const toggleGroup = (groupTitle: string) => {
+    setExpandedGroups(prev => ({
+      ...prev,
+      [groupTitle]: !prev[groupTitle],
+    }));
+  };
+
+  const isItemActive = (url: string) => location === url;
+
+  const isGroupActive = (group: MenuGroup) => {
+    return group.items.some(item => location === item.url);
   };
 
   const style = {
@@ -118,24 +191,66 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
             </div>
           </SidebarHeader>
 
-          <SidebarContent>
+          <SidebarContent className="overflow-y-auto">
             <SidebarGroup>
-              <SidebarGroupLabel>Management</SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
-                  {menuItems.map((item) => (
-                    <SidebarMenuItem key={item.title}>
-                      <SidebarMenuButton asChild isActive={location === item.url}>
-                        <Link href={item.url}>
-                          <item.icon className="h-4 w-4" />
-                          <span>{item.title}</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))}
+                  <SidebarMenuItem>
+                    <SidebarMenuButton asChild isActive={location === '/admin'}>
+                      <Link href="/admin">
+                        <LayoutDashboard className="h-4 w-4" />
+                        <span>Dashboard</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>
+
+            {menuGroups.map((group) => (
+              <Collapsible
+                key={group.title}
+                open={expandedGroups[group.title]}
+                onOpenChange={() => toggleGroup(group.title)}
+              >
+                <SidebarGroup>
+                  <CollapsibleTrigger asChild>
+                    <button
+                      className={`flex w-full items-center justify-between px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors ${
+                        isGroupActive(group) ? 'text-foreground' : ''
+                      }`}
+                      data-testid={`button-group-${group.title.toLowerCase().replace(/\s+/g, '-')}`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <group.icon className="h-4 w-4" />
+                        <span>{group.title}</span>
+                      </div>
+                      <ChevronDown
+                        className={`h-4 w-4 transition-transform duration-200 ${
+                          expandedGroups[group.title] ? 'rotate-180' : ''
+                        }`}
+                      />
+                    </button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <SidebarGroupContent>
+                      <SidebarMenu>
+                        {group.items.map((item) => (
+                          <SidebarMenuItem key={item.title}>
+                            <SidebarMenuButton asChild isActive={isItemActive(item.url)}>
+                              <Link href={item.url}>
+                                <item.icon className="h-4 w-4" />
+                                <span>{item.title}</span>
+                              </Link>
+                            </SidebarMenuButton>
+                          </SidebarMenuItem>
+                        ))}
+                      </SidebarMenu>
+                    </SidebarGroupContent>
+                  </CollapsibleContent>
+                </SidebarGroup>
+              </Collapsible>
+            ))}
           </SidebarContent>
 
           <SidebarFooter className="border-t p-4">

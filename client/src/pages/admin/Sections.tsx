@@ -335,7 +335,7 @@ export default function Sections() {
     <AdminLayout>
       <div className="p-6 space-y-6">
         <div>
-          <h1 className="text-2xl font-bold">Sections</h1>
+          <h1 className="text-2xl font-bold">Page Sections</h1>
           <p className="text-muted-foreground">Toggle, reorder, and edit landing page sections</p>
         </div>
 
