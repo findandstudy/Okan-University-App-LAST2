@@ -39,7 +39,7 @@ export default function AdminLogin() {
           title: 'Welcome!',
           description: 'You have successfully logged in.',
         });
-        navigate('/admin/dashboard');
+        navigate('/admin');
       }
     } catch (error) {
       toast({

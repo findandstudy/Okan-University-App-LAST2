@@ -47,7 +47,7 @@ interface AdminLayoutProps {
 }
 
 const menuItems = [
-  { title: 'Dashboard', url: '/admin/dashboard', icon: LayoutDashboard },
+  { title: 'Dashboard', url: '/admin', icon: LayoutDashboard },
   { title: 'Tenant', url: '/admin/tenant', icon: Building },
   { title: 'Theme', url: '/admin/theme', icon: Palette },
   { title: 'SEO Settings', url: '/admin/seo', icon: Search },
@@ -77,14 +77,14 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
   useEffect(() => {
     const isAuth = localStorage.getItem('adminAuth');
-    if (!isAuth && location !== '/admin') {
-      navigate('/admin');
+    if (!isAuth && location !== '/admin/login') {
+      navigate('/admin/login');
     }
   }, [location, navigate]);
 
   const handleLogout = () => {
     localStorage.removeItem('adminAuth');
-    navigate('/admin');
+    navigate('/admin/login');
   };
 
   const style = {
