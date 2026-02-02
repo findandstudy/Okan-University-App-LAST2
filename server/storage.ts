@@ -4,7 +4,7 @@ import {
   tenants, tenantThemes, sections, menuItems, programs, leads, applications,
   documents, adminUsers, chatSettings, chatSessions, chatMessages,
   integrationSettings, webhookOutbox, webhookDeliveries, emailSettings,
-  emailTemplates, mediaAssets, faqItems, testimonials, trustBadges,
+  emailTemplates, mediaAssets, faqItems, testimonials, trustBadges, seoSettings,
   type Tenant, type InsertTenant,
   type TenantTheme, type InsertTenantTheme,
   type Section, type InsertSection,
@@ -18,6 +18,7 @@ import {
   type TrustBadge, type InsertTrustBadge,
   type MediaAsset, type InsertMediaAsset,
   type EmailTemplate, type InsertEmailTemplate,
+  type SeoSettings, type InsertSeoSettings,
 } from '@shared/schema';
 
 export interface IStorage {
@@ -92,6 +93,11 @@ export interface IStorage {
   createEmailTemplate(template: InsertEmailTemplate): Promise<EmailTemplate>;
   updateEmailTemplate(id: string, data: Partial<InsertEmailTemplate>): Promise<EmailTemplate | undefined>;
   deleteEmailTemplate(id: string): Promise<boolean>;
+
+  // SEO Settings
+  getSeoSettings(tenantId: string): Promise<SeoSettings | undefined>;
+  createSeoSettings(seo: InsertSeoSettings): Promise<SeoSettings>;
+  updateSeoSettings(tenantId: string, data: Partial<InsertSeoSettings>): Promise<SeoSettings | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -356,6 +362,22 @@ export class DatabaseStorage implements IStorage {
   async deleteEmailTemplate(id: string): Promise<boolean> {
     const result = await db.delete(emailTemplates).where(eq(emailTemplates.id, id)).returning();
     return result.length > 0;
+  }
+
+  // SEO Settings
+  async getSeoSettings(tenantId: string): Promise<SeoSettings | undefined> {
+    const [seo] = await db.select().from(seoSettings).where(eq(seoSettings.tenantId, tenantId));
+    return seo;
+  }
+
+  async createSeoSettings(seo: InsertSeoSettings): Promise<SeoSettings> {
+    const [created] = await db.insert(seoSettings).values(seo).returning();
+    return created;
+  }
+
+  async updateSeoSettings(tenantId: string, data: Partial<InsertSeoSettings>): Promise<SeoSettings | undefined> {
+    const [updated] = await db.update(seoSettings).set(data).where(eq(seoSettings.tenantId, tenantId)).returning();
+    return updated;
   }
 }
 

@@ -38,6 +38,7 @@ import {
   Phone,
   PanelBottom,
   Filter,
+  Search,
 } from 'lucide-react';
 import type { Tenant } from '@shared/schema';
 
@@ -49,6 +50,7 @@ const menuItems = [
   { title: 'Dashboard', url: '/admin', icon: LayoutDashboard },
   { title: 'Tenant', url: '/admin/tenant', icon: Building },
   { title: 'Theme', url: '/admin/theme', icon: Palette },
+  { title: 'SEO Settings', url: '/admin/seo', icon: Search },
   { title: 'Hero Content', url: '/admin/hero', icon: Sparkles },
   { title: 'Why Choose Us', url: '/admin/why-choose-us', icon: BadgeCheck },
   { title: 'Programs', url: '/admin/programs', icon: GraduationCap },

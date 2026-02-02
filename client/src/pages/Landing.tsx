@@ -10,7 +10,9 @@ import { FAQ } from '@/components/landing/FAQ';
 import { Contact } from '@/components/landing/Contact';
 import { Footer } from '@/components/landing/Footer';
 import { ChatWidget } from '@/components/ChatWidget';
+import { Preloader } from '@/components/Preloader';
 import TrackingScripts from '@/components/TrackingScripts';
+import SEOMetaTags from '@/components/SEOMetaTags';
 import type { Tenant, Section, TenantTheme } from '@shared/schema';
 
 // Convert hex color to HSL values for CSS variables
@@ -40,17 +42,19 @@ function hexToHSL(hex: string): string {
 }
 
 export default function Landing() {
-  const { data: tenant } = useQuery<Tenant>({
+  const { data: tenant, isLoading: isTenantLoading } = useQuery<Tenant>({
     queryKey: ['/api/tenant'],
   });
 
-  const { data: sections = [] } = useQuery<Section[]>({
+  const { data: sections = [], isLoading: isSectionsLoading } = useQuery<Section[]>({
     queryKey: ['/api/sections'],
   });
 
-  const { data: theme } = useQuery<TenantTheme>({
+  const { data: theme, isLoading: isThemeLoading } = useQuery<TenantTheme>({
     queryKey: ['/api/theme'],
   });
+
+  const isLoading = isTenantLoading || isSectionsLoading || isThemeLoading;
 
   const universityName = tenant?.universityName || 'University';
   const logoUrl = tenant?.logoUrl || undefined;
@@ -83,7 +87,7 @@ export default function Landing() {
     }
   }, [theme]);
 
-  // Dynamically set favicon and page title based on tenant
+  // Dynamically set favicon based on tenant (title is handled by SEOMetaTags)
   useEffect(() => {
     if (faviconUrl) {
       let link = document.querySelector("link[rel~='icon']") as HTMLLinkElement;
@@ -94,17 +98,18 @@ export default function Landing() {
       }
       link.href = faviconUrl;
     }
-    
-    if (universityName && universityName !== 'University') {
-      document.title = universityName;
-    }
-  }, [faviconUrl, universityName]);
+  }, [faviconUrl]);
 
   const isChatboxEnabled = sections.find(s => s.sectionKey === 'chatbox')?.isEnabled ?? true;
+
+  if (isLoading) {
+    return <Preloader logoUrl={logoUrl} universityName={universityName} />;
+  }
 
   return (
     <div className="min-h-screen flex flex-col">
       <TrackingScripts />
+      <SEOMetaTags />
       <Header universityName={universityName} logoUrl={logoUrl} />
       <main className="flex-1">
         <Hero />

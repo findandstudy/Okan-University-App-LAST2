@@ -2,7 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { z } from "zod";
-import { insertProgramSchema, insertLeadSchema, insertApplicationSchema, insertMediaAssetSchema, insertTestimonialSchema, insertDocumentSchema, insertFaqItemSchema } from "@shared/schema";
+import { insertProgramSchema, insertLeadSchema, insertApplicationSchema, insertMediaAssetSchema, insertTestimonialSchema, insertDocumentSchema, insertFaqItemSchema, insertSeoSettingsSchema } from "@shared/schema";
 import session from "express-session";
 import MemoryStore from "memorystore";
 import multer from "multer";
@@ -885,6 +885,55 @@ Sitemap: https://okanuniversity.app/sitemap.xml`;
     } catch (error) {
       console.error("Error deleting email template:", error);
       res.status(500).json({ error: "Failed to delete email template" });
+    }
+  });
+
+  // SEO Settings (public - for landing page)
+  app.get("/api/seo-settings", async (req, res) => {
+    try {
+      const tenantId = getTenantId(req);
+      const seo = await storage.getSeoSettings(tenantId);
+      res.json(seo || {});
+    } catch (error) {
+      console.error("Error fetching SEO settings:", error);
+      res.status(500).json({ error: "Failed to fetch SEO settings" });
+    }
+  });
+
+  // SEO Settings (admin)
+  app.get("/api/admin/seo-settings", requireAdmin, async (req, res) => {
+    try {
+      const tenantId = getTenantId(req);
+      const seo = await storage.getSeoSettings(tenantId);
+      res.json(seo || {});
+    } catch (error) {
+      console.error("Error fetching SEO settings:", error);
+      res.status(500).json({ error: "Failed to fetch SEO settings" });
+    }
+  });
+
+  app.post("/api/admin/seo-settings", requireAdmin, async (req, res) => {
+    try {
+      const tenantId = getTenantId(req);
+      const { tenantId: _, id: __, ...data } = req.body;
+      
+      const parsed = insertSeoSettingsSchema.omit({ tenantId: true }).safeParse(data);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid SEO settings data", details: parsed.error });
+      }
+      
+      const existing = await storage.getSeoSettings(tenantId);
+      
+      if (existing) {
+        const seo = await storage.updateSeoSettings(tenantId, parsed.data);
+        res.json(seo);
+      } else {
+        const seo = await storage.createSeoSettings({ ...parsed.data, tenantId });
+        res.json(seo);
+      }
+    } catch (error) {
+      console.error("Error saving SEO settings:", error);
+      res.status(500).json({ error: "Failed to save SEO settings" });
     }
   });
 

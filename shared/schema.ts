@@ -281,6 +281,23 @@ export const trustBadges = pgTable("trust_badges", {
   isEnabled: boolean("is_enabled").default(true),
 });
 
+// SEO Settings
+export const seoSettings = pgTable("seo_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id).unique(),
+  metaTitleByLang: jsonb("meta_title_by_lang").$type<Record<SupportedLanguage, string>>(),
+  metaDescriptionByLang: jsonb("meta_description_by_lang").$type<Record<SupportedLanguage, string>>(),
+  metaKeywordsByLang: jsonb("meta_keywords_by_lang").$type<Record<SupportedLanguage, string>>(),
+  ogTitle: text("og_title"),
+  ogDescription: text("og_description"),
+  ogImage: text("og_image"),
+  ogType: text("og_type").default("website"),
+  twitterCard: text("twitter_card").default("summary_large_image"),
+  twitterSite: text("twitter_site"),
+  canonicalUrl: text("canonical_url"),
+  robotsDirective: text("robots_directive").default("index, follow"),
+});
+
 // Insert schemas
 export const insertTenantSchema = createInsertSchema(tenants).omit({ id: true, createdAt: true });
 export const insertTenantThemeSchema = createInsertSchema(tenantThemes).omit({ id: true });
@@ -302,6 +319,7 @@ export const insertMediaAssetSchema = createInsertSchema(mediaAssets).omit({ id:
 export const insertFaqItemSchema = createInsertSchema(faqItems).omit({ id: true });
 export const insertTestimonialSchema = createInsertSchema(testimonials).omit({ id: true });
 export const insertTrustBadgeSchema = createInsertSchema(trustBadges).omit({ id: true });
+export const insertSeoSettingsSchema = createInsertSchema(seoSettings).omit({ id: true });
 
 // Types
 export type Tenant = typeof tenants.$inferSelect;
@@ -344,6 +362,8 @@ export type Testimonial = typeof testimonials.$inferSelect;
 export type InsertTestimonial = z.infer<typeof insertTestimonialSchema>;
 export type TrustBadge = typeof trustBadges.$inferSelect;
 export type InsertTrustBadge = z.infer<typeof insertTrustBadgeSchema>;
+export type SeoSettings = typeof seoSettings.$inferSelect;
+export type InsertSeoSettings = z.infer<typeof insertSeoSettingsSchema>;
 
 // Application form validation schema with UPPERCASE enforcement
 export const leadFormSchema = z.object({
