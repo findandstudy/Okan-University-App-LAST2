@@ -97,3 +97,17 @@ Preferred communication style: Simple, everyday language.
 - Photos uploaded via `/api/upload` endpoint and stored in object storage
 - Landing page fetches from `/api/testimonials` with fallback to default testimonials if none exist
 - Tenant-scoped: each tenant manages their own testimonials
+
+### SEO Settings Management
+- Admin page at `/admin/seo` for managing SEO meta tags and social media optimization
+- Meta Tags tab: multi-language meta title, description, keywords (EN, AR, TR, FR, RU, FA)
+- Robots directive (index/noindex, follow/nofollow) and canonical URL
+- Social Media tab: Open Graph (title, description, image, type) and Twitter Card settings
+- SEOMetaTags component dynamically injects meta tags into HTML head
+- Falls back to tenant university name for page title when no SEO settings exist
+- Unique constraint ensures one SEO settings row per tenant
+
+### Landing Page Preloader
+- Preloader component displays while initial API data loads
+- Shows animated university logo with loading dots
+- Provides smooth user experience before full page render
