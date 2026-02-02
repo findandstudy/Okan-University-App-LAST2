@@ -39,7 +39,7 @@ export default function AdminLogin() {
           title: 'Welcome!',
           description: 'You have successfully logged in.',
         });
-        navigate('/admin');
+        navigate('/admin/dashboard');
       }
     } catch (error) {
       toast({
@@ -125,12 +125,6 @@ export default function AdminLogin() {
               )}
             </Button>
           </form>
-
-          <div className="mt-6 p-4 bg-muted rounded-lg text-sm">
-            <p className="font-medium mb-1">Demo Credentials:</p>
-            <p className="text-muted-foreground">Email: admin@okan.edu.tr</p>
-            <p className="text-muted-foreground">Password: admin123</p>
-          </div>
         </CardContent>
       </Card>
     </div>

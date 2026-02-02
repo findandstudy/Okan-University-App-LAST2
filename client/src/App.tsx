@@ -37,8 +37,8 @@ function Router() {
       <Route path="/" component={Landing} />
       <Route path="/apply" component={Apply} />
       
-      <Route path="/admin/login" component={AdminLogin} />
-      <Route path="/admin" component={Dashboard} />
+      <Route path="/admin" component={AdminLogin} />
+      <Route path="/admin/dashboard" component={Dashboard} />
       <Route path="/admin/tenant" component={Tenant} />
       <Route path="/admin/theme" component={Theme} />
       <Route path="/admin/sections" component={Sections} />
