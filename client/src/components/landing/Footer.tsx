@@ -70,7 +70,7 @@ export function Footer({
     <footer className="bg-card border-t">
       <div className="container mx-auto px-4 py-12">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
-          <div className="md:col-span-2">
+          <div className="md:col-span-2 text-center md:text-left flex flex-col items-center md:items-start">
             <div className="flex items-center gap-2 mb-4">
               {logoUrl && logoUrl.trim() !== '' && !logoError ? (
                 <img 
@@ -92,7 +92,7 @@ export function Footer({
               {description}
             </p>
             {socialLinks.length > 0 && (
-              <div className="flex gap-3">
+              <div className="flex gap-3 justify-center md:justify-start">
                 {socialLinks.map((social, index) => (
                   <a
                     key={index}
@@ -110,7 +110,7 @@ export function Footer({
             )}
           </div>
 
-          <div>
+          <div className="text-center md:text-left">
             <h4 className="font-semibold mb-4">Quick Links</h4>
             <ul className="space-y-2">
               {quickLinks.map((link, index) => (
@@ -126,7 +126,7 @@ export function Footer({
             </ul>
           </div>
 
-          <div>
+          <div className="text-center md:text-left">
             <h4 className="font-semibold mb-4">{contactTitle}</h4>
             <ul className="space-y-2 text-muted-foreground">
               <li>{contactEmail}</li>
