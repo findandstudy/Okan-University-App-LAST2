@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link } from 'wouter';
 import { useQuery } from '@tanstack/react-query';
 import { useI18n } from '@/lib/i18n';
@@ -49,8 +50,21 @@ function getYouTubeEmbedUrl(url: string): string {
   return videoId ? `https://www.youtube.com/embed/${videoId}` : '';
 }
 
+// Default fallback content for instant LCP
+const FALLBACK_HERO = {
+  badge: 'Applications Open for 2026',
+  title: 'Start Your Journey to Excellence',
+  subtitle: 'Study at top universities with exclusive scholarships and full support',
+  features: [
+    'Scholarship opportunities up to 20%',
+    'No examination certificate is required!',
+    '48-hour application processing'
+  ]
+};
+
 export function Hero({ title, subtitle, ctaLabel, backgroundImage }: HeroProps) {
   const { t, isRTL, language } = useI18n();
+  const [videoLoaded, setVideoLoaded] = useState(false);
   
   const { data: tenant } = useQuery<Tenant>({
     queryKey: ['/api/tenant'],
@@ -68,18 +82,14 @@ export function Hero({ title, subtitle, ctaLabel, backgroundImage }: HeroProps) 
 
   const lang = language as SupportedLanguage;
   
-  const badgeText = heroSettings?.badge?.[lang] || heroSettings?.badge?.en || 'Applications Open for 2026';
-  const heroTitle = title || heroSettings?.title?.[lang] || heroSettings?.title?.en || t('hero.title');
-  const heroSubtitle = subtitle || heroSettings?.subtitle?.[lang] || heroSettings?.subtitle?.en || t('hero.subtitle');
+  // Use fallback content for instant LCP, then update when API data arrives
+  const badgeText = heroSettings?.badge?.[lang] || heroSettings?.badge?.en || FALLBACK_HERO.badge;
+  const heroTitle = title || heroSettings?.title?.[lang] || heroSettings?.title?.en || FALLBACK_HERO.title;
+  const heroSubtitle = subtitle || heroSettings?.subtitle?.[lang] || heroSettings?.subtitle?.en || FALLBACK_HERO.subtitle;
   
-  const defaultFeatures = [
-    'Scholarship opportunities up to 50%',
-    'Full visa and admission support',
-    '48-hour application processing',
-  ];
   const features = heroSettings?.features?.[lang]?.length 
     ? heroSettings.features[lang] 
-    : (heroSettings?.features?.en?.length ? heroSettings.features.en : defaultFeatures);
+    : (heroSettings?.features?.en?.length ? heroSettings.features.en : FALLBACK_HERO.features);
 
   const stat1Value = heroSettings?.stats?.stat1Value || '50+';
   const stat1Label = heroSettings?.stats?.stat1Label?.[lang] || heroSettings?.stats?.stat1Label?.en || 'Programs';
@@ -168,13 +178,37 @@ export function Hero({ title, subtitle, ctaLabel, backgroundImage }: HeroProps) 
             <div className="relative rounded-2xl overflow-hidden shadow-2xl">
               {embedUrl ? (
                 <div className="aspect-[4/3]">
-                  <iframe
-                    src={embedUrl}
-                    className="w-full h-full"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                    title="Campus Tour Video"
-                  />
+                  {videoLoaded ? (
+                    <iframe
+                      src={`${embedUrl}?autoplay=1`}
+                      className="w-full h-full"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                      title="Campus Tour Video"
+                    />
+                  ) : (
+                    <button
+                      onClick={() => setVideoLoaded(true)}
+                      className="w-full h-full relative cursor-pointer group"
+                      aria-label="Play video"
+                      data-testid="button-play-video"
+                    >
+                      <img
+                        src={`https://img.youtube.com/vi/${embedUrl.split('/embed/')[1]}/maxresdefault.jpg`}
+                        alt="Video thumbnail"
+                        className="w-full h-full object-cover"
+                        loading="lazy"
+                        decoding="async"
+                        width={640}
+                        height={480}
+                      />
+                      <div className="absolute inset-0 bg-black/30 group-hover:bg-black/40 transition-colors flex items-center justify-center">
+                        <div className="w-20 h-20 rounded-full bg-primary flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+                          <Play className="h-10 w-10 text-white fill-white ml-1" />
+                        </div>
+                      </div>
+                    </button>
+                  )}
                 </div>
               ) : (
                 <div className="aspect-[4/3] bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">

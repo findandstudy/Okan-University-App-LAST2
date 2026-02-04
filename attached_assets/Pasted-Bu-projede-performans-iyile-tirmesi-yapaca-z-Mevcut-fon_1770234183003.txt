@@ -1,0 +1,69 @@
+Bu projede performans iyileştirmesi yapacağız. Mevcut fonksiyonları/akışları bozmadan, sadece performans odaklı değişiklikler yap.
+
+HEDEF (Lighthouse):
+- LCP’yi düşür (hero başlık/paragraf 3s+ gecikiyor)
+- Toplam ağ yükünü ciddi azalt (özellikle 3.2MB avatarlar ve 2MB logo)
+- YouTube ve GTM kaynaklı JS/CPU yükünü azalt
+- Gzip/Brotli ve cache header’larını doğru ayarla
+
+KISIT:
+- Admin panel ve mevcut API sözleşmeleri kırılmayacak
+- DB şeması değişmesin (gerekirse yeni alan ekleme, mevcut alanlarla ilerle)
+- UI/UX aynı kalsın (yalnızca yükleme şekli değişebilir)
+
+1) GÖRSEL OPTİMİZASYONU (en yüksek öncelik)
+- /objects/uploads altındaki büyük görselleri orijinal boyutuyla frontend’e vermeyi bırak.
+- Node backend’e Sharp ekle.
+- Dinamik thumbnail endpoint’i oluştur:
+  GET /objects/uploads/:id?w=..&h=..&fmt=webp&q=75
+  - w/h yoksa varsayılan: w=160
+  - fmt varsayılan webp
+  - çıktıyı cache’le (memory veya disk) aynı parametrelerle tekrar üretme.
+- Frontend’de:
+  - Avatar gibi küçük görselleri bu endpoint ile 80/160’lık versiyonlardan çek.
+  - Tüm fold-altı görseller için loading="lazy" decoding="async" kullan.
+  - width/height attribute’larını ekle (layout shift azalt).
+  - srcset + sizes kullan (responsive).
+
+2) LCP İYİLEŞTİRME (hero API beklemesin)
+- Şu an home page render’ı /api/tenant, /api/sections, /api/theme, /api/seo-settings, /api/programs, /api/testimonials, /api/faq bekliyor.
+- Home’daki hero title/desc için “anında render edilen fallback metin” ekle.
+  - İlk render: sabit default hero (mevcut kopyaya yakın).
+  - API gelince state güncellensin.
+- Ek olarak tek çağrıda veri almak için yeni endpoint ekle:
+  GET /api/bootstrap
+  - tenant, theme, seo-settings, sections, testimonials, faq ve programs (ilk sayfa) tek JSON’da dönsün.
+  - Mevcut endpointler kalsın, kırma.
+  - Frontend home’da bu tek endpoint’i kullanacak şekilde refactor et.
+  - Bootstrap response’u memory cache ile TTL=60s/300s cache’le.
+
+3) YOUTUBE EMBED OPTİMİZASYONU
+- YouTube embed’i ilk yükte tam iframe + script ile yükleme.
+- “click-to-load” yap:
+  - İlk anda sadece poster görseli + play butonu render et.
+  - Tıklanınca iframe yükle.
+  - Alternatif: iframe loading="lazy" + viewport’a girince yükle.
+
+4) GTM / 3RD PARTY
+- Google Tag Manager script’ini defer et ve requestIdleCallback ile sayfa interaktif olduktan sonra yükle.
+- İlk render ve LCP’yi bloke etmesin.
+
+5) JS BUNDLE KÜÇÜLTME
+- Route bazlı code splitting uygula (admin panel, ağır listeler dynamic import).
+- Prod build’de minify açık olsun.
+- Kullanılmayan büyük kütüphaneleri kaldır / tree-shaking’i doğrula.
+
+6) SERVER SIKIŞTIRMA + CACHE HEADER
+- HTML ve JSON için gzip/brotli etkinleştir (Express ise compression middleware).
+- /assets/index-*.js ve /assets/index-*.css için:
+  Cache-Control: public, max-age=31536000, immutable
+- /objects/uploads optimized çıktıları için makul cache header ekle.
+
+7) PRECONNECT + FONT
+- fonts.googleapis.com ve fonts.gstatic.com için preconnect ekle.
+- font-display: swap uygula.
+
+TESLİMAT
+- Yapılan değişiklikleri adım adım commit benzeri özetle.
+- Hangi dosyalarda ne değiştiğini listele.
+- Çalışır durumda bırak (test: home page load + admin panel).

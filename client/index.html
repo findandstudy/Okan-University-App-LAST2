@@ -1,14 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <!-- Google tag (gtag.js) -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-1M42R6XS2J"></script>
-    <script>
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
-      gtag('config', 'G-1M42R6XS2J');
-    </script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
     <link rel="icon" type="image/png" href="/objects/uploads/48ff2f2c-82d1-4d2a-8faf-24064887610f" />
@@ -26,13 +18,38 @@
     <meta name="twitter:title" content="Okan University Apply Portal">
     <meta name="twitter:description" content="Start your journey at Okan University. Apply now for scholarships and world-class education in Turkey.">
     <meta name="twitter:image" content="https://asset-manager-findandstudy.replit.app/objects/uploads/30f63df1-66bd-45e0-a3bf-6a3f6676d531">
+    <!-- Preconnect for performance -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://www.googletagmanager.com">
+    <link rel="preconnect" href="https://img.youtube.com">
+    <!-- Fonts with display swap -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Noto+Sans+Arabic:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <title>Okan University Apply Portal</title>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <!-- Google Analytics - deferred loading -->
+    <script>
+      if ('requestIdleCallback' in window) {
+        requestIdleCallback(function() { loadGTM(); });
+      } else {
+        setTimeout(loadGTM, 2000);
+      }
+      function loadGTM() {
+        var s = document.createElement('script');
+        s.async = true;
+        s.src = 'https://www.googletagmanager.com/gtag/js?id=G-1M42R6XS2J';
+        document.head.appendChild(s);
+        s.onload = function() {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          window.gtag = gtag;
+          gtag('js', new Date());
+          gtag('config', 'G-1M42R6XS2J');
+        };
+      }
+    </script>
   </body>
 </html>

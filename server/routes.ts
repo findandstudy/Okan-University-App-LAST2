@@ -6,9 +6,19 @@ import { insertProgramSchema, insertLeadSchema, insertApplicationSchema, insertM
 import session from "express-session";
 import MemoryStore from "memorystore";
 import multer from "multer";
+import sharp from "sharp";
 import { registerObjectStorageRoutes, ObjectStorageService } from "./replit_integrations/object_storage";
 
 const SessionStore = MemoryStore(session);
+
+// In-memory cache for optimized images and bootstrap data
+const imageCache = new Map<string, { buffer: Buffer; contentType: string; timestamp: number }>();
+const IMAGE_CACHE_TTL = 3600000; // 1 hour
+const MAX_CACHE_SIZE = 100;
+
+// Bootstrap data cache
+let bootstrapCache: { data: any; timestamp: number } | null = null;
+const BOOTSTRAP_CACHE_TTL = 60000; // 60 seconds
 
 declare module 'express-session' {
   interface SessionData {
@@ -63,6 +73,123 @@ export async function registerRoutes(
 
   // Register Object Storage routes
   registerObjectStorageRoutes(app);
+
+  // Optimized image endpoint with Sharp
+  app.get("/api/img/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const width = parseInt(req.query.w as string) || 160;
+      const height = req.query.h ? parseInt(req.query.h as string) : undefined;
+      const format = (req.query.fmt as string) || 'webp';
+      const quality = parseInt(req.query.q as string) || 75;
+      
+      // Create cache key
+      const cacheKey = `${id}_${width}_${height || 'auto'}_${format}_${quality}`;
+      
+      // Check cache
+      const cached = imageCache.get(cacheKey);
+      if (cached && Date.now() - cached.timestamp < IMAGE_CACHE_TTL) {
+        res.set('Content-Type', cached.contentType);
+        res.set('Cache-Control', 'public, max-age=86400');
+        return res.send(cached.buffer);
+      }
+      
+      // Fetch original image from object storage
+      const objectStorageService = new ObjectStorageService();
+      const objectPath = `/objects/uploads/${id}`;
+      
+      let buffer: Buffer;
+      try {
+        // Get file from object storage
+        const file = await objectStorageService.getObjectEntityFile(objectPath);
+        const [contents] = await file.download();
+        buffer = contents;
+      } catch (fetchError) {
+        console.error("Failed to fetch image from storage:", fetchError);
+        return res.status(404).json({ error: "Image not found" });
+      }
+      
+      // Process with Sharp
+      let sharpInstance = sharp(buffer);
+      
+      if (height) {
+        sharpInstance = sharpInstance.resize(width, height, { fit: 'cover' });
+      } else {
+        sharpInstance = sharpInstance.resize(width, undefined, { withoutEnlargement: true });
+      }
+      
+      let outputBuffer: Buffer;
+      let contentType: string;
+      
+      if (format === 'webp') {
+        outputBuffer = await sharpInstance.webp({ quality }).toBuffer();
+        contentType = 'image/webp';
+      } else if (format === 'jpeg' || format === 'jpg') {
+        outputBuffer = await sharpInstance.jpeg({ quality }).toBuffer();
+        contentType = 'image/jpeg';
+      } else {
+        outputBuffer = await sharpInstance.png({ quality }).toBuffer();
+        contentType = 'image/png';
+      }
+      
+      // Cache the result (limit cache size)
+      if (imageCache.size >= MAX_CACHE_SIZE) {
+        const oldestKey = imageCache.keys().next().value;
+        if (oldestKey) imageCache.delete(oldestKey);
+      }
+      imageCache.set(cacheKey, { buffer: outputBuffer, contentType, timestamp: Date.now() });
+      
+      res.set('Content-Type', contentType);
+      res.set('Cache-Control', 'public, max-age=86400');
+      res.send(outputBuffer);
+    } catch (error) {
+      console.error("Image optimization error:", error);
+      res.status(500).json({ error: "Failed to optimize image" });
+    }
+  });
+
+  // Bootstrap API - single endpoint for all landing page data
+  app.get("/api/bootstrap", async (req, res) => {
+    try {
+      // Check cache
+      if (bootstrapCache && Date.now() - bootstrapCache.timestamp < BOOTSTRAP_CACHE_TTL) {
+        res.set('Cache-Control', 'public, max-age=60');
+        return res.json(bootstrapCache.data);
+      }
+      
+      const tenantId = getTenantId(req);
+      
+      // Fetch all data in parallel
+      const [tenant, theme, sections, testimonials, faqItems, seoSettings, programs] = await Promise.all([
+        storage.getTenantByDomain("okanuniversity.app"),
+        storage.getTheme(tenantId),
+        storage.getSections(tenantId),
+        storage.getTestimonials(tenantId),
+        storage.getFaqItems(tenantId),
+        storage.getSeoSettings(tenantId),
+        storage.getPrograms(tenantId)
+      ]);
+      
+      const data = {
+        tenant,
+        theme,
+        sections,
+        testimonials,
+        faqItems,
+        seoSettings,
+        programs: programs.slice(0, 50) // First 50 programs for initial load
+      };
+      
+      // Cache the result
+      bootstrapCache = { data, timestamp: Date.now() };
+      
+      res.set('Cache-Control', 'public, max-age=60');
+      res.json(data);
+    } catch (error) {
+      console.error("Bootstrap error:", error);
+      res.status(500).json({ error: "Failed to fetch bootstrap data" });
+    }
+  });
 
   // Server-side file upload endpoint
   const upload = multer({ 

@@ -2,9 +2,10 @@ import { useI18n } from '@/lib/i18n';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { Card, CardContent } from '@/components/ui/card';
-import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Star, Quote } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { OptimizedImage } from '@/components/OptimizedImage';
 import type { Testimonial, SupportedLanguage } from '@shared/schema';
 
 const defaultTestimonials = [
@@ -120,7 +121,13 @@ export function Testimonials() {
                   <div className="flex items-center gap-3 pt-4 border-t">
                     <Avatar>
                       {testimonial.studentPhoto ? (
-                        <AvatarImage src={testimonial.studentPhoto} alt={testimonial.studentName} />
+                        <OptimizedImage 
+                          src={testimonial.studentPhoto} 
+                          alt={testimonial.studentName}
+                          width={80}
+                          height={80}
+                          className="w-full h-full object-cover rounded-full"
+                        />
                       ) : null}
                       <AvatarFallback className="bg-primary/10 text-primary font-semibold">
                         {testimonial.studentName.split(' ').map(n => n[0]).join('')}

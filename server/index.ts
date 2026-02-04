@@ -3,8 +3,12 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { seedDatabase } from "./seedOnStartup";
+import compression from "compression";
 
 const app = express();
+
+// Enable gzip/brotli compression for all responses
+app.use(compression());
 const httpServer = createServer(app);
 
 declare module "http" {
