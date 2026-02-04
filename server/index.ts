@@ -8,7 +8,10 @@ import compression from "compression";
 const app = express();
 
 // Enable gzip/brotli compression for all responses
-app.use(compression());
+app.use(compression({
+  threshold: 1024, // Compress responses larger than 1KB
+  level: 6 // Compression level (1-9)
+}));
 const httpServer = createServer(app);
 
 declare module "http" {
@@ -37,6 +40,12 @@ export function log(message: string, source = "express") {
 
   console.log(`${formattedTime} [${source}] ${message}`);
 }
+
+// Set Cache-Control for API routes
+app.use('/api', (_req, res, next) => {
+  res.set('Cache-Control', 'no-store');
+  next();
+});
 
 app.use((req, res, next) => {
   const start = Date.now();

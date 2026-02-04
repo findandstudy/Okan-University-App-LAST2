@@ -60,8 +60,10 @@ export function serveStatic(app: Express) {
       }
       
       res.set("Content-Type", "text/html");
+      res.set("Cache-Control", "no-cache");
       res.send(html);
     } catch (error) {
+      res.set("Cache-Control", "no-cache");
       res.sendFile(path.resolve(distPath, "index.html"));
     }
   });
