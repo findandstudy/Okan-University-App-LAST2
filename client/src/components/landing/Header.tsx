@@ -5,7 +5,6 @@ import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Menu, GraduationCap } from 'lucide-react';
-import { OptimizedImage } from '@/components/OptimizedImage';
 
 const LOGO_CACHE_KEY = 'cached_logo_url';
 const NAME_CACHE_KEY = 'cached_university_name';
@@ -81,14 +80,12 @@ export function Header({ universityName = 'University', logoUrl }: HeaderProps) 
       <div className="container mx-auto flex h-16 items-center justify-between px-4">
         <div className="flex items-center gap-3">
           {displayLogoUrl && displayLogoUrl.trim() !== '' && !logoError ? (
-            <OptimizedImage 
+            <img 
               src={displayLogoUrl} 
               alt={displayName} 
-              width={200}
-              height={60}
-              quality={85}
               loading="eager"
-              className="h-[3.75rem] w-auto"
+              decoding="async"
+              className="h-12 w-auto object-contain"
               onError={() => setLogoError(true)}
             />
           ) : (
