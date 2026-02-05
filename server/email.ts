@@ -1,11 +1,19 @@
 import nodemailer from 'nodemailer';
 import type { EmailSettings, EmailTemplate } from '@shared/schema';
 
+interface EmailAttachment {
+  filename: string;
+  content?: Buffer;
+  path?: string;
+  contentType?: string;
+}
+
 interface SendEmailOptions {
   to: string;
   subject: string;
   text?: string;
   html?: string;
+  attachments?: EmailAttachment[];
 }
 
 interface EmailResult {
@@ -40,7 +48,7 @@ export async function sendEmail(
     const transporter = await createTransporter(settings);
 
     const fromAddress = settings.fromEmail || settings.smtpUser || '';
-    const mailOptions = {
+    const mailOptions: any = {
       from: settings.fromName 
         ? `"${settings.fromName}" <${fromAddress}>`
         : fromAddress,
@@ -49,6 +57,16 @@ export async function sendEmail(
       text: options.text,
       html: options.html,
     };
+
+    // Add attachments if provided
+    if (options.attachments && options.attachments.length > 0) {
+      mailOptions.attachments = options.attachments.map(att => ({
+        filename: att.filename,
+        content: att.content,
+        path: att.path,
+        contentType: att.contentType,
+      }));
+    }
 
     const info = await transporter.sendMail(mailOptions);
 

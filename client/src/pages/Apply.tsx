@@ -379,6 +379,17 @@ export default function Apply() {
         }
       }
 
+      // Send notification emails with document attachments after all documents are uploaded
+      try {
+        console.log('Sending notification emails with attachments...');
+        const notifyResponse = await apiRequest('POST', `/api/applications/${application.id}/send-notification`, {});
+        const notifyResult = await notifyResponse.json();
+        console.log('Email notification result:', notifyResult);
+      } catch (notifyError) {
+        console.error('Failed to send notification emails:', notifyError);
+        // Don't fail the application submission if email fails
+      }
+
       return application;
     },
     onSuccess: () => {

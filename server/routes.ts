@@ -502,95 +502,7 @@ export async function registerRoutes(
       const validated = insertApplicationSchema.parse({ ...req.body, tenantId });
       const application = await storage.createApplication(validated);
 
-      // Send application emails asynchronously (don't block the response)
-      (async () => {
-        try {
-          const emailSettings = await storage.getEmailSettings(tenantId);
-          if (!emailSettings?.isEnabled || !emailSettings.smtpPassword) {
-            console.log('Email notifications disabled or not configured');
-            return;
-          }
-
-          const [internalTemplate, userTemplate] = await Promise.all([
-            storage.getEmailTemplateByKey(tenantId, 'application_internal_notification'),
-            storage.getEmailTemplateByKey(tenantId, 'application_user_confirmation'),
-          ]);
-
-          if (!internalTemplate || !userTemplate) {
-            console.log('Email templates not found');
-            return;
-          }
-
-          const tenant = await storage.getTenant(tenantId);
-          const applicantData = application.applicantData as { 
-            fullName?: string; 
-            firstName?: string;
-            lastName?: string;
-            email?: string; 
-            phone?: string; 
-            countryCode?: string;
-            nationality?: string;
-            programName?: string;
-            degreeLevel?: string;
-            language?: string;
-            tuitionFee?: string;
-            universityName?: string;
-            intakeTerm?: string;
-          } || {};
-
-          // Use firstName/lastName from applicantData if available, otherwise split fullName
-          const firstName = applicantData.firstName || (applicantData.fullName || '').split(' ')[0] || '';
-          const lastName = applicantData.lastName || (applicantData.fullName || '').split(' ').slice(1).join(' ') || '';
-
-          // Construct full logo URL
-          const siteUrl = `https://${tenant?.domain || 'okanuniversity.app'}`;
-          let logoUrl = '';
-          if (tenant?.logoUrl) {
-            logoUrl = tenant.logoUrl.startsWith('http') 
-              ? tenant.logoUrl 
-              : `${siteUrl}${tenant.logoUrl.startsWith('/') ? '' : '/'}${tenant.logoUrl}`;
-          }
-
-          const emailData: ApplicationEmailData = {
-            fullName: applicantData.fullName || '',
-            firstName,
-            lastName,
-            email: applicantData.email || '',
-            phone: applicantData.phone || '',
-            countryCode: applicantData.countryCode || '',
-            nationality: applicantData.nationality,
-            programName: applicantData.programName || 'Not specified',
-            degreeLevel: applicantData.degreeLevel || 'Not specified',
-            language: applicantData.language,
-            tuitionFee: applicantData.tuitionFee,
-            intakeTerm: applicantData.intakeTerm,
-          };
-
-          const siteConfig = {
-            siteName: tenant?.universityName || applicantData.universityName || 'Okan University',
-            siteUrl,
-            logoUrl,
-            contactEmail: emailSettings.fromEmail || 'info@findandstudy.com',
-            adminEmail: 'admission@findandstudy.com',
-            dashboardUrl: `${siteUrl}/admin/applications`,
-          };
-
-          const result = await sendApplicationEmails(
-            emailSettings,
-            internalTemplate,
-            userTemplate,
-            emailData,
-            siteConfig
-          );
-
-          console.log('Application emails sent:', {
-            internal: result.internalResult.success,
-            user: result.userResult.success,
-          });
-        } catch (emailError) {
-          console.error('Failed to send application emails:', emailError);
-        }
-      })();
+      // Note: Emails are sent via POST /api/applications/:id/send-notification after documents are uploaded
 
       res.status(201).json(application);
     } catch (error) {
@@ -633,6 +545,190 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error fetching documents:", error);
       res.status(500).json({ error: "Failed to fetch documents" });
+    }
+  });
+
+  // Send application notification emails (called after documents are uploaded)
+  app.post("/api/applications/:id/send-notification", async (req, res) => {
+    try {
+      const applicationId = req.params.id as string;
+      const tenantId = getTenantId(req);
+      
+      // Get application
+      const application = await storage.getApplication(applicationId);
+      if (!application) {
+        return res.status(404).json({ error: "Application not found" });
+      }
+
+      // Get email settings
+      const emailSettings = await storage.getEmailSettings(tenantId);
+      if (!emailSettings?.isEnabled || !emailSettings.smtpPassword) {
+        console.log('Email notifications disabled or not configured');
+        return res.json({ success: false, message: 'Email notifications not configured' });
+      }
+
+      // Get email templates
+      const [internalTemplate, userTemplate] = await Promise.all([
+        storage.getEmailTemplateByKey(tenantId, 'application_internal_notification'),
+        storage.getEmailTemplateByKey(tenantId, 'application_user_confirmation'),
+      ]);
+
+      if (!internalTemplate || !userTemplate) {
+        console.log('Email templates not found');
+        return res.json({ success: false, message: 'Email templates not found' });
+      }
+
+      // Get tenant and applicant data
+      const tenant = await storage.getTenant(tenantId);
+      const applicantData = application.applicantData as { 
+        fullName?: string; 
+        firstName?: string;
+        lastName?: string;
+        email?: string; 
+        phone?: string; 
+        countryCode?: string;
+        nationality?: string;
+        programName?: string;
+        degreeLevel?: string;
+        language?: string;
+        tuitionFee?: string;
+        universityName?: string;
+        intakeTerm?: string;
+      } || {};
+
+      const firstName = applicantData.firstName || (applicantData.fullName || '').split(' ')[0] || '';
+      const lastName = applicantData.lastName || (applicantData.fullName || '').split(' ').slice(1).join(' ') || '';
+
+      // Construct full logo URL
+      const siteUrl = `https://${tenant?.domain || 'okanuniversity.app'}`;
+      let logoUrl = '';
+      if (tenant?.logoUrl) {
+        logoUrl = tenant.logoUrl.startsWith('http') 
+          ? tenant.logoUrl 
+          : `${siteUrl}${tenant.logoUrl.startsWith('/') ? '' : '/'}${tenant.logoUrl}`;
+      }
+
+      const emailData: ApplicationEmailData = {
+        fullName: applicantData.fullName || `${firstName} ${lastName}`,
+        firstName,
+        lastName,
+        email: applicantData.email || '',
+        phone: applicantData.phone || '',
+        countryCode: applicantData.countryCode || '',
+        nationality: applicantData.nationality,
+        programName: applicantData.programName || 'Not specified',
+        degreeLevel: applicantData.degreeLevel || 'Not specified',
+        language: applicantData.language,
+        tuitionFee: applicantData.tuitionFee,
+        intakeTerm: applicantData.intakeTerm,
+      };
+
+      const siteConfig = {
+        siteName: tenant?.universityName || applicantData.universityName || 'Okan University',
+        siteUrl,
+        logoUrl,
+        contactEmail: emailSettings.fromEmail || 'info@findandstudy.com',
+        adminEmail: 'admission@findandstudy.com',
+        dashboardUrl: `${siteUrl}/admin/applications`,
+      };
+
+      // Get documents and download them for attachment
+      const docs = await storage.getDocumentsByApplication(applicationId);
+      const attachments: { filename: string; content: Buffer; contentType?: string }[] = [];
+
+      const objectStorageService = new ObjectStorageService();
+      
+      for (const doc of docs) {
+        try {
+          if (doc.fileUrl) {
+            const file = await objectStorageService.getObjectEntityFile(doc.fileUrl);
+            const [fileContent] = await file.download();
+            const [metadata] = await file.getMetadata();
+            
+            // Determine file extension from original filename or content type
+            const originalExt = doc.fileName?.split('.').pop() || '';
+            const docTypeLabel = doc.documentType?.replace(/_/g, ' ').toUpperCase() || 'DOCUMENT';
+            const filename = `${firstName}_${lastName}_${docTypeLabel}.${originalExt || 'pdf'}`;
+            
+            attachments.push({
+              filename,
+              content: fileContent,
+              contentType: metadata.contentType as string || 'application/octet-stream',
+            });
+          }
+        } catch (docError) {
+          console.error(`Failed to attach document ${doc.documentType}:`, docError);
+        }
+      }
+
+      // Process templates
+      const now = new Date();
+      const variables: Record<string, string> = {
+        siteName: siteConfig.siteName,
+        siteUrl: siteConfig.siteUrl,
+        logoUrl: siteConfig.logoUrl || '',
+        contactEmail: siteConfig.contactEmail,
+        dashboardUrl: siteConfig.dashboardUrl,
+        currentYear: now.getFullYear().toString(),
+        submittedDate: now.toLocaleDateString('en-US', { 
+          weekday: 'long', 
+          year: 'numeric', 
+          month: 'long', 
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        }),
+        fullName: emailData.fullName,
+        firstName: emailData.firstName,
+        lastName: emailData.lastName,
+        email: emailData.email,
+        phone: emailData.phone,
+        countryCode: emailData.countryCode,
+        nationality: emailData.nationality || 'Not specified',
+        programName: emailData.programName || 'Not specified',
+        degreeLevel: emailData.degreeLevel || 'Not specified',
+        language: emailData.language || 'Not specified',
+        tuitionFee: emailData.tuitionFee || 'Not specified',
+        intakeTerm: emailData.intakeTerm || 'Not specified',
+      };
+
+      // Import processTemplate from email module
+      const { processTemplate, sendEmail } = await import('./email');
+
+      // Send admin email with attachments
+      const internalProcessed = processTemplate(internalTemplate, 'en', variables);
+      const internalResult = await sendEmail(emailSettings, {
+        to: siteConfig.adminEmail,
+        subject: internalProcessed.subject,
+        text: internalProcessed.textBody,
+        html: internalProcessed.htmlBody,
+        attachments,
+      });
+
+      // Send user confirmation email (no attachments)
+      const userProcessed = processTemplate(userTemplate, 'en', variables);
+      const userResult = await sendEmail(emailSettings, {
+        to: emailData.email,
+        subject: userProcessed.subject,
+        text: userProcessed.textBody,
+        html: userProcessed.htmlBody,
+      });
+
+      console.log('Application emails sent:', {
+        internal: internalResult.success,
+        user: userResult.success,
+        attachments: attachments.length,
+      });
+
+      res.json({ 
+        success: true, 
+        internal: internalResult.success,
+        user: userResult.success,
+        attachmentsCount: attachments.length,
+      });
+    } catch (error) {
+      console.error("Error sending notification emails:", error);
+      res.status(500).json({ error: "Failed to send notification emails" });
     }
   });
 
