@@ -530,12 +530,24 @@ export async function registerRoutes(
             nationality?: string;
             programName?: string;
             degreeLevel?: string;
+            language?: string;
+            tuitionFee?: string;
+            universityName?: string;
             intakeTerm?: string;
           } || {};
 
           const nameParts = (applicantData.fullName || '').split(' ');
           const firstName = nameParts[0] || '';
           const lastName = nameParts.slice(1).join(' ') || '';
+
+          // Construct full logo URL
+          const siteUrl = `https://${tenant?.domain || 'okanuniversity.app'}`;
+          let logoUrl = '';
+          if (tenant?.logoUrl) {
+            logoUrl = tenant.logoUrl.startsWith('http') 
+              ? tenant.logoUrl 
+              : `${siteUrl}${tenant.logoUrl.startsWith('/') ? '' : '/'}${tenant.logoUrl}`;
+          }
 
           const emailData: ApplicationEmailData = {
             fullName: applicantData.fullName || '',
@@ -545,18 +557,20 @@ export async function registerRoutes(
             phone: applicantData.phone || '',
             countryCode: applicantData.countryCode || '',
             nationality: applicantData.nationality,
-            programName: applicantData.programName,
-            degreeLevel: applicantData.degreeLevel,
+            programName: applicantData.programName || 'Not specified',
+            degreeLevel: applicantData.degreeLevel || 'Not specified',
+            language: applicantData.language,
+            tuitionFee: applicantData.tuitionFee,
             intakeTerm: applicantData.intakeTerm,
           };
 
           const siteConfig = {
-            siteName: tenant?.universityName || 'University',
-            siteUrl: `https://${tenant?.domain || 'okanuniversity.app'}`,
-            logoUrl: tenant?.logoUrl || '',
+            siteName: tenant?.universityName || applicantData.universityName || 'Okan University',
+            siteUrl,
+            logoUrl,
             contactEmail: emailSettings.fromEmail || 'info@findandstudy.com',
             adminEmail: 'admission@findandstudy.com',
-            dashboardUrl: `https://${tenant?.domain || 'okanuniversity.app'}/admin/applications`,
+            dashboardUrl: `${siteUrl}/admin/applications`,
           };
 
           const result = await sendApplicationEmails(

@@ -309,6 +309,9 @@ export default function Apply() {
       
       const lead = await leadResponse.json();
 
+      // Get the selected program for email data
+      const program = programs.find((p) => p.id === data.programId);
+      
       const applicationResponse = await apiRequest('POST', '/api/applications', {
         leadId: lead.id,
         programId: data.programId,
@@ -318,6 +321,12 @@ export default function Apply() {
           email: data.email,
           phone: data.phone,
           countryCode: data.countryCode,
+          // Include program information for email notifications
+          programName: program?.programName || '',
+          degreeLevel: program?.degree || '',
+          language: program?.language || '',
+          tuitionFee: program?.discountedFee || program?.tuitionFee || '',
+          universityName: program?.universityName || 'Okan University',
         },
         status: 'submitted',
       });

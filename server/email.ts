@@ -113,6 +113,8 @@ export interface ApplicationEmailData {
   nationality?: string;
   programName?: string;
   degreeLevel?: string;
+  language?: string;
+  tuitionFee?: string;
   intakeTerm?: string;
   utmSource?: string;
 }
@@ -156,6 +158,8 @@ export async function sendApplicationEmails(
     nationality: data.nationality || 'Not specified',
     programName: data.programName || 'Not specified',
     degreeLevel: data.degreeLevel || 'Not specified',
+    language: data.language || 'Not specified',
+    tuitionFee: data.tuitionFee || 'Not specified',
     intakeTerm: data.intakeTerm || 'Not specified',
     utmSource: data.utmSource || 'Direct',
   };
