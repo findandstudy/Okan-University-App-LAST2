@@ -2,7 +2,8 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { z } from "zod";
-import { insertProgramSchema, insertLeadSchema, insertApplicationSchema, insertMediaAssetSchema, insertTestimonialSchema, insertDocumentSchema, insertFaqItemSchema, insertSeoSettingsSchema } from "@shared/schema";
+import { insertProgramSchema, insertLeadSchema, insertApplicationSchema, insertMediaAssetSchema, insertTestimonialSchema, insertDocumentSchema, insertFaqItemSchema, insertSeoSettingsSchema, insertEmailSettingsSchema } from "@shared/schema";
+import { sendEmail, verifySmtpConnection } from "./email";
 import session from "express-session";
 import MemoryStore from "memorystore";
 import multer from "multer";
@@ -1061,6 +1062,104 @@ Sitemap: https://okanuniversity.app/sitemap.xml`;
     } catch (error) {
       console.error("Error saving SEO settings:", error);
       res.status(500).json({ error: "Failed to save SEO settings" });
+    }
+  });
+
+  // Email Settings
+  app.get("/api/admin/email-settings", requireAdmin, async (req, res) => {
+    try {
+      const tenantId = getTenantId(req);
+      const settings = await storage.getEmailSettings(tenantId);
+      if (settings) {
+        const { smtpPassword, ...safeSettings } = settings;
+        res.json({ ...safeSettings, smtpPassword: smtpPassword ? '********' : '' });
+      } else {
+        res.json({});
+      }
+    } catch (error) {
+      console.error("Error fetching email settings:", error);
+      res.status(500).json({ error: "Failed to fetch email settings" });
+    }
+  });
+
+  app.post("/api/admin/email-settings", requireAdmin, async (req, res) => {
+    try {
+      const tenantId = getTenantId(req);
+      const { tenantId: _, id: __, smtpPassword, ...data } = req.body;
+      
+      const existing = await storage.getEmailSettings(tenantId);
+      
+      const updateData: any = { ...data };
+      if (smtpPassword && smtpPassword !== '********') {
+        updateData.smtpPassword = smtpPassword;
+      } else if (existing?.smtpPassword) {
+        updateData.smtpPassword = existing.smtpPassword;
+      }
+      
+      if (existing) {
+        const settings = await storage.updateEmailSettings(tenantId, updateData);
+        res.json(settings);
+      } else {
+        const settings = await storage.createEmailSettings({ ...updateData, tenantId });
+        res.json(settings);
+      }
+    } catch (error) {
+      console.error("Error saving email settings:", error);
+      res.status(500).json({ error: "Failed to save email settings" });
+    }
+  });
+
+  app.post("/api/admin/email-settings/test", requireAdmin, async (req, res) => {
+    try {
+      const tenantId = getTenantId(req);
+      const { testEmail, smtpHost, smtpPort, smtpUser, smtpPassword, fromEmail, fromName } = req.body;
+      
+      let settings = await storage.getEmailSettings(tenantId);
+      
+      const testSettings = {
+        id: 'test',
+        tenantId,
+        provider: 'smtp',
+        isEnabled: true,
+        smtpHost: smtpHost || settings?.smtpHost,
+        smtpPort: smtpPort || settings?.smtpPort,
+        smtpUser: smtpUser || settings?.smtpUser,
+        smtpPassword: (smtpPassword && smtpPassword !== '********') ? smtpPassword : settings?.smtpPassword,
+        sendgridApiKey: null,
+        fromEmail: fromEmail || settings?.fromEmail,
+        fromName: fromName || settings?.fromName,
+      };
+      
+      if (!testSettings.smtpHost || !testSettings.smtpPort || !testSettings.smtpUser || !testSettings.smtpPassword) {
+        return res.status(400).json({ error: "SMTP settings are incomplete" });
+      }
+      
+      const verifyResult = await verifySmtpConnection(testSettings as any);
+      if (!verifyResult.success) {
+        return res.status(400).json({ error: `SMTP connection failed: ${verifyResult.error}` });
+      }
+      
+      const sendResult = await sendEmail(testSettings as any, {
+        to: testEmail || testSettings.fromEmail || testSettings.smtpUser || '',
+        subject: 'Test Email from University Platform',
+        text: 'This is a test email to verify your SMTP configuration is working correctly.',
+        html: `
+          <div style="font-family: Arial, sans-serif; padding: 20px;">
+            <h2>Test Email</h2>
+            <p>This is a test email to verify your SMTP configuration is working correctly.</p>
+            <p style="color: #666;">Sent from: ${testSettings.fromEmail || testSettings.smtpUser}</p>
+          </div>
+        `,
+      });
+      
+      if (sendResult.success) {
+        res.json({ success: true, messageId: sendResult.messageId });
+      } else {
+        res.status(400).json({ error: sendResult.error });
+      }
+    } catch (error: any) {
+      console.error("Error testing email:", error);
+      res.status(500).json({ error: error.message || "Failed to send test email" });
     }
   });
 

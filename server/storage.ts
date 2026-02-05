@@ -18,6 +18,7 @@ import {
   type TrustBadge, type InsertTrustBadge,
   type MediaAsset, type InsertMediaAsset,
   type EmailTemplate, type InsertEmailTemplate,
+  type EmailSettings, type InsertEmailSettings,
   type SeoSettings, type InsertSeoSettings,
 } from '@shared/schema';
 
@@ -93,6 +94,11 @@ export interface IStorage {
   createEmailTemplate(template: InsertEmailTemplate): Promise<EmailTemplate>;
   updateEmailTemplate(id: string, data: Partial<InsertEmailTemplate>): Promise<EmailTemplate | undefined>;
   deleteEmailTemplate(id: string): Promise<boolean>;
+
+  // Email Settings
+  getEmailSettings(tenantId: string): Promise<EmailSettings | undefined>;
+  createEmailSettings(settings: InsertEmailSettings): Promise<EmailSettings>;
+  updateEmailSettings(tenantId: string, data: Partial<InsertEmailSettings>): Promise<EmailSettings | undefined>;
 
   // SEO Settings
   getSeoSettings(tenantId: string): Promise<SeoSettings | undefined>;
@@ -362,6 +368,22 @@ export class DatabaseStorage implements IStorage {
   async deleteEmailTemplate(id: string): Promise<boolean> {
     const result = await db.delete(emailTemplates).where(eq(emailTemplates.id, id)).returning();
     return result.length > 0;
+  }
+
+  // Email Settings
+  async getEmailSettings(tenantId: string): Promise<EmailSettings | undefined> {
+    const [settings] = await db.select().from(emailSettings).where(eq(emailSettings.tenantId, tenantId));
+    return settings;
+  }
+
+  async createEmailSettings(settings: InsertEmailSettings): Promise<EmailSettings> {
+    const [created] = await db.insert(emailSettings).values(settings).returning();
+    return created;
+  }
+
+  async updateEmailSettings(tenantId: string, data: Partial<InsertEmailSettings>): Promise<EmailSettings | undefined> {
+    const [updated] = await db.update(emailSettings).set(data).where(eq(emailSettings.tenantId, tenantId)).returning();
+    return updated;
   }
 
   // SEO Settings

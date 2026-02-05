@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,7 +7,7 @@ import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
-import { Mail, Send, Plus, Pencil, Trash2, Save, X } from 'lucide-react';
+import { Mail, Send, Plus, Pencil, Trash2, Save, X, Loader2 } from 'lucide-react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { queryClient, apiRequest } from '@/lib/queryClient';
 import {
@@ -65,18 +65,32 @@ const DEFAULT_TEMPLATE_KEYS = [
   { key: 'rejection', label: 'Rejection Notice' },
 ];
 
+interface EmailSettingsData {
+  id?: string;
+  tenantId?: string;
+  isEnabled: boolean;
+  provider: string;
+  smtpHost: string;
+  smtpPort: string;
+  smtpUser: string;
+  smtpPassword: string;
+  fromEmail: string;
+  fromName: string;
+}
+
 export default function Email() {
   const { toast } = useToast();
-  const [settings, setSettings] = useState({
-    enabled: true,
+  const [settings, setSettings] = useState<EmailSettingsData>({
+    isEnabled: true,
     provider: 'smtp',
-    smtpHost: 'smtp.example.com',
+    smtpHost: '',
     smtpPort: '587',
     smtpUser: '',
     smtpPassword: '',
-    fromEmail: 'apply@okanuniversity.app',
-    fromName: 'Okan University Admissions',
+    fromEmail: '',
+    fromName: '',
   });
+  const [testEmail, setTestEmail] = useState('');
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<EmailTemplate | null>(null);
@@ -90,8 +104,63 @@ export default function Email() {
     textBodyByLang: {} as Record<string, string>,
   });
 
+  const { data: emailSettings, isLoading: settingsLoading } = useQuery<EmailSettingsData>({
+    queryKey: ['/api/admin/email-settings'],
+  });
+
+  React.useEffect(() => {
+    if (emailSettings && Object.keys(emailSettings).length > 0) {
+      setSettings({
+        isEnabled: emailSettings.isEnabled ?? true,
+        provider: emailSettings.provider || 'smtp',
+        smtpHost: emailSettings.smtpHost || '',
+        smtpPort: String(emailSettings.smtpPort || '587'),
+        smtpUser: emailSettings.smtpUser || '',
+        smtpPassword: emailSettings.smtpPassword || '',
+        fromEmail: emailSettings.fromEmail || '',
+        fromName: emailSettings.fromName || '',
+      });
+    }
+  }, [emailSettings]);
+
   const { data: templates = [], isLoading } = useQuery<EmailTemplate[]>({
     queryKey: ['/api/email-templates'],
+  });
+
+  const saveSettingsMutation = useMutation({
+    mutationFn: async (data: EmailSettingsData) => {
+      return apiRequest('POST', '/api/admin/email-settings', {
+        ...data,
+        smtpPort: parseInt(data.smtpPort) || 587,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/email-settings'] });
+      toast({ title: 'Settings saved', description: 'Email settings have been updated.' });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Error', description: error.message || 'Failed to save settings.', variant: 'destructive' });
+    },
+  });
+
+  const testEmailMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest('POST', '/api/admin/email-settings/test', {
+        testEmail: testEmail || settings.fromEmail,
+        smtpHost: settings.smtpHost,
+        smtpPort: parseInt(settings.smtpPort) || 587,
+        smtpUser: settings.smtpUser,
+        smtpPassword: settings.smtpPassword,
+        fromEmail: settings.fromEmail,
+        fromName: settings.fromName,
+      });
+    },
+    onSuccess: () => {
+      toast({ title: 'Test email sent', description: `A test email has been sent to ${testEmail || settings.fromEmail}.` });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Error', description: error.message || 'Failed to send test email.', variant: 'destructive' });
+    },
   });
 
   const createMutation = useMutation({
@@ -137,17 +206,11 @@ export default function Email() {
   });
 
   const handleTestEmail = () => {
-    toast({
-      title: 'Test email sent',
-      description: 'A test email has been sent to your configured address.',
-    });
+    testEmailMutation.mutate();
   };
 
   const handleSaveSettings = () => {
-    toast({
-      title: 'Settings saved',
-      description: 'Email settings have been updated.',
-    });
+    saveSettingsMutation.mutate(settings);
   };
 
   const handleAddTemplate = () => {
@@ -233,9 +296,9 @@ export default function Email() {
                     <CardDescription>Configure your email delivery settings</CardDescription>
                   </div>
                   <Switch
-                    checked={settings.enabled}
+                    checked={settings.isEnabled}
                     onCheckedChange={(checked) =>
-                      setSettings({ ...settings, enabled: checked })
+                      setSettings({ ...settings, isEnabled: checked })
                     }
                     data-testid="switch-email-enabled"
                   />
@@ -318,13 +381,42 @@ export default function Email() {
                   </div>
                 </div>
 
-                <div className="flex gap-2 pt-4">
-                  <Button variant="outline" onClick={handleTestEmail}>
-                    <Send className="h-4 w-4 mr-2" />
-                    Send Test Email
-                  </Button>
-                  <Button onClick={handleSaveSettings}>
-                    <Save className="h-4 w-4 mr-2" />
+                <div className="pt-4 space-y-4">
+                  <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-end">
+                    <div className="flex-1 w-full sm:w-auto">
+                      <Label>Test Email Address</Label>
+                      <Input
+                        value={testEmail}
+                        onChange={(e) => setTestEmail(e.target.value)}
+                        placeholder={settings.fromEmail || "Enter email address"}
+                        className="mt-1.5"
+                        data-testid="input-test-email"
+                      />
+                    </div>
+                    <Button 
+                      variant="outline" 
+                      onClick={handleTestEmail}
+                      disabled={testEmailMutation.isPending}
+                      data-testid="button-test-email"
+                    >
+                      {testEmailMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <Send className="h-4 w-4 mr-2" />
+                      )}
+                      Send Test Email
+                    </Button>
+                  </div>
+                  <Button 
+                    onClick={handleSaveSettings}
+                    disabled={saveSettingsMutation.isPending}
+                    data-testid="button-save-settings"
+                  >
+                    {saveSettingsMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Save className="h-4 w-4 mr-2" />
+                    )}
                     Save Settings
                   </Button>
                 </div>
