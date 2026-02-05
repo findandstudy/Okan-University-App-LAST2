@@ -260,7 +260,8 @@ const steps = [
 ];
 
 interface FormData {
-  fullName: string;
+  firstName: string;
+  lastName: string;
   email: string;
   phone: string;
   countryCode: string;
@@ -283,7 +284,8 @@ export default function Apply() {
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [formData, setFormData] = useState<FormData>({
-    fullName: '',
+    firstName: '',
+    lastName: '',
     email: '',
     phone: '',
     countryCode: '+90',
@@ -299,8 +301,10 @@ export default function Apply() {
 
   const submitMutation = useMutation({
     mutationFn: async (data: FormData) => {
+      const fullName = `${data.firstName.toUpperCase()} ${data.lastName.toUpperCase()}`;
+      
       const leadResponse = await apiRequest('POST', '/api/leads', {
-        fullName: data.fullName.toUpperCase(),
+        fullName,
         email: data.email,
         phone: data.phone,
         countryCode: data.countryCode,
@@ -317,7 +321,9 @@ export default function Apply() {
         programId: data.programId,
         tenantId: 'default',
         applicantData: {
-          fullName: data.fullName.toUpperCase(),
+          fullName,
+          firstName: data.firstName.toUpperCase(),
+          lastName: data.lastName.toUpperCase(),
           email: data.email,
           phone: data.phone,
           countryCode: data.countryCode,
@@ -391,7 +397,7 @@ export default function Apply() {
   const validateStep = (step: number): boolean => {
     switch (step) {
       case 1:
-        return !!(formData.fullName && formData.email && formData.phone && formData.countryCode);
+        return !!(formData.firstName && formData.lastName && formData.email && formData.phone && formData.countryCode);
       case 2:
         return !!formData.programId;
       case 3:
@@ -539,18 +545,33 @@ export default function Apply() {
               >
                 {currentStep === 1 && (
                   <div className="space-y-4">
-                    <div>
-                      <Label htmlFor="fullName">{t('apply.fullname')} *</Label>
-                      <Input
-                        id="fullName"
-                        value={formData.fullName}
-                        onChange={(e) =>
-                          setFormData({ ...formData, fullName: e.target.value.toUpperCase() })
-                        }
-                        placeholder="JOHN DOE"
-                        className="mt-1.5 uppercase"
-                        data-testid="input-fullname"
-                      />
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label htmlFor="firstName">First Name *</Label>
+                        <Input
+                          id="firstName"
+                          value={formData.firstName}
+                          onChange={(e) =>
+                            setFormData({ ...formData, firstName: e.target.value.toUpperCase() })
+                          }
+                          placeholder="JOHN"
+                          className="mt-1.5 uppercase"
+                          data-testid="input-firstname"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="lastName">Last Name *</Label>
+                        <Input
+                          id="lastName"
+                          value={formData.lastName}
+                          onChange={(e) =>
+                            setFormData({ ...formData, lastName: e.target.value.toUpperCase() })
+                          }
+                          placeholder="DOE"
+                          className="mt-1.5 uppercase"
+                          data-testid="input-lastname"
+                        />
+                      </div>
                     </div>
 
                     <div>
@@ -747,8 +768,10 @@ export default function Apply() {
                         <User className="h-4 w-4" /> Personal Information
                       </h4>
                       <div className="grid grid-cols-2 gap-2 text-sm">
-                        <div className="text-muted-foreground">Name:</div>
-                        <div className="font-medium">{formData.fullName}</div>
+                        <div className="text-muted-foreground">First Name:</div>
+                        <div className="font-medium">{formData.firstName}</div>
+                        <div className="text-muted-foreground">Last Name:</div>
+                        <div className="font-medium">{formData.lastName}</div>
                         <div className="text-muted-foreground">Email:</div>
                         <div className="font-medium">{formData.email}</div>
                         <div className="text-muted-foreground">Phone:</div>

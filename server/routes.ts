@@ -524,6 +524,8 @@ export async function registerRoutes(
           const tenant = await storage.getTenant(tenantId);
           const applicantData = application.applicantData as { 
             fullName?: string; 
+            firstName?: string;
+            lastName?: string;
             email?: string; 
             phone?: string; 
             countryCode?: string;
@@ -536,9 +538,9 @@ export async function registerRoutes(
             intakeTerm?: string;
           } || {};
 
-          const nameParts = (applicantData.fullName || '').split(' ');
-          const firstName = nameParts[0] || '';
-          const lastName = nameParts.slice(1).join(' ') || '';
+          // Use firstName/lastName from applicantData if available, otherwise split fullName
+          const firstName = applicantData.firstName || (applicantData.fullName || '').split(' ')[0] || '';
+          const lastName = applicantData.lastName || (applicantData.fullName || '').split(' ').slice(1).join(' ') || '';
 
           // Construct full logo URL
           const siteUrl = `https://${tenant?.domain || 'okanuniversity.app'}`;
