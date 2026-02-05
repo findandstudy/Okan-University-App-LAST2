@@ -1114,6 +1114,17 @@ Sitemap: https://okanuniversity.app/sitemap.xml`;
       const tenantId = getTenantId(req);
       const { testEmail, smtpHost, smtpPort, smtpUser, smtpPassword, fromEmail, fromName } = req.body;
       
+      // Debug log - mask password for security
+      console.log('Test email request:', {
+        smtpHost,
+        smtpPort,
+        smtpUser,
+        smtpPasswordLength: smtpPassword?.length,
+        smtpPasswordMasked: smtpPassword === '********',
+        fromEmail,
+        testEmail
+      });
+      
       let settings = await storage.getEmailSettings(tenantId);
       
       const testSettings = {

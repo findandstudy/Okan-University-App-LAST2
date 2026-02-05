@@ -116,7 +116,7 @@ export default function Email() {
         smtpHost: emailSettings.smtpHost || '',
         smtpPort: String(emailSettings.smtpPort || '587'),
         smtpUser: emailSettings.smtpUser || '',
-        smtpPassword: emailSettings.smtpPassword || '',
+        smtpPassword: '', // Never pre-fill password - user must enter it fresh
         fromEmail: emailSettings.fromEmail || '',
         fromName: emailSettings.fromName || '',
       });
@@ -350,6 +350,7 @@ export default function Email() {
                       onChange={(e) =>
                         setSettings({ ...settings, smtpPassword: e.target.value })
                       }
+                      placeholder={emailSettings?.smtpPassword === '********' ? 'Password saved - enter new to change' : 'Enter SMTP password'}
                       className="mt-1.5"
                       data-testid="input-smtp-password"
                     />
