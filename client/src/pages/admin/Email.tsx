@@ -57,6 +57,8 @@ const LANGUAGES = [
 ];
 
 const DEFAULT_TEMPLATE_KEYS = [
+  { key: 'application_internal_notification', label: 'Internal Notification (New Application)' },
+  { key: 'application_user_confirmation', label: 'User Confirmation (Application Received)' },
   { key: 'application_confirmation', label: 'Application Confirmation' },
   { key: 'welcome', label: 'Welcome Email' },
   { key: 'status_update', label: 'Status Update' },

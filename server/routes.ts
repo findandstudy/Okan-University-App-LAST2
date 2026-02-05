@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { z } from "zod";
 import { insertProgramSchema, insertLeadSchema, insertApplicationSchema, insertMediaAssetSchema, insertTestimonialSchema, insertDocumentSchema, insertFaqItemSchema, insertSeoSettingsSchema, insertEmailSettingsSchema } from "@shared/schema";
-import { sendEmail, verifySmtpConnection } from "./email";
+import { sendEmail, verifySmtpConnection, sendApplicationEmails, type ApplicationEmailData } from "./email";
 import session from "express-session";
 import MemoryStore from "memorystore";
 import multer from "multer";
@@ -501,6 +501,81 @@ export async function registerRoutes(
       const tenantId = getTenantId(req);
       const validated = insertApplicationSchema.parse({ ...req.body, tenantId });
       const application = await storage.createApplication(validated);
+
+      // Send application emails asynchronously (don't block the response)
+      (async () => {
+        try {
+          const emailSettings = await storage.getEmailSettings(tenantId);
+          if (!emailSettings?.isEnabled || !emailSettings.smtpPassword) {
+            console.log('Email notifications disabled or not configured');
+            return;
+          }
+
+          const [internalTemplate, userTemplate] = await Promise.all([
+            storage.getEmailTemplateByKey(tenantId, 'application_internal_notification'),
+            storage.getEmailTemplateByKey(tenantId, 'application_user_confirmation'),
+          ]);
+
+          if (!internalTemplate || !userTemplate) {
+            console.log('Email templates not found');
+            return;
+          }
+
+          const tenant = await storage.getTenant(tenantId);
+          const applicantData = application.applicantData as { 
+            fullName?: string; 
+            email?: string; 
+            phone?: string; 
+            countryCode?: string;
+            nationality?: string;
+            programName?: string;
+            degreeLevel?: string;
+            intakeTerm?: string;
+          } || {};
+
+          const nameParts = (applicantData.fullName || '').split(' ');
+          const firstName = nameParts[0] || '';
+          const lastName = nameParts.slice(1).join(' ') || '';
+
+          const emailData: ApplicationEmailData = {
+            fullName: applicantData.fullName || '',
+            firstName,
+            lastName,
+            email: applicantData.email || '',
+            phone: applicantData.phone || '',
+            countryCode: applicantData.countryCode || '',
+            nationality: applicantData.nationality,
+            programName: applicantData.programName,
+            degreeLevel: applicantData.degreeLevel,
+            intakeTerm: applicantData.intakeTerm,
+          };
+
+          const siteConfig = {
+            siteName: tenant?.universityName || 'University',
+            siteUrl: `https://${tenant?.domain || 'okanuniversity.app'}`,
+            logoUrl: tenant?.logoUrl || '',
+            contactEmail: emailSettings.fromEmail || 'info@findandstudy.com',
+            adminEmail: 'admission@findandstudy.com',
+            dashboardUrl: `https://${tenant?.domain || 'okanuniversity.app'}/admin/applications`,
+          };
+
+          const result = await sendApplicationEmails(
+            emailSettings,
+            internalTemplate,
+            userTemplate,
+            emailData,
+            siteConfig
+          );
+
+          console.log('Application emails sent:', {
+            internal: result.internalResult.success,
+            user: result.userResult.success,
+          });
+        } catch (emailError) {
+          console.error('Failed to send application emails:', emailError);
+        }
+      })();
+
       res.status(201).json(application);
     } catch (error) {
       console.error("Error creating application:", error);
