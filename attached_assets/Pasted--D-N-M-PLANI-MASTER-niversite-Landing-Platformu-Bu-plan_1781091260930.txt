@@ -1,0 +1,199 @@
+# DÖNÜŞÜM PLANI (MASTER) — Üniversite Landing Platformu
+
+Bu plan, keşif raporu + bağlanan tüm kararlara göre yazıldı. Hedef: mevcut CRM/başvuru platformunu, **tek Hostinger VPS'te dinamik multi-tenant, çok dilli landing + dinamik blog üretim/barındırma sistemine** dönüştürmek.
+
+> Kullanım: Bu master planı Replit'e ver → Replit plan modunda detaylandırsın → son revizeyi ver → fazları sırayla uygula. Her faz bağımsız test edilir.
+
+---
+
+## 🔒 BAĞLANAN KARARLAR (tüm fazlarda geçerli)
+
+- **Mimari:** Dinamik multi-tenant, tek VPS. Tek app domain'den tenant çözümleyip tüm siteleri servis eder. Statik üretim zorunlu değil (ZIP opsiyonel yedek).
+- **Proje varlığı:** `tenants` tablosu = "site/proje" varlığıdır. Ayrı `site_projects` tablosu AÇMA — `tenants`'a `status` ve alias domain ekle (veri çoğaltma olmasın).
+- **Yayın kontrolü:** `tenants.status` = `taslak` (canlı değil/özel) | `yayinda` (canlı servis). Manuel.
+- **Depolama:** VPS yerel diski (Replit sidecar storage kaldırılır). sharp + `/api/img` cache korunur.
+- **Diller:** en, tr, ar, fr, ru, fa, zh, hi, es, id (ar, fa = RTL).
+- **Roller:** Sadece superadmin. Proje bazlı izolasyon yok (birden çok admin olabilir, hepsi tam yetkili).
+- **AI:** Panelden sağlayıcı + anahtar (`integration_settings` `type='ai'` olarak yeniden kullanılır, anahtar şifreli). Çeviri + içerik üretici bunu kullanır.
+- **Blog:** Dinamik. Excel içe aktarma + AI üretim + 10 dil + takvim. Yayın modu: otomatik VEYA onay kuyruğu — takvim başına seçilir.
+- **Programlar/iletişim/başvuru:** 3. parti widget (embed). SEO metni statik kalır.
+- **Stack sadakati:** Express 5, Drizzle + `db:push`, **Zod v3**, wouter, TanStack Query, shadcn/ui, custom i18n. Bu projenin pattern'ları korunur.
+
+---
+
+## 🗺️ FAZ SIRASI (bağımlılığa göre)
+
+Faz 0 (temizlik) → Faz 1 (multi-tenant) → Faz 2 (VPS temeli: storage/session/güvenlik) → Faz 3 (10 dil) → Faz 4 (hub + widget) → Faz 5 (AI çeviri + içerik üretici) → Faz 6 (SEO) → Faz 7 (blog) → Faz 8 (opsiyonel ZIP/sürüm) → Faz 9 (VPS deploy).
+
+---
+
+## 🟥 FAZ 0 — Güvenli Temizlik (CRM modüllerini kaldır)
+
+**Hedef:** Sade içerik modeline geçmek için kullanılmayacak modülleri FK sırasına dikkat ederek kaldır.
+
+**Silme sırası (FK bağımlılığı — KRİTİK):**
+1. `ai_extractions` → 2. `documents` → 3. `applications` → 4. `leads` (bu sırayla).
+5. `email_settings`, `email_templates` + `server/email.ts` + nodemailer.
+6. `chat_settings`, `chat_sessions`, `chat_messages` + `ChatWidget.tsx`.
+7. `webhook_outbox`, `webhook_deliveries`.
+8. `programs` (Faz 4'te widget yuvası gelene kadar bootstrap'tan çıkar).
+
+**Dosya/route/sayfa temizliği:** `Apply.tsx` (883 satır), `admin/Applications.tsx`, `admin/Programs.tsx`, `admin/ProgramFilters.tsx`, `admin/Email.tsx`, `EmbedPrograms.tsx`, ilgili storage metotları ve `/api/programs|leads|applications|documents|email-*|public-upload|send-notification` route'ları.
+
+**Bootstrap & seed:** `/api/bootstrap`'tan `programs` çıkar; `seedOnStartup.ts`'ten email/program seed'lerini temizle.
+
+**Üretim DB notu:** `db:push` migration dosyası üretmez; üretimde tablo silme için manuel `DROP TABLE` (FK sırasıyla) gerekir. **Önce DB yedeği al.**
+
+**Kabul:** App program/başvuru/email/chat olmadan derleniyor (`npm run check` temiz), landing açılıyor, admin panel kırık link bırakmıyor.
+
+---
+
+## 🟧 FAZ 1 — Gerçek Multi-Tenancy + Yayın Kontrolü
+
+**Hedef:** Tek deployment domain'den tenant çözsün; `taslak/yayinda` yayını kontrol etsin.
+
+**Şema:** `tenants`'a `status text default 'taslak'` ekle. Yeni `tenant_domains` (id, tenantId FK, domain unique, isPrimary bool, createdAt) — alias + canonical için (apply* aynı tenant). `db:push`.
+
+**Kod:**
+- `getTenantId()` (routes.ts:33) → host header'dan (`www.`/port temizleyerek) `tenant_domains`'ten çöz; bulunamazsa 404/coming-soon. Tercihen `resolveTenant` middleware → `req.tenantId`.
+- `/api/bootstrap` (routes.ts:165) → `okanuniversity.app` hardcode KALDIR, `req.tenantId` kullan.
+- `bootstrapCache` → `Map<tenantId, {data,timestamp}>`.
+- `server/static.ts` → `okanuniversity.app` hardcode kontrolünü genelleştir.
+- Yayın kapısı: `status==='yayinda'` değilse public site 404/"yakında"; admin önizleme her zaman görür.
+- Bootstrap'a `primaryDomain` ekle (Faz 6 canonical/hreflang için).
+
+**Altyapı (Faz 9'da uygulanır, burada not):** Çok-domain otomatik SSL = **Caddy on-demand TLS** (panele eklenen her domain için sertifika otomatik). Kod değişimi gerektirmez.
+
+**Kabul:** Farklı Host header'ı → doğru tenant. Bilinmeyen/`taslak` domain → 404/yakında. İki domain cache'i karışmıyor. `npm run check` temiz.
+
+---
+
+## 🟨 FAZ 2 — VPS Temeli (Depolama + Session + Güvenlik)
+
+**Hedef:** Replit'e bağımlılığı kır, üretime hazır + güvenli yap.
+
+**Depolama (yerel disk):** `server/replit_integrations/object_storage/` yerine yerel dosya sistemi katmanı: yüklemeler VPS'te `uploads/` (env ile yol), app/Nginx servis eder. `sharp` optimizasyon + `GET /api/img/:id` WebP cache **korunur**. `POST /api/upload` (admin medya) yerel diske yazacak şekilde uyarlanır. `ObjectUploader.tsx` admin yüklemesi için korunur.
+
+**Session:** `MemoryStore` → `connect-pg-simple` (zaten yüklü). PostgreSQL session tablosu.
+
+**Güvenlik:**
+- Şifre: düz metin → **bcrypt/scrypt hash**. Login `passwordHash !== password` yerine hash compare. Seed şifresi (`admin123`) hash'li + ilk girişte değiştir uyarısı.
+- `SESSION_SECRET` hardcode fallback kaldır → env zorunlu.
+- `send-notification` zaten silindi (Faz 0); kalan public endpoint'lere temel rate limit.
+
+**Kabul:** Yükleme yerel diske gidiyor + optimize WebP serviste; restart'ta session düşmüyor; şifreler hash'li; `npm run check` temiz.
+
+---
+
+## 🟩 FAZ 3 — 10 Dil + Düzgün RTL
+
+**Hedef:** 6 → 10 dil, ar/fa RTL düzgün.
+
+**Kod:**
+- `shared/schema.ts` SUPPORTED_LANGUAGES → 10; `contentByLangSchema` otomatik genişler.
+- `client/src/lib/i18n.tsx` → SUPPORTED_LANGUAGES, LANGUAGE_NAMES (`zh:中文, hi:हिन्दी, es:Español, id:Bahasa`), LANGUAGE_CODES, `defaultTranslations` 4 yeni tam dil bloğu.
+- Fontlar: ar→Noto Sans Arabic, fa→Vazirmatn, zh→Noto Sans SC, hi→Noto Sans Devanagari, diğer→Inter (`index.css` + i18n font-swap dile özel).
+- RTL: landing component'lerde fiziksel CSS (`ml/pl/text-left`) → mantıksal (`ms/ps/text-start`); yön bağımlı ikon flip.
+- Mevcut `contentByLang` satırlarına eksik dil anahtarları (fallback zaten EN'e düşüyor).
+
+**Kabul:** Switcher'da 10 dil; zh/hi/es/id çevrili; ar/fa tam aynalanıyor + doğru font; `npm run check` temiz.
+
+---
+
+## 🟦 FAZ 4 — "Oluşturulan Siteler" Hub + Widget + Tema + Disclaimer
+
+**Hedef:** Panelin merkezi: proje listesi + sekmeli editör; widget yuvaları.
+
+**Hub:** `pages/admin/Sites.tsx` (liste: logo, domain, diller, status, son güncelleme; aksiyon: önizle/düzenle/yayınla/[ZIP]). `pages/admin/SiteEditor.tsx` (sekmeler: İçerik / Çeviriler / Widget / Görseller / Tema / SEO / Blog / Sürümler). "Yeni Site" sihirbazı (ad + domain + diller + boş/klonla). "Mevcut üniversiteden klonla" (sections/FAQ/testimonial/tema/widget kopyalanır, domain hariç). Route: `GET/POST/PATCH /api/admin/sites` (= tenants üzerinde).
+
+**Widget:** Yeni `widgets` tablosu (id, tenantId, sectionKey, embedCode/iframeUrl, isEnabled). `WidgetEmbed.tsx` (sanitize edilmiş embed). `ProgramFinder` + `Contact` → widget yuvası. Editörde "Embed Kodu" alanı.
+
+**Disclaimer:** `sections`'a `sectionKey='disclaimer'` — contentByLang metin + `settings.isEnabled` aç/kapa (ayrı tablo yok). Çevrilir.
+
+**Status UI:** Editörde taslak/yayında geçişi.
+
+**Kabul:** Listeden proje yönetilebiliyor; widget embed landing'de render oluyor; disclaimer aç/kapa çalışıyor; klonlama içeriği taşıyor.
+
+---
+
+## 🟪 FAZ 5 — AI Bağlantısı + Çeviri + İçerik Üretici
+
+**Hedef:** Esnek AI; İngilizce'den 10 dile çeviri; doküman/link → özgün içerik.
+
+**AI ayarı:** `integration_settings` `type='ai'` (provider: claude/openai, apiKey **şifreli**, model). `pages/admin/AISettings.tsx`, `GET/POST /api/admin/ai-settings`, "bağlantıyı test et". Eski n8n/portal kayıtları temizlenir.
+
+**Çeviri:** `server/aiTranslation.ts` — `integration_settings`'ten config okur. `POST /api/admin/ai/translate {text, sourceLang, targetLangs[]}`. Editörlerde "🌐 Otomatik Çevir" → 9 dili doldur (düzenlenebilir taslak).
+
+**İçerik üretici:** paketler `pdf-parse`, `mammoth`, `cheerio`. `server/contentGenerator.ts`. `POST /api/admin/ai/generate-content` (kaynak: pdf/docx/url/text) → özgün hero/about/FAQ(8-12)/SEO (EN) → önizleme → onayla → section'lara + çeviri. Korumalar: kopyalama yok, uydurma yok, ücret/tarih "doğrula" işaretli.
+
+**Kabul:** Panelden AI bağlanıyor; EN içerik 9 dile çevriliyor; PDF/Word/link/metin → özgün içerik üretip kaydediliyor.
+
+---
+
+## 🟫 FAZ 6 — SEO (Lokalize Meta + Schema + hreflang)
+
+**Hedef:** Her SERP alanı dil-başına kontrol + otomatik yapısal SEO.
+
+**Meta (dil başına):** `seo_settings` + AI **lokalize öneri** (birebir çeviri değil) title/description/keywords; editörde onayla. Dahili AI anahtar kelime katmanı → meta/H/içerik/alt/schema'ya işlenir.
+
+**Yapısal (otomatik):** hreflang (10 dil), canonical (primaryDomain), JSON-LD (Organization/EducationalOrganization+logo, WebSite, BreadcrumbList, FAQPage, Course), dinamik `sitemap.xml` + `robots.txt` tenant başına, dil başına temiz URL (`/`, `/tr/`, `/ar/`).
+
+**Not (dürüst):** Schema rich-result'a *uygunluk* sağlar, gösterimi Google'a kalır; FAQ rich-result artık nadir; Review/yıldız schema kullanmıyoruz (ceza riski).
+
+**Kabul:** Her dil sayfasında lokalize meta + doğru hreflang/canonical; geçerli JSON-LD (Rich Results Test); sitemap 10 dili kapsıyor.
+
+---
+
+## ⬛ FAZ 7 — Dinamik Blog (Excel → AI → Takvim)
+
+**Hedef:** Excel'den yazı listesi → AI üretim → 10 dil → takvimli yayın.
+
+**Şema:** `blog_posts` (id, tenantId, status: taslak/zamanli/yayinda, publishAt, createdAt), `blog_post_translations` (postId, lang, title, slug, content, metaTitle, metaDesc), `blog_schedule` (tenantId, dailyLimit, weekdays[], mode: 'otomatik'|'onay', isEnabled).
+
+**İçe aktarma:** `xlsx` paketi — sütunlar: başlık, anahtar kelime, backlink siteleri. Satırlar kuyruğa.
+
+**Üretim:** AI anahtar kelime odaklı özgün makale + verilen sitelere doğal backlink → 10 dile çeviri → her yazıya **Article/BlogPosting JSON-LD**.
+
+**Takvim:** `node-cron` — `dailyLimit` + `weekdays`. **Mod (takvim başına):** `otomatik` (üret→zamanı gelince yayınla) | `onay` (üret→kuyruk→admin onaylayınca yayınla).
+
+**Çıktı:** `/blog/` indeks + yazı sayfaları, dil başına, hreflang. Dinamik (anlık yayın).
+
+**Not (dürüst):** Ağ içi programatik backlink "link scheme" riski taşır; doğal/faydalı linkleme güvenli.
+
+**Kabul:** Excel import çalışıyor; AI yazı üretip 10 dile çeviriyor; takvim otomatik VE onay modunda doğru yayınlıyor; blog SEO/schema doğru.
+
+---
+
+## ⬜ FAZ 8 — Opsiyonel: ZIP Export + Sürümler (düşük öncelik)
+
+**ZIP:** `jszip` — tam site (10 dil sayfaları + görseller + assets) snapshot; `POST /api/admin/sites/:id/export-zip` (büyük siteler için async). Yedek/taşıma amaçlı.
+
+**Sürümler:** `site_versions` opsiyonel — "yayınla" anında veya elle snapshot. Düşük öncelik.
+
+---
+
+## 🟢 FAZ 9 — VPS Deployment (Hostinger)
+
+**Hedef:** Tek VPS'te üretim.
+
+- Build: mevcut `script/build.ts` (Vite → dist/public, esbuild → dist/index.cjs) korunur.
+- **PM2:** `ecosystem.config.cjs` (cluster/fork), `pm2 reload --update-env`.
+- **Reverse proxy + SSL:** **Caddy** (on-demand TLS, çok domaini otomatik HTTPS) — en zarif; alternatif Nginx + certbot. `trust proxy` zaten set.
+- **PostgreSQL:** VPS'te kurulu, `DATABASE_URL`.
+- **Env:** DATABASE_URL, SESSION_SECRET, AI anahtarı (şifreli DB'de), uploads yolu.
+- Deploy akışı: `git pull → npm install → npm run build → pm2 reload`.
+- Domain ekleme: panelde tenant + domain → DNS A kaydı VPS IP → Caddy otomatik SSL → `yayinda` → canlı.
+
+**Kabul:** Birden çok domain tek VPS'te HTTPS ile canlı; restart dayanıklı; yeni domain eklemek dakikalar.
+
+---
+
+## ⚠️ GENEL RİSKLER (keşiften)
+
+- `db:push` üretimde tablo silmede tehlikeli → önce yedek, FK sırasıyla manuel DROP.
+- `contentByLang` 6→10 geçişte eksik anahtarlar → fallback EN.
+- Object storage Replit sidecar'dan yerel diske geçiş → tüm upload akışı test edilmeli.
+- Mevcut tenant/domain sayısı build başında DB'den teyit edilmeli.
+
+## ✅ DOĞRULAMA (her faz)
+`npm run check` (tsc) + `npm run dev` + çok-domain Host header testi + ilgili modülün manuel testi. Yüksek riskli fazlarda (0 silme, 2 storage) ekstra dikkat.

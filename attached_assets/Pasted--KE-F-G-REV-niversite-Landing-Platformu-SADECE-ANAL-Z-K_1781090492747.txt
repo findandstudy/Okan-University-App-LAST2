@@ -1,0 +1,109 @@
+# KEŞİF GÖREVİ — Üniversite Landing Platformu (SADECE ANALİZ — KOD DEĞİŞTİRME)
+
+Bu bir **keşif/analiz** görevidir. Aşağıdaki kurallara KESİNLİKLE uy:
+
+- ❌ Hiçbir dosyayı DEĞİŞTİRME, silme, ekleme yapma.
+- ❌ `db:push`, migration, `npm install`, build veya herhangi bir komut ÇALIŞTIRMA.
+- ❌ Henüz PLAN veya KOD yazma.
+- ✅ Sadece mevcut kod tabanını OKU/TARA ve aşağıdaki başlıklara göre **yapılandırılmış bir Türkçe rapor** üret.
+- ✅ Emin olmadığın yerleri "açık soru" olarak işaretle.
+
+Amacım, bu raporu alıp asıl dönüşüm planını yazmak. O yüzden net, dosya yollu, eksiksiz raporla.
+
+---
+
+## 🎯 HEDEF MİMARİ (bağlam — neyi hedeflediğimizi bil, raporu buna göre yaz)
+
+Bu proje şu anki haliyle çok-modüllü bir başvuru/CRM platformu. Onu daha **sade ve odaklı** bir sisteme dönüştüreceğiz:
+
+**Yeni tanım:** Üniversiteler için **çok dilli, dinamik landing page üretim ve barındırma platformu.** Tek bir Hostinger VPS üzerinde çalışır; tek uygulama, domain'e göre tenant çözümleyerek **tüm üniversite sitelerini aynı sunucudan dinamik servis eder.**
+
+Hedef mimarinin temel kararları:
+1. **Dinamik multi-tenant, tek VPS.** Panel + üretilen siteler aynı sunucuda. Domain → tenant çözümleme. İçerik DB'den anlık servis edilir (statik üretim/ZIP'e mecbur değiliz).
+2. **Otomatik yayın (deploy yok).** Panele domain eklenince DNS VPS'e bakar → otomatik SSL → anında canlı. Çok domain için otomatik SSL (Caddy on-demand TLS veya Nginx+certbot) hedefleniyor.
+3. **Manuel yayın statüsü = yayın kontrolü.** Her site projesinde `status` alanı: `taslak` (canlı değil/özel) veya `yayinda` (canlı servis edilir).
+4. **Sade içerik modeli — şunlar KALDIRILACAK:** program yönetimi, başvuru (lead/application), belge yükleme, AI döküman çıkarımı, e-posta gönderimi (SMTP/şablon), chat, webhook (outbox/deliveries). Sistem artık CRM değil.
+5. **Program/iletişim/başvuru = 3. parti WIDGET.** Bu alanlara admin embed kodu (iframe/script) girer; SEO metni statik kalır, etkileşim widget'tan gelir.
+6. **10 dil + RTL.** en, tr, ar, fr, ru, fa, zh, hi, es, id (ar ve fa = RTL). Şu an 6 dil var.
+7. **Esnek AI bağlantısı.** Panelden sağlayıcı (Claude/GPT) + API anahtarı girilir; AI çeviri ve içerik üretici bunu kullanır.
+8. **AI otomatik çeviri.** İngilizce içerik → diğer 9 dil (lokalize, düzenlenebilir taslak).
+9. **İçerik üretici.** PDF / Word / link / düz metin → özgün hero/about/FAQ/SEO üret → 10 dile çevir.
+10. **Dinamik blog modülü.** Excel ile yazı listesi (başlık, anahtar kelime, backlink siteleri) içe aktarılır → AI yazıyı üretir → 10 dile çevrilir → SEO + Article schema → **takvim/planlama ile otomatik yayınlanır** (günlük adet, haftalık günler). Blog dinamiktir.
+11. **SEO:** dil başına lokalize meta (AI önerisi), otomatik hreflang + canonical + JSON-LD (Organization/WebSite/BreadcrumbList/FAQPage/Course/Article) + sitemap + robots.
+12. **"Oluşturulan Siteler" hub'ı.** Panelin merkezi: tüm üniversite projeleri liste halinde; satırdan önizle/düzenle/yayınla; proje açılınca İçerik/Çeviriler/Widget/Görseller/Tema/SEO/Blog/Sürümler sekmeleri.
+13. **Roller:** sadece superadmin (tenant-scope rol YOK).
+14. **Disclaimer bandı:** "Operated by Find And Study" — proje başına aç/kapa + düzenlenebilir, çevrilir.
+15. **Opsiyonel ZIP yedek:** asıl yayın dinamik; istenirse bir sitenin statik kopyası ZIP olarak dışa aktarılabilir (yedek/taşıma).
+
+---
+
+## 📋 RAPORLAMANI İSTEDİĞİM BAŞLIKLAR
+
+### 1. Genel mimari & stack teyidi
+- Tam klasör yapısı (client/server/shared), önemli dosyalar, satır sayıları.
+- Stack ve versiyonlar (Express, Drizzle, React, Vite, wouter, TanStack Query, Zod sürümü, i18n yaklaşımı).
+- `package.json` scriptleri, `.replit`, build/start akışı, port, env değişkenleri.
+
+### 2. Multi-tenant mevcut durumu
+- `getTenantId()` nasıl çalışıyor (hardcode mu), `/api/bootstrap` tenant'ı nasıl seçiyor, `bootstrapCache` yapısı.
+- Tenant ile ilgili tablolar (`tenants`, var mı `tenant_domains`?), domain alanları.
+- **Domain bazlı gerçek tenant çözümleme + alias + çok-domain SSL** için tam olarak nelerin değişmesi gerektiğini raporla (dosya/fonksiyon bazında).
+
+### 3. KALDIRILACAK modüller — tam envanter
+Şu modüllerin her biri için: ilgili **server route'ları, storage metotları, shared/schema tabloları, client sayfaları/component'leri** ve **bağımlılıkları** (silince ne kırılır) listele:
+- Programs (program yönetimi + ProgramFinder + program filtreleri)
+- Leads + Applications (başvuru sihirbazı, Apply sayfası)
+- Documents (belge yükleme)
+- aiExtractions
+- Email (emailSettings, emailTemplates, nodemailer, send-notification, gönderim)
+- Chat (chatSettings, chatSessions, chatMessages, ChatWidget)
+- Webhook (webhookOutbox, webhookDeliveries)
+- integrationSettings (AI ayarına dönüştürülebilir mi yoksa silinsin mi — değerlendir)
+
+### 4. KORUNACAK & UYARLANACAK
+Şunların mevcut durumunu ve yeni modele nasıl uyarlanacağını raporla:
+- i18n altyapısı, theme/tenantThemes, seoSettings, sections, faqItems, testimonials, trustBadges, menuItems, mediaAssets.
+- Object storage entegrasyonu (görsel/logo/favicon yükleme + sharp optimizasyon).
+- Admin auth iskeleti (session, requireAdmin), admin layout/menü.
+
+### 5. Landing component envanteri (yeni "dinamik template")
+- `client/src/components/landing/*` her component: içeriği nereden alıyor (contentByLang? bootstrap?), dinamik template olarak nasıl korunur.
+- `ProgramFinder` ve iletişim/başvuru alanları **widget yuvasına** nasıl dönüştürülür (program modülü silinince).
+
+### 6. i18n & RTL
+- 6 dilin tanımlı olduğu tüm yerler (`shared/schema.ts` SUPPORTED_LANGUAGES, `client/src/lib/i18n.tsx`, LanguageSwitcher).
+- RTL nasıl uygulanıyor (dir, font swap), eksikleri.
+- **10 dile çıkarmak + RTL'i düzgün yapmak** için dokunulacak tam dosya listesi.
+
+### 7. YENİ modüller — nereye oturur
+Her biri için mevcut yapıya en uygun yerleşimi öner (yeni tablo/route/sayfa):
+- "Oluşturulan Siteler" hub'ı (proje listesi + sekmeli editör)
+- Widget yöneticisi (embed kodları)
+- AI bağlantı ayarları (sağlayıcı + anahtar; `integration_settings` yeniden kullanılabilir mi)
+- AI çeviri servisi
+- İçerik üretici (PDF/Word/link/metin — hangi npm paketleri: pdf-parse, mammoth, cheerio?)
+- **Dinamik blog** (yeni tablolar: blog yazıları, çeviriler, takvim/planlama; Excel içe aktarma — hangi paket; zamanlanmış yayın için cron/scheduler yaklaşımı)
+- Disclaimer bandı, publish/status kontrolü, opsiyonel ZIP export
+
+### 8. DB şema planı (öneri)
+- Düşecek tablolar / kalacak tablolar / eklenecek tablolar (site projeleri, blog, widget, çeviriler, site sürümleri, AI ayarları) — gerekçeli liste.
+
+### 9. Güvenlik mevcut durumu
+- Şifre saklama (düz metin mi — `admin.passwordHash` karşılaştırması), seed şifresi.
+- Session store (MemoryStore mu, connect-pg-simple bağlı mı).
+- Public endpoint korumaları, `send-notification` auth durumu.
+
+### 10. Deployment / altyapı (Hostinger VPS hedefi)
+- Mevcut `.replit`, build (`script/build.ts`), start, esbuild/vite yapısı.
+- **Hostinger VPS + Nginx/Caddy + PM2 + PostgreSQL + çok-domain otomatik SSL** için neyin değişmesi gerektiğini ANALİZ olarak raporla (uygulama değil, öneri).
+
+### 11. Riskler & açık sorular
+- Silme bağımlılıkları, şema/migration riskleri.
+- Seed'de/DB'de şu an kaç tenant ve hangi domainler var.
+- Senin gördüğün, plan yazarken bilmem gereken her şey.
+
+---
+
+## 📤 ÇIKTI FORMATI
+
+Yukarıdaki 11 başlığa göre, **dosya yollu**, madde/tablo halinde yapılandırılmış bir **Türkçe rapor** üret. Kod yazma, hiçbir şeyi değiştirme. Raporun sonunda net bir **"Açık Sorular"** listesi bırak.
