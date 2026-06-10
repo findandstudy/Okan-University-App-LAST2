@@ -48,15 +48,29 @@ function requireAdmin(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
+// ─── Dev host detection ───────────────────────────────────────────────────────
+// Returns true for hosts where it's safe to fall back to the default tenant
+// (local development and Replit preview environments).
+function isDevHost(host: string): boolean {
+  return (
+    host === 'localhost' ||
+    host === '127.0.0.1' ||
+    host.endsWith('.replit.dev') ||
+    host.endsWith('.picard.replit.dev') ||
+    host.endsWith('.repl.co')
+  );
+}
+
 // ─── resolveTenant middleware ─────────────────────────────────────────────────
 // Resolves tenant from Host header and attaches req.tenant + req.tenantId.
-// Falls back to 'default' tenant when running on localhost/Replit dev domain.
+// Falls back to 'default' tenant ONLY for known dev/preview hosts.
+// Unknown production domains receive a 404.
 async function resolveTenant(req: Request, res: Response, next: NextFunction) {
   try {
     const rawHost = req.headers.host || '';
     const host = rawHost.replace(/^www\./, '').replace(/:\d+$/, '').toLowerCase();
 
-    // Always resolve from DB
+    // Try to resolve from DB (tenant_domains → tenants.domain fallback)
     const tenant = await storage.getTenantByHostDomain(host);
 
     if (tenant) {
@@ -65,12 +79,14 @@ async function resolveTenant(req: Request, res: Response, next: NextFunction) {
       return next();
     }
 
-    // Dev/Replit fallback — load 'default' tenant without publish gate
-    const defaultTenant = await storage.getTenant('default');
-    if (defaultTenant) {
-      req.tenant = defaultTenant;
-      req.tenantId = defaultTenant.id;
-      return next();
+    // Allow fallback to 'default' tenant only on dev/preview hosts
+    if (isDevHost(host)) {
+      const defaultTenant = await storage.getTenant('default');
+      if (defaultTenant) {
+        req.tenant = defaultTenant;
+        req.tenantId = defaultTenant.id;
+        return next();
+      }
     }
 
     return res.status(404).json({ error: "Tenant not found" });
@@ -303,7 +319,7 @@ export async function registerRoutes(
   });
 
   // ─── Tenant API ─────────────────────────────────────────────────────────────
-  app.get("/api/tenant", resolveTenant, async (req, res) => {
+  app.get("/api/tenant", resolveTenant, requirePublished, async (req, res) => {
     res.json(req.tenant);
   });
 
@@ -341,10 +357,12 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/admin/tenant-domains/:id", requireAdmin, async (req, res) => {
+  app.delete("/api/admin/tenant-domains/:id", requireAdmin, resolveTenant, async (req, res) => {
     try {
-      const success = await storage.deleteTenantDomain(req.params.id as string);
-      if (!success) return res.status(404).json({ error: "Domain not found" });
+      const domains = await storage.getTenantDomains(req.tenantId);
+      const domain = domains.find(d => d.id === req.params.id);
+      if (!domain) return res.status(404).json({ error: "Domain not found" });
+      await storage.deleteTenantDomain(req.params.id as string);
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to delete domain" });
@@ -352,7 +370,7 @@ export async function registerRoutes(
   });
 
   // ─── Theme API ──────────────────────────────────────────────────────────────
-  app.get("/api/theme", resolveTenant, async (req, res) => {
+  app.get("/api/theme", resolveTenant, requirePublished, async (req, res) => {
     try {
       let theme = await storage.getTheme(req.tenantId);
       if (!theme) theme = await storage.createTheme({ tenantId: req.tenantId });
@@ -380,7 +398,7 @@ export async function registerRoutes(
   });
 
   // ─── Sections API ───────────────────────────────────────────────────────────
-  app.get("/api/sections", resolveTenant, async (req, res) => {
+  app.get("/api/sections", resolveTenant, requirePublished, async (req, res) => {
     try {
       const list = await storage.getSections(req.tenantId);
       res.json(list);
@@ -442,7 +460,7 @@ export async function registerRoutes(
   });
 
   // ─── SEO routes (sitemap + robots) ─────────────────────────────────────────
-  app.get("/sitemap.xml", resolveTenant, (req, res) => {
+  app.get("/sitemap.xml", resolveTenant, requirePublished, (req, res) => {
     const baseUrl = `https://${req.tenant.domain}`;
     const languages = ["en", "ar", "tr", "fr", "ru", "fa"];
 
@@ -465,14 +483,14 @@ export async function registerRoutes(
     res.send(sitemap);
   });
 
-  app.get("/robots.txt", resolveTenant, (req, res) => {
+  app.get("/robots.txt", resolveTenant, requirePublished, (req, res) => {
     const baseUrl = `https://${req.tenant.domain}`;
     res.header("Content-Type", "text/plain");
     res.send(`User-agent: *\nAllow: /\n\nSitemap: ${baseUrl}/sitemap.xml`);
   });
 
   // ─── Media Assets API ───────────────────────────────────────────────────────
-  app.get("/api/media", resolveTenant, async (req, res) => {
+  app.get("/api/media", resolveTenant, requirePublished, async (req, res) => {
     try {
       const media = await storage.getMediaAssets(req.tenantId);
       res.json(media);
@@ -492,10 +510,11 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/media/:id", requireAdmin, async (req, res) => {
+  app.delete("/api/media/:id", requireAdmin, resolveTenant, async (req, res) => {
     try {
-      const success = await storage.deleteMediaAsset(req.params.id as string);
-      if (!success) return res.status(404).json({ error: "Media not found" });
+      const asset = await storage.getMediaAsset(req.params.id as string);
+      if (!asset || asset.tenantId !== req.tenantId) return res.status(404).json({ error: "Media not found" });
+      await storage.deleteMediaAsset(req.params.id as string);
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to delete media" });
@@ -511,10 +530,10 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/testimonials/:id", async (req, res) => {
+  app.get("/api/testimonials/:id", resolveTenant, async (req, res) => {
     try {
       const t = await storage.getTestimonial(req.params.id as string);
-      if (!t) return res.status(404).json({ error: "Testimonial not found" });
+      if (!t || t.tenantId !== req.tenantId) return res.status(404).json({ error: "Testimonial not found" });
       res.json(t);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch testimonial" });
@@ -565,10 +584,10 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/faq/:id", async (req, res) => {
+  app.get("/api/faq/:id", resolveTenant, async (req, res) => {
     try {
       const faq = await storage.getFaqItem(req.params.id as string);
-      if (!faq) return res.status(404).json({ error: "FAQ item not found" });
+      if (!faq || faq.tenantId !== req.tenantId) return res.status(404).json({ error: "FAQ item not found" });
       res.json(faq);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch FAQ item" });
@@ -611,7 +630,7 @@ export async function registerRoutes(
   });
 
   // ─── SEO Settings API ───────────────────────────────────────────────────────
-  app.get("/api/seo-settings", resolveTenant, async (req, res) => {
+  app.get("/api/seo-settings", resolveTenant, requirePublished, async (req, res) => {
     try {
       res.json(await storage.getSeoSettings(req.tenantId) || {});
     } catch (error) {

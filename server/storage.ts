@@ -48,6 +48,7 @@ export interface IStorage {
 
   // Media Assets
   getMediaAssets(tenantId: string): Promise<MediaAsset[]>;
+  getMediaAsset(id: string): Promise<MediaAsset | undefined>;
   createMediaAsset(asset: InsertMediaAsset): Promise<MediaAsset>;
   deleteMediaAsset(id: string): Promise<boolean>;
 
@@ -199,6 +200,11 @@ export class DatabaseStorage implements IStorage {
   // Media Assets
   async getMediaAssets(tenantId: string): Promise<MediaAsset[]> {
     return db.select().from(mediaAssets).where(eq(mediaAssets.tenantId, tenantId)).orderBy(desc(mediaAssets.uploadedAt));
+  }
+
+  async getMediaAsset(id: string): Promise<MediaAsset | undefined> {
+    const [asset] = await db.select().from(mediaAssets).where(eq(mediaAssets.id, id));
+    return asset;
   }
 
   async createMediaAsset(asset: InsertMediaAsset): Promise<MediaAsset> {
