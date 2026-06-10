@@ -45,7 +45,7 @@ const defaultTestimonials = [
 ];
 
 export function Testimonials() {
-  const { t, isRTL, language } = useI18n();
+  const { t, language } = useI18n();
 
   const { data: testimonials, isLoading } = useQuery<Testimonial[]>({
     queryKey: ['/api/testimonials'],
@@ -112,8 +112,8 @@ export function Testimonials() {
                   </div>
 
                   <div className="relative mb-6">
-                    <Quote className="absolute -top-2 -left-2 h-8 w-8 text-primary/10" />
-                    <p className={`text-muted-foreground relative z-10 ${isRTL ? 'text-right' : ''}`}>
+                    <Quote className="absolute -top-2 -start-2 h-8 w-8 text-primary/10" />
+                    <p className="text-muted-foreground relative z-10">
                       "{getContent(testimonial)}"
                     </p>
                   </div>
@@ -133,7 +133,7 @@ export function Testimonials() {
                         {testimonial.studentName.split(' ').map(n => n[0]).join('')}
                       </AvatarFallback>
                     </Avatar>
-                    <div className={isRTL ? 'text-right' : ''}>
+                    <div>
                       <p className="font-semibold text-sm">{testimonial.studentName}</p>
                       <p className="text-xs text-muted-foreground">
                         {testimonial.programName}{testimonial.country ? ` • ${testimonial.country}` : ''}

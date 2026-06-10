@@ -114,7 +114,7 @@ export function Hero({ title, subtitle, ctaLabel, backgroundImage }: HeroProps) 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
-            className={isRTL ? 'text-right' : 'text-left'}
+            className="text-start"
           >
             <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-4 py-2 text-sm font-medium text-primary mb-6">
               <span className="relative flex h-2 w-2">
@@ -142,7 +142,7 @@ export function Hero({ title, subtitle, ctaLabel, backgroundImage }: HeroProps) 
                 }}
               >
                 {ctaLabel || t('hero.cta')}
-                <ArrowRight className={`h-5 w-5 ${isRTL ? 'rotate-180' : ''}`} />
+                <ArrowRight className="h-5 w-5 rtl:rotate-180" />
               </Button>
               <Button
                 variant="outline"
@@ -226,7 +226,7 @@ export function Hero({ title, subtitle, ctaLabel, backgroundImage }: HeroProps) 
               )}
             </div>
 
-            <div className="absolute -bottom-6 -left-6 bg-card rounded-xl shadow-lg p-4 border">
+            <div className="absolute -bottom-6 -start-6 bg-card rounded-xl shadow-lg p-4 border">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
                   <span className="text-2xl font-bold text-primary">{stat1Value}</span>
@@ -238,7 +238,7 @@ export function Hero({ title, subtitle, ctaLabel, backgroundImage }: HeroProps) 
               </div>
             </div>
 
-            <div className="absolute -top-6 -right-6 bg-card rounded-xl shadow-lg p-4 border">
+            <div className="absolute -top-6 -end-6 bg-card rounded-xl shadow-lg p-4 border">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center">
                   <span className="text-2xl font-bold text-green-600">{stat2Value}</span>

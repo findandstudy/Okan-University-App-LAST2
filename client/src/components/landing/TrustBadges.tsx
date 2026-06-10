@@ -39,7 +39,7 @@ const defaultBadges = [
 ];
 
 export function TrustBadges() {
-  const { t, isRTL, language } = useI18n();
+  const { t, language } = useI18n();
 
   const { data: sections = [] } = useQuery<Section[]>({
     queryKey: ['/api/sections'],
@@ -91,7 +91,7 @@ export function TrustBadges() {
                 <div className="flex-shrink-0 w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
                   <badge.icon className="h-6 w-6 text-primary" />
                 </div>
-                <div className={isRTL ? 'text-right' : 'text-left'}>
+                <div className="text-start">
                   <h3 className="font-semibold text-lg mb-1">{badge.title}</h3>
                   <p className="text-muted-foreground text-sm">{badge.description}</p>
                 </div>

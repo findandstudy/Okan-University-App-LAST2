@@ -4,7 +4,7 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
 // Supported languages
-export const SUPPORTED_LANGUAGES = ['en', 'ar', 'tr', 'fr', 'ru', 'fa'] as const;
+export const SUPPORTED_LANGUAGES = ['en', 'ar', 'tr', 'fr', 'ru', 'fa', 'zh', 'hi', 'es', 'id'] as const;
 export type SupportedLanguage = typeof SUPPORTED_LANGUAGES[number];
 export const RTL_LANGUAGES: SupportedLanguage[] = ['ar', 'fa'];
 

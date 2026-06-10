@@ -24,7 +24,7 @@ const steps = [
 ];
 
 export function Steps() {
-  const { t, isRTL } = useI18n();
+  const { t } = useI18n();
 
   return (
     <section id="steps" className="py-20 bg-muted/30">
@@ -59,7 +59,7 @@ export function Steps() {
                   <div className={`w-20 h-20 rounded-full ${step.color} mx-auto flex items-center justify-center shadow-lg`}>
                     <step.icon className="h-10 w-10 text-white" />
                   </div>
-                  <div className="absolute -top-2 -right-2 w-8 h-8 rounded-full bg-card border-2 border-primary flex items-center justify-center font-bold text-primary">
+                  <div className="absolute -top-2 -end-2 w-8 h-8 rounded-full bg-card border-2 border-primary flex items-center justify-center font-bold text-primary">
                     {index + 1}
                   </div>
                 </div>

@@ -241,7 +241,7 @@ export function Contact() {
                     <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
                       <item.icon className="h-6 w-6 text-primary" />
                     </div>
-                    <div className={isRTL ? 'text-right' : ''}>
+                    <div className="text-start">
                       <p className="text-sm text-muted-foreground">{item.label}</p>
                       <p className="font-medium">{item.value}</p>
                     </div>

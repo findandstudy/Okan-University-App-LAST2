@@ -126,7 +126,7 @@ const defaultFAQs = [
 const INITIAL_FAQ_COUNT = 5;
 
 export function FAQ() {
-  const { t, isRTL, language } = useI18n();
+  const { t, language } = useI18n();
   const [showAll, setShowAll] = useState(false);
 
   const { data: faqItems = [], isLoading } = useQuery<FaqItem[]>({
@@ -204,7 +204,7 @@ export function FAQ() {
                       className="bg-card border rounded-xl px-6 shadow-sm"
                       data-testid={`faq-item-${index}`}
                     >
-                      <AccordionTrigger className={`text-left hover:no-underline ${isRTL ? 'text-right' : ''}`}>
+                      <AccordionTrigger className="text-start hover:no-underline">
                         <span className="font-medium">{getQuestion(faq)}</span>
                       </AccordionTrigger>
                       <AccordionContent className="text-muted-foreground">
@@ -220,7 +220,7 @@ export function FAQ() {
                       className="bg-card border rounded-xl px-6 shadow-sm"
                       data-testid={`faq-item-${index}`}
                     >
-                      <AccordionTrigger className={`text-left hover:no-underline ${isRTL ? 'text-right' : ''}`}>
+                      <AccordionTrigger className="text-start hover:no-underline">
                         <span className="font-medium">{getDefaultQuestion(faq)}</span>
                       </AccordionTrigger>
                       <AccordionContent className="text-muted-foreground">
