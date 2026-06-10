@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { SeoSettings, SupportedLanguage, Tenant } from '@shared/schema';
 import { SUPPORTED_LANGUAGES } from '@shared/schema';
@@ -8,7 +8,15 @@ interface SEOMetaTagsProps {
   primaryDomain?: string;
 }
 
-export default function SEOMetaTags({ lang = 'en', primaryDomain }: SEOMetaTagsProps) {
+function getLangFromPath(): SupportedLanguage {
+  if (typeof window === 'undefined') return 'en';
+  const firstSegment = window.location.pathname.split('/').filter(Boolean)[0];
+  return SUPPORTED_LANGUAGES.includes(firstSegment as SupportedLanguage)
+    ? (firstSegment as SupportedLanguage)
+    : 'en';
+}
+
+export default function SEOMetaTags({ lang: _lang, primaryDomain }: SEOMetaTagsProps) {
   const { data: seoSettings } = useQuery<SeoSettings>({
     queryKey: ['/api/seo-settings'],
   });
@@ -17,12 +25,42 @@ export default function SEOMetaTags({ lang = 'en', primaryDomain }: SEOMetaTagsP
     queryKey: ['/api/tenant'],
   });
 
+  // Track URL path changes so meta tags update on client-side navigation
+  const [pathname, setPathname] = useState(() =>
+    typeof window !== 'undefined' ? window.location.pathname : '/'
+  );
+
+  useEffect(() => {
+    const onNav = () => setPathname(window.location.pathname);
+    window.addEventListener('popstate', onNav);
+    // wouter uses history.pushState which doesn't fire popstate — patch it
+    const origPush = history.pushState.bind(history);
+    history.pushState = (...args) => {
+      origPush(...args);
+      onNav();
+    };
+    const origReplace = history.replaceState.bind(history);
+    history.replaceState = (...args) => {
+      origReplace(...args);
+      onNav();
+    };
+    return () => {
+      window.removeEventListener('popstate', onNav);
+      history.pushState = origPush;
+      history.replaceState = origReplace;
+    };
+  }, []);
+
   const lastSettingsRef = useRef<string | null>(null);
 
   useEffect(() => {
     const fallbackTitle = tenant?.universityName || 'University';
 
-    const settingsKey = JSON.stringify({ seoSettings, tenant, lang, primaryDomain });
+    // URL path is the canonical source of truth for SEO language
+    // (crawlers don't have localStorage, so URL always wins)
+    const effectiveLang: SupportedLanguage = getLangFromPath();
+
+    const settingsKey = JSON.stringify({ seoSettings, tenant, effectiveLang, primaryDomain });
     if (settingsKey === lastSettingsRef.current) return;
     lastSettingsRef.current = settingsKey;
 
@@ -30,9 +68,9 @@ export default function SEOMetaTags({ lang = 'en', primaryDomain }: SEOMetaTagsP
     const metaDescriptionByLang = seoSettings?.metaDescriptionByLang as Record<SupportedLanguage, string> | null | undefined;
     const metaKeywordsByLang = seoSettings?.metaKeywordsByLang as Record<SupportedLanguage, string> | null | undefined;
 
-    const title = metaTitleByLang?.[lang] || metaTitleByLang?.en || fallbackTitle;
-    const description = metaDescriptionByLang?.[lang] || metaDescriptionByLang?.en;
-    const keywords = metaKeywordsByLang?.[lang] || metaKeywordsByLang?.en;
+    const title = metaTitleByLang?.[effectiveLang] || metaTitleByLang?.en || fallbackTitle;
+    const description = metaDescriptionByLang?.[effectiveLang] || metaDescriptionByLang?.en;
+    const keywords = metaKeywordsByLang?.[effectiveLang] || metaKeywordsByLang?.en;
 
     document.title = title;
 
@@ -88,28 +126,28 @@ export default function SEOMetaTags({ lang = 'en', primaryDomain }: SEOMetaTagsP
     updateOrCreateMeta('twitter-description', 'twitter:description', seoSettings?.ogDescription || description);
     updateOrCreateMeta('twitter-image', 'twitter:image', seoSettings?.ogImage || undefined);
 
-    // ── Canonical ──────────────────────────────────────────────────────────────
-    const baseDomain = primaryDomain || tenant?.domain;
-    const baseUrl = seoSettings?.canonicalUrl
-      ? seoSettings.canonicalUrl.replace(/\/$/, '')
-      : baseDomain
-        ? `https://${baseDomain}`
-        : null;
+    // ── Canonical & hreflang ───────────────────────────────────────────────────
+    // hreflang ALWAYS uses the primary domain (spec: stable canonical domain)
+    const hreflangBaseDomain = primaryDomain || tenant?.domain;
+    const hreflangBase = hreflangBaseDomain ? `https://${hreflangBaseDomain}` : null;
 
-    const canonicalHref = baseUrl ? (lang === 'en' ? `${baseUrl}/` : `${baseUrl}/${lang}`) : null;
+    // Canonical: explicit editor override OR derived from primary domain + current lang path
+    const derivedCanonical = hreflangBase
+      ? (effectiveLang === 'en' ? `${hreflangBase}/` : `${hreflangBase}/${effectiveLang}`)
+      : null;
+    const canonicalHref = seoSettings?.canonicalUrl || derivedCanonical;
+
     if (canonicalHref) {
       updateOrCreateLink('seo-canonical', 'canonical', canonicalHref);
     } else {
       removeLink('seo-canonical');
     }
 
-    // ── hreflang alternate links ───────────────────────────────────────────────
-    if (baseUrl) {
-      // x-default → root
-      updateOrCreateLink('hreflang-x-default', 'alternate', `${baseUrl}/`, 'x-default');
-
+    // hreflang links use primaryDomain exclusively (not canonicalUrl which is page-specific)
+    if (hreflangBase) {
+      updateOrCreateLink('hreflang-x-default', 'alternate', `${hreflangBase}/`, 'x-default');
       SUPPORTED_LANGUAGES.forEach((l) => {
-        const href = l === 'en' ? `${baseUrl}/` : `${baseUrl}/${l}`;
+        const href = l === 'en' ? `${hreflangBase}/` : `${hreflangBase}/${l}`;
         updateOrCreateLink(`hreflang-${l}`, 'alternate', href, l);
       });
     } else {
@@ -118,7 +156,7 @@ export default function SEOMetaTags({ lang = 'en', primaryDomain }: SEOMetaTagsP
     }
 
     return () => {};
-  }, [seoSettings, tenant, lang, primaryDomain]);
+  }, [seoSettings, tenant, primaryDomain, pathname]);
 
   return null;
 }
