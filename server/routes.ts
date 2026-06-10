@@ -957,5 +957,156 @@ export async function registerRoutes(
     }
   });
 
+  // ─── AI Settings ─────────────────────────────────────────────────────────────
+  app.get("/api/admin/ai-settings", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
+    try {
+      const settings = await storage.getAISettings(req.tenantId);
+      if (!settings) return res.json(null);
+      res.json({ provider: settings.provider, model: settings.model, hasApiKey: settings.hasApiKey });
+    } catch {
+      res.status(500).json({ error: "Failed to fetch AI settings" });
+    }
+  });
+
+  app.post("/api/admin/ai-settings", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
+    try {
+      const { provider, model, apiKey } = req.body;
+      if (!provider || !model) return res.status(400).json({ error: "provider and model are required" });
+      const { encryptApiKey } = await import('./aiService');
+      const encryptedApiKey = apiKey ? encryptApiKey(apiKey) : undefined;
+      await storage.saveAISettings(req.tenantId, { provider, model, encryptedApiKey });
+      res.json({ success: true });
+    } catch {
+      res.status(500).json({ error: "Failed to save AI settings" });
+    }
+  });
+
+  app.post("/api/admin/ai/test", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
+    try {
+      const { provider, model, apiKey } = req.body;
+      if (!provider || !model) return res.status(400).json({ error: "provider and model are required" });
+      let keyToTest = apiKey;
+      if (!keyToTest) {
+        const settings = await storage.getAISettings(req.tenantId);
+        if (!settings?.encryptedApiKey) return res.status(400).json({ error: "No API key configured" });
+        const { decryptApiKey } = await import('./aiService');
+        keyToTest = decryptApiKey(settings.encryptedApiKey);
+      }
+      const { testAIConnection } = await import('./aiService');
+      const success = await testAIConnection(provider, keyToTest, model);
+      res.json({ success });
+    } catch (err: any) {
+      res.json({ success: false, error: err?.message || 'Connection failed' });
+    }
+  });
+
+  app.post("/api/admin/ai/translate", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
+    try {
+      const { sourceContent, sourceLang = 'en', targetLangs } = req.body;
+      if (!sourceContent || !targetLangs) return res.status(400).json({ error: "sourceContent and targetLangs are required" });
+      const { translateContentByLang } = await import('./aiTranslation');
+      const result = await translateContentByLang(sourceContent, sourceLang, targetLangs, req.tenantId);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || "Translation failed" });
+    }
+  });
+
+  app.post("/api/admin/ai/generate-content", requireAdmin, resolveTenant, requireAdminTenantAccess, upload.single('file'), async (req, res) => {
+    try {
+      const { url, text } = req.body;
+      const file = req.file;
+      let sourceText = '';
+
+      const { extractTextFromUrl, extractTextFromPdf, extractTextFromDocx, generateContent } = await import('./contentGenerator');
+
+      if (url) {
+        sourceText = await extractTextFromUrl(url);
+      } else if (file) {
+        const ext = file.originalname?.toLowerCase();
+        if (ext?.endsWith('.pdf')) {
+          sourceText = await extractTextFromPdf(file.buffer);
+        } else if (ext?.endsWith('.docx')) {
+          sourceText = await extractTextFromDocx(file.buffer);
+        } else {
+          return res.status(400).json({ error: "Unsupported file type. Use PDF or DOCX." });
+        }
+      } else if (text) {
+        sourceText = text;
+      } else {
+        return res.status(400).json({ error: "Provide url, file, or text" });
+      }
+
+      if (!sourceText.trim()) return res.status(400).json({ error: "No text content found in source" });
+
+      const content = await generateContent(sourceText, req.tenantId);
+      res.json(content);
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || "Content generation failed" });
+    }
+  });
+
+  app.post("/api/admin/ai/apply-content", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
+    try {
+      const { generatedContent } = req.body;
+      if (!generatedContent) return res.status(400).json({ error: "generatedContent is required" });
+
+      const { hero, about, faq } = generatedContent;
+
+      // Find or create hero section
+      const existingSections = await storage.getSections(req.tenantId);
+      const heroSection = existingSections.find(s => s.sectionKey === 'hero');
+
+      const heroContent = {
+        en: {
+          title: hero?.title || undefined,
+          subtitle: hero?.subtitle || undefined,
+          body: hero?.body || undefined,
+          ctaLabel: hero?.ctaLabel || undefined,
+        },
+      };
+
+      if (heroSection) {
+        await storage.updateSection(heroSection.id, { contentByLang: heroContent });
+      } else {
+        await storage.createSection({
+          tenantId: req.tenantId,
+          sectionKey: 'hero',
+          displayOrder: 0,
+          isEnabled: true,
+          contentByLang: heroContent,
+          settings: null,
+        });
+      }
+
+      // Create FAQ items
+      if (Array.isArray(faq) && faq.length > 0) {
+        const existingFaq = await storage.getFaqItems(req.tenantId);
+        for (const item of faq) {
+          if (!item.question) continue;
+          const exists = existingFaq.find(f => {
+            const q = f.questionByLang?.en || '';
+            return q === item.question;
+          });
+          if (!exists) {
+            const allLangs = ['en','ar','tr','fr','ru','fa','zh','hi','es','id'] as const;
+            const emptyLangs = Object.fromEntries(allLangs.map(l => [l, ''])) as Record<typeof allLangs[number], string>;
+            await storage.createFaqItem({
+              tenantId: req.tenantId,
+              questionByLang: { ...emptyLangs, en: item.question },
+              answerByLang: { ...emptyLangs, en: item.answer },
+              displayOrder: existingFaq.length,
+              isEnabled: true,
+            });
+          }
+        }
+      }
+
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || "Failed to apply content" });
+    }
+  });
+
   return httpServer;
 }

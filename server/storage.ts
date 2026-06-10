@@ -81,6 +81,10 @@ export interface IStorage {
   createWidget(widget: InsertWidget): Promise<Widget>;
   updateWidget(id: string, data: Partial<InsertWidget>): Promise<Widget | undefined>;
   deleteWidget(id: string): Promise<boolean>;
+
+  // AI Settings
+  getAISettings(tenantId: string): Promise<{ provider: string; model: string; hasApiKey: boolean; encryptedApiKey?: string } | null>;
+  saveAISettings(tenantId: string, data: { provider: string; model: string; encryptedApiKey?: string }): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -341,6 +345,50 @@ export class DatabaseStorage implements IStorage {
   async deleteWidget(id: string): Promise<boolean> {
     const result = await db.delete(widgets).where(eq(widgets.id, id)).returning();
     return result.length > 0;
+  }
+
+  // AI Settings
+  async getAISettings(tenantId: string): Promise<{ provider: string; model: string; hasApiKey: boolean; encryptedApiKey?: string } | null> {
+    const [row] = await db
+      .select()
+      .from(integrationSettings)
+      .where(and(eq(integrationSettings.tenantId, tenantId), eq(integrationSettings.integrationType, 'ai')));
+    if (!row || !row.settings) return null;
+    const s = row.settings as any;
+    return {
+      provider: s.provider || 'anthropic',
+      model: s.model || 'claude-3-5-haiku-20241022',
+      hasApiKey: !!s.encryptedApiKey,
+      encryptedApiKey: s.encryptedApiKey,
+    };
+  }
+
+  async saveAISettings(tenantId: string, data: { provider: string; model: string; encryptedApiKey?: string }): Promise<void> {
+    const [existing] = await db
+      .select()
+      .from(integrationSettings)
+      .where(and(eq(integrationSettings.tenantId, tenantId), eq(integrationSettings.integrationType, 'ai')));
+
+    const currentSettings = (existing?.settings as any) || {};
+    const newSettings = {
+      provider: data.provider,
+      model: data.model,
+      encryptedApiKey: data.encryptedApiKey ?? currentSettings.encryptedApiKey,
+    };
+
+    if (existing) {
+      await db
+        .update(integrationSettings)
+        .set({ settings: newSettings })
+        .where(eq(integrationSettings.id, existing.id));
+    } else {
+      await db.insert(integrationSettings).values({
+        tenantId,
+        integrationType: 'ai',
+        settings: newSettings,
+        isEnabled: true,
+      });
+    }
   }
 }
 

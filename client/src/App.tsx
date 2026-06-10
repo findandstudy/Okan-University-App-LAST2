@@ -24,6 +24,8 @@ import FooterContent from "@/pages/admin/FooterContent";
 import SEOSettings from "@/pages/admin/SEOSettings";
 import Sites from "@/pages/admin/Sites";
 import SiteEditor from "@/pages/admin/SiteEditor";
+import AISettings from "@/pages/admin/AISettings";
+import ContentGenerator from "@/pages/admin/ContentGenerator";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -49,6 +51,8 @@ function Router() {
       <Route path="/admin/contact-info" component={() => <ContactInfo />} />
       <Route path="/admin/footer" component={() => <FooterContent />} />
       <Route path="/admin/seo" component={() => <SEOSettings />} />
+      <Route path="/admin/ai-settings" component={() => <AISettings />} />
+      <Route path="/admin/content-generator" component={() => <ContentGenerator />} />
       <Route path="/admin/sites" component={Sites} />
       <Route path="/admin/sites/:tenantId" component={SiteEditor} />
 

@@ -1,1 +1,2 @@
 - [EmbeddableLayout pattern](embeddable-layout.md) — how admin pages support both standalone and embedded-in-SiteEditor modes
+- [AI integration patterns](ai-integration.md) — AES-256-CBC for API key encryption; dynamic imports for SDKs; FAQ schema uses questionByLang/answerByLang

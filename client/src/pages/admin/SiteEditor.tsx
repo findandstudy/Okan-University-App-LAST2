@@ -29,6 +29,8 @@ import HeroContent from './HeroContent';
 import WhyChooseUs from './WhyChooseUs';
 import ContactInfo from './ContactInfo';
 import FooterContent from './FooterContent';
+import AISettings from './AISettings';
+import ContentGenerator from './ContentGenerator';
 import { Construction, Upload } from 'lucide-react';
 import type { Tenant, Widget } from '@shared/schema';
 
@@ -511,6 +513,7 @@ export default function SiteEditor() {
               <TabsTrigger value="media" data-testid="tab-media">Media</TabsTrigger>
               <TabsTrigger value="settings" data-testid="tab-settings">Settings</TabsTrigger>
               <TabsTrigger value="translations" data-testid="tab-translations">Çeviriler</TabsTrigger>
+              <TabsTrigger value="ai" data-testid="tab-ai">AI</TabsTrigger>
               <TabsTrigger value="blog" data-testid="tab-blog">Blog</TabsTrigger>
               <TabsTrigger value="versions" data-testid="tab-versions">Versions</TabsTrigger>
             </TabsList>
@@ -572,6 +575,21 @@ export default function SiteEditor() {
 
             <TabsContent value="translations" className="mt-4">
               <PlaceholderTab title="Çeviriler" description="Manage multi-language translations for all site content across supported languages." />
+            </TabsContent>
+
+            <TabsContent value="ai" className="mt-4">
+              <Tabs defaultValue="settings">
+                <TabsList>
+                  <TabsTrigger value="settings">AI Settings</TabsTrigger>
+                  <TabsTrigger value="generator">Content Generator</TabsTrigger>
+                </TabsList>
+                <TabsContent value="settings" className="mt-4">
+                  <AISettings embedded />
+                </TabsContent>
+                <TabsContent value="generator" className="mt-4">
+                  <ContentGenerator embedded />
+                </TabsContent>
+              </Tabs>
             </TabsContent>
 
             <TabsContent value="blog" className="mt-4">

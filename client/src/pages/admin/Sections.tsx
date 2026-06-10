@@ -18,7 +18,7 @@ import {
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
-import { GripVertical, Eye, EyeOff, Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
+import { GripVertical, Eye, EyeOff, Loader2, Pencil, Plus, Trash2, Globe } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -144,6 +144,34 @@ export default function Sections({ embedded }: { embedded?: boolean } = {}) {
         title: 'Failed to save sections',
         variant: 'destructive',
       });
+    },
+  });
+
+  const translateMutation = useMutation({
+    mutationFn: async () => {
+      const enContent = contentForms['en'];
+      const response = await apiRequest('POST', `/api/admin/ai/translate${apiSuffix}`, {
+        sourceContent: enContent,
+        sourceLang: 'en',
+        targetLangs: LANGUAGES.filter(l => l.code !== 'en').map(l => l.code),
+      });
+      return response.json();
+    },
+    onSuccess: (data: Record<string, Record<string, string>>) => {
+      setContentForms(prev => {
+        const updated = { ...prev };
+        for (const [lang, content] of Object.entries(data)) {
+          updated[lang as SupportedLanguage] = {
+            ...prev[lang as SupportedLanguage],
+            ...content,
+          };
+        }
+        return updated;
+      });
+      toast({ title: 'Translated!', description: 'All language tabs have been filled with AI translations.' });
+    },
+    onError: (err: Error) => {
+      toast({ title: 'Translation failed', description: err.message || 'Check your AI settings.', variant: 'destructive' });
     },
   });
 
@@ -545,6 +573,22 @@ export default function Sections({ embedded }: { embedded?: boolean } = {}) {
               className="flex-1"
             >
               Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => translateMutation.mutate()}
+              disabled={translateMutation.isPending || !contentForms['en'].title}
+              className="flex-1 gap-1.5"
+              data-testid="button-auto-translate"
+              title="Translate English content to all other languages using AI"
+            >
+              {translateMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Globe className="h-4 w-4" />
+              )}
+              Auto Translate
             </Button>
             <Button
               onClick={handleSaveContent}

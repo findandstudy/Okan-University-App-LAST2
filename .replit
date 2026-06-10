@@ -40,3 +40,8 @@ waitForPort = 5000
 
 [agent]
 integrations = ["javascript_object_storage:2.0.0"]
+
+[userenv]
+
+[userenv.shared]
+ENCRYPTION_KEY = "c738127b604fe51f104f4e06abdbfa2c304dda5e88caa3628b4f3e69a885f9b0"

@@ -35,6 +35,8 @@ import {
   Wrench,
   GraduationCap,
   LayoutGrid,
+  Bot,
+  Sparkles,
   type LucideIcon,
 } from 'lucide-react';
 import type { Tenant } from '@shared/schema';
@@ -70,6 +72,14 @@ const menuGroups: NavGroup[] = [
       { title: 'Testimonials', url: '/admin/testimonials', icon: MessageSquareQuote },
       { title: 'FAQ', url: '/admin/faq', icon: HelpCircle },
       { title: 'Page Sections', url: '/admin/sections', icon: LayoutList },
+    ],
+  },
+  {
+    title: 'AI Tools',
+    icon: Bot,
+    items: [
+      { title: 'AI Settings', url: '/admin/ai-settings', icon: Bot },
+      { title: 'Content Generator', url: '/admin/content-generator', icon: Sparkles },
     ],
   },
   {
