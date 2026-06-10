@@ -37,6 +37,7 @@ import {
   Globe,
   Wrench,
   GraduationCap,
+  LayoutGrid,
   type LucideIcon,
 } from 'lucide-react';
 import type { Tenant } from '@shared/schema';
@@ -84,6 +85,7 @@ const menuGroups: NavGroup[] = [
     title: 'System',
     icon: Wrench,
     items: [
+      { title: 'Sites Hub', url: '/admin/sites', icon: LayoutGrid },
       { title: 'Media', url: '/admin/media', icon: Image },
     ],
   },

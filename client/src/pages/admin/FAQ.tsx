@@ -27,6 +27,12 @@ import { apiRequest, queryClient } from '@/lib/queryClient';
 import { Plus, Pencil, Trash2, Loader2, HelpCircle } from 'lucide-react';
 import type { FaqItem, SupportedLanguage } from '@shared/schema';
 import AdminLayout from './AdminLayout';
+import { useSiteContext } from '@/lib/siteContext';
+
+function EmbeddableLayout({ embedded, children }: { embedded?: boolean; children: React.ReactNode }) {
+  if (embedded) return <>{children}</>;
+  return <AdminLayout>{children}</AdminLayout>;
+}
 
 const SUPPORTED_LANGUAGES: SupportedLanguage[] = ['en', 'ar', 'tr', 'fr', 'ru', 'fa', 'zh', 'hi', 'es', 'id'];
 const LANGUAGE_LABELS: Record<SupportedLanguage, string> = {
@@ -60,27 +66,28 @@ const initialFormState: FAQForm = {
   },
 };
 
-export default function FAQ() {
+export default function FAQ({ embedded }: { embedded?: boolean } = {}) {
   const { toast } = useToast();
+  const { apiSuffix } = useSiteContext();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingFaq, setEditingFaq] = useState<FaqItem | null>(null);
   const [formData, setFormData] = useState<FAQForm>(initialFormState);
   const [selectedLang, setSelectedLang] = useState<SupportedLanguage>('en');
 
   const { data: faqItems = [], isLoading } = useQuery<FaqItem[]>({
-    queryKey: ['/api/faq'],
+    queryKey: ['/api/faq' + apiSuffix],
   });
 
   const createMutation = useMutation({
     mutationFn: async (data: FAQForm) => {
-      const response = await apiRequest('POST', '/api/faq', {
+      const response = await apiRequest('POST', '/api/faq' + apiSuffix, {
         ...data,
         tenantId: 'default',
       });
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/faq'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/faq' + apiSuffix] });
       toast({ title: 'FAQ item created successfully' });
       handleCloseDialog();
     },
@@ -91,11 +98,11 @@ export default function FAQ() {
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<FAQForm> }) => {
-      const response = await apiRequest('PATCH', `/api/faq/${id}`, data);
+      const response = await apiRequest('PATCH', `/api/faq/${id}${apiSuffix}`, data);
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/faq'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/faq' + apiSuffix] });
       toast({ title: 'FAQ item updated successfully' });
       handleCloseDialog();
     },
@@ -106,10 +113,10 @@ export default function FAQ() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      await apiRequest('DELETE', `/api/faq/${id}`);
+      await apiRequest('DELETE', `/api/faq/${id}${apiSuffix}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/faq'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/faq' + apiSuffix] });
       toast({ title: 'FAQ item deleted successfully' });
     },
     onError: () => {
@@ -183,7 +190,7 @@ export default function FAQ() {
   };
 
   return (
-    <AdminLayout>
+    <EmbeddableLayout embedded={embedded}>
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-2">
           <CardTitle>FAQ Management</CardTitle>
@@ -373,6 +380,6 @@ export default function FAQ() {
           )}
         </CardContent>
       </Card>
-    </AdminLayout>
+    </EmbeddableLayout>
   );
 }

@@ -16,13 +16,20 @@ import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { Loader2 } from 'lucide-react';
 import AdminLayout from './AdminLayout';
+import { useSiteContext } from '@/lib/siteContext';
 import type { TenantTheme } from '@shared/schema';
+
+function EmbeddableLayout({ embedded, children }: { embedded?: boolean; children: React.ReactNode }) {
+  if (embedded) return <>{children}</>;
+  return <AdminLayout>{children}</AdminLayout>;
+}
 
 const FONT_OPTIONS = ['Inter', 'Open Sans', 'Roboto', 'Poppins', 'Montserrat'];
 const BUTTON_STYLES = ['rounded', 'pill', 'square'];
 
-export default function Theme() {
+export default function Theme({ embedded }: { embedded?: boolean } = {}) {
   const { toast } = useToast();
+  const { apiSuffix } = useSiteContext();
   const [settings, setSettings] = useState({
     primaryColor: '#2563eb',
     secondaryColor: '#3b82f6',
@@ -33,7 +40,7 @@ export default function Theme() {
   });
 
   const { data: theme, isLoading } = useQuery<TenantTheme>({
-    queryKey: ['/api/theme'],
+    queryKey: ['/api/theme' + apiSuffix],
   });
 
   useEffect(() => {
@@ -51,11 +58,11 @@ export default function Theme() {
 
   const updateMutation = useMutation({
     mutationFn: async (data: typeof settings) => {
-      const response = await apiRequest('PATCH', '/api/theme', data);
+      const response = await apiRequest('PATCH', '/api/theme' + apiSuffix, data);
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/theme'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/theme' + apiSuffix] });
       toast({
         title: 'Theme saved',
         description: 'Theme settings have been updated.',
@@ -75,7 +82,7 @@ export default function Theme() {
 
   if (isLoading) {
     return (
-      <AdminLayout>
+      <EmbeddableLayout embedded={embedded}>
         <div className="p-6 space-y-6">
           <Skeleton className="h-8 w-48" />
           <div className="grid lg:grid-cols-2 gap-6">
@@ -83,12 +90,12 @@ export default function Theme() {
             <Skeleton className="h-64 w-full" />
           </div>
         </div>
-      </AdminLayout>
+      </EmbeddableLayout>
     );
   }
 
   return (
-    <AdminLayout>
+    <EmbeddableLayout embedded={embedded}>
       <div className="p-6 space-y-6">
         <div>
           <h1 className="text-2xl font-bold">Theme Settings</h1>
@@ -265,6 +272,6 @@ export default function Theme() {
           </Button>
         </div>
       </div>
-    </AdminLayout>
+    </EmbeddableLayout>
   );
 }

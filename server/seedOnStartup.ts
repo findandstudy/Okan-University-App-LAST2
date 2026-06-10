@@ -26,6 +26,20 @@ const defaultSections = [
   { tenantId: 'default', sectionKey: 'testimonials', displayOrder: 4, isEnabled: true },
   { tenantId: 'default', sectionKey: 'faq', displayOrder: 5, isEnabled: true },
   { tenantId: 'default', sectionKey: 'contact', displayOrder: 6, isEnabled: true },
+  {
+    tenantId: 'default',
+    sectionKey: 'disclaimer',
+    displayOrder: 7,
+    isEnabled: false,
+    contentByLang: {
+      en: { body: 'This website is for informational purposes only. All information is subject to change without notice.' },
+      ar: { body: 'هذا الموقع لأغراض إعلامية فقط. جميع المعلومات عرضة للتغيير دون إشعار مسبق.' },
+      tr: { body: 'Bu web sitesi yalnızca bilgi amaçlıdır. Tüm bilgiler önceden bildirimde bulunmaksızın değiştirilebilir.' },
+      fr: { body: 'Ce site web est à titre informatif uniquement. Toutes les informations sont susceptibles d\'être modifiées sans préavis.' },
+      ru: { body: 'Данный веб-сайт предназначен исключительно для информационных целей. Вся информация может быть изменена без предварительного уведомления.' },
+      fa: { body: 'این وب‌سایت صرفاً برای اهداف اطلاع‌رسانی است. تمام اطلاعات ممکن است بدون اطلاع قبلی تغییر کنند.' },
+    },
+  },
 ];
 
 const defaultTheme = {
@@ -91,7 +105,14 @@ export async function seedDatabase() {
     const existingSections = await db.select().from(sections).where(eq(sections.tenantId, 'default'));
     if (existingSections.length === 0) {
       console.log('Creating default sections...');
-      await db.insert(sections).values(defaultSections);
+      await db.insert(sections).values(defaultSections as any);
+    } else {
+      // Ensure disclaimer section exists
+      const hasDisclaimer = existingSections.some(s => s.sectionKey === 'disclaimer');
+      if (!hasDisclaimer) {
+        console.log('Adding disclaimer section...');
+        await db.insert(sections).values(defaultSections.find(s => s.sectionKey === 'disclaimer') as any);
+      }
     }
 
     // Theme

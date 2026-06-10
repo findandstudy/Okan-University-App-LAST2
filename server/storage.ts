@@ -3,7 +3,7 @@ import { eq, desc, and } from 'drizzle-orm';
 import {
   tenants, tenantDomains, tenantThemes, sections, menuItems,
   adminUsers, integrationSettings, mediaAssets, faqItems,
-  testimonials, trustBadges, seoSettings,
+  testimonials, trustBadges, seoSettings, widgets,
   type Tenant, type InsertTenant,
   type TenantDomain, type InsertTenantDomain,
   type TenantTheme, type InsertTenantTheme,
@@ -14,6 +14,7 @@ import {
   type TrustBadge, type InsertTrustBadge,
   type MediaAsset, type InsertMediaAsset,
   type SeoSettings, type InsertSeoSettings,
+  type Widget, type InsertWidget,
 } from '@shared/schema';
 
 export interface IStorage {
@@ -21,8 +22,10 @@ export interface IStorage {
   getTenant(id: string): Promise<Tenant | undefined>;
   getTenantByDomain(domain: string): Promise<Tenant | undefined>;
   getTenantByHostDomain(host: string): Promise<Tenant | undefined>;
+  getAllTenants(): Promise<Tenant[]>;
   createTenant(tenant: InsertTenant): Promise<Tenant>;
   updateTenant(id: string, data: Partial<InsertTenant>): Promise<Tenant | undefined>;
+  deleteTenant(id: string): Promise<boolean>;
 
   // Tenant Domains
   getTenantDomains(tenantId: string): Promise<TenantDomain[]>;
@@ -71,6 +74,13 @@ export interface IStorage {
   getSeoSettings(tenantId: string): Promise<SeoSettings | undefined>;
   createSeoSettings(seo: InsertSeoSettings): Promise<SeoSettings>;
   updateSeoSettings(tenantId: string, data: Partial<InsertSeoSettings>): Promise<SeoSettings | undefined>;
+
+  // Widgets
+  getWidgets(tenantId: string): Promise<Widget[]>;
+  getWidget(id: string): Promise<Widget | undefined>;
+  createWidget(widget: InsertWidget): Promise<Widget>;
+  updateWidget(id: string, data: Partial<InsertWidget>): Promise<Widget | undefined>;
+  deleteWidget(id: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -112,9 +122,27 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
+  async getAllTenants(): Promise<Tenant[]> {
+    return db.select().from(tenants).orderBy(desc(tenants.createdAt));
+  }
+
   async updateTenant(id: string, data: Partial<InsertTenant>): Promise<Tenant | undefined> {
     const [updated] = await db.update(tenants).set(data).where(eq(tenants.id, id)).returning();
     return updated;
+  }
+
+  async deleteTenant(id: string): Promise<boolean> {
+    // Delete child records first to avoid FK violations
+    await db.delete(widgets).where(eq(widgets.tenantId, id));
+    await db.delete(seoSettings).where(eq(seoSettings.tenantId, id));
+    await db.delete(testimonials).where(eq(testimonials.tenantId, id));
+    await db.delete(faqItems).where(eq(faqItems.tenantId, id));
+    await db.delete(sections).where(eq(sections.tenantId, id));
+    await db.delete(tenantThemes).where(eq(tenantThemes.tenantId, id));
+    await db.delete(tenantDomains).where(eq(tenantDomains.tenantId, id));
+    await db.delete(mediaAssets).where(eq(mediaAssets.tenantId, id));
+    const result = await db.delete(tenants).where(eq(tenants.id, id)).returning();
+    return result.length > 0;
   }
 
   // Tenant Domains
@@ -288,6 +316,31 @@ export class DatabaseStorage implements IStorage {
   async updateSeoSettings(tenantId: string, data: Partial<InsertSeoSettings>): Promise<SeoSettings | undefined> {
     const [updated] = await db.update(seoSettings).set(data).where(eq(seoSettings.tenantId, tenantId)).returning();
     return updated;
+  }
+
+  // Widgets
+  async getWidgets(tenantId: string): Promise<Widget[]> {
+    return db.select().from(widgets).where(eq(widgets.tenantId, tenantId)).orderBy(widgets.displayOrder);
+  }
+
+  async getWidget(id: string): Promise<Widget | undefined> {
+    const [widget] = await db.select().from(widgets).where(eq(widgets.id, id));
+    return widget;
+  }
+
+  async createWidget(widget: InsertWidget): Promise<Widget> {
+    const [created] = await db.insert(widgets).values(widget).returning();
+    return created;
+  }
+
+  async updateWidget(id: string, data: Partial<InsertWidget>): Promise<Widget | undefined> {
+    const [updated] = await db.update(widgets).set(data).where(eq(widgets.id, id)).returning();
+    return updated;
+  }
+
+  async deleteWidget(id: string): Promise<boolean> {
+    const result = await db.delete(widgets).where(eq(widgets.id, id)).returning();
+    return result.length > 0;
   }
 }
 

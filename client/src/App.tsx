@@ -22,6 +22,8 @@ import WhyChooseUs from "@/pages/admin/WhyChooseUs";
 import ContactInfo from "@/pages/admin/ContactInfo";
 import FooterContent from "@/pages/admin/FooterContent";
 import SEOSettings from "@/pages/admin/SEOSettings";
+import Sites from "@/pages/admin/Sites";
+import SiteEditor from "@/pages/admin/SiteEditor";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -36,17 +38,19 @@ function Router() {
       }} />
       <Route path="/admin" component={Dashboard} />
       <Route path="/admin/tenant" component={Tenant} />
-      <Route path="/admin/theme" component={Theme} />
-      <Route path="/admin/sections" component={Sections} />
+      <Route path="/admin/theme" component={() => <Theme />} />
+      <Route path="/admin/sections" component={() => <Sections />} />
       <Route path="/admin/contact-form" component={ContactForm} />
       <Route path="/admin/media" component={Media} />
-      <Route path="/admin/testimonials" component={Testimonials} />
-      <Route path="/admin/faq" component={FAQ} />
+      <Route path="/admin/testimonials" component={() => <Testimonials />} />
+      <Route path="/admin/faq" component={() => <FAQ />} />
       <Route path="/admin/hero" component={HeroContent} />
       <Route path="/admin/why-choose-us" component={WhyChooseUs} />
       <Route path="/admin/contact-info" component={ContactInfo} />
       <Route path="/admin/footer" component={FooterContent} />
-      <Route path="/admin/seo" component={SEOSettings} />
+      <Route path="/admin/seo" component={() => <SEOSettings />} />
+      <Route path="/admin/sites" component={Sites} />
+      <Route path="/admin/sites/:tenantId" component={SiteEditor} />
 
       <Route path="/:lang" component={Landing} />
 

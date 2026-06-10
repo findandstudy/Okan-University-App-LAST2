@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import AdminLayout from './AdminLayout';
+import { useSiteContext } from '@/lib/siteContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,6 +16,11 @@ import { apiRequest, queryClient } from '@/lib/queryClient';
 import { Save, Globe, Share2, Twitter, Image, Search } from 'lucide-react';
 import type { SeoSettings, SupportedLanguage } from '@shared/schema';
 import { SUPPORTED_LANGUAGES } from '@shared/schema';
+
+function EmbeddableLayout({ embedded, children }: { embedded?: boolean; children: React.ReactNode }) {
+  if (embedded) return <>{children}</>;
+  return <AdminLayout>{children}</AdminLayout>;
+}
 
 const LANGUAGES: { code: SupportedLanguage; label: string }[] = [
   { code: 'en', label: 'English' },
@@ -39,13 +45,14 @@ interface SeoFormData {
   robotsDirective: string;
 }
 
-export default function SEOSettings() {
+export default function SEOSettings({ embedded }: { embedded?: boolean } = {}) {
   const { toast } = useToast();
+  const { apiSuffix } = useSiteContext();
   const [activeTab, setActiveTab] = useState<'meta' | 'social'>('meta');
   const [activeLang, setActiveLang] = useState<SupportedLanguage>('en');
 
   const { data: seoSettings, isLoading } = useQuery<SeoSettings>({
-    queryKey: ['/api/admin/seo-settings'],
+    queryKey: ['/api/admin/seo-settings' + apiSuffix],
   });
 
   const form = useForm<SeoFormData>({
@@ -68,11 +75,11 @@ export default function SEOSettings() {
 
   const saveMutation = useMutation({
     mutationFn: async (data: SeoFormData) => {
-      return apiRequest('POST', '/api/admin/seo-settings', data);
+      return apiRequest('POST', '/api/admin/seo-settings' + apiSuffix, data);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/seo-settings'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/seo-settings'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/seo-settings' + apiSuffix] });
+      queryClient.invalidateQueries({ queryKey: ['/api/seo-settings' + apiSuffix] });
       toast({
         title: 'SEO Settings Saved',
         description: 'Your SEO settings have been updated successfully.',
@@ -111,7 +118,7 @@ export default function SEOSettings() {
   }, [seoSettings, reset, form.formState.isDirty]);
 
   return (
-    <AdminLayout>
+    <EmbeddableLayout embedded={embedded}>
       <div className="p-6 space-y-6" data-testid="page-seo-settings">
         <div className="flex items-center justify-between">
           <div>
@@ -448,6 +455,6 @@ export default function SEOSettings() {
           </form>
         </Form>
       </div>
-    </AdminLayout>
+    </EmbeddableLayout>
   );
 }

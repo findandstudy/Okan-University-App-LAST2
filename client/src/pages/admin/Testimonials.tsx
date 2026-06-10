@@ -35,6 +35,12 @@ import { apiRequest, queryClient } from '@/lib/queryClient';
 import { Plus, Pencil, Trash2, Upload, Star, Loader2, ImageIcon } from 'lucide-react';
 import type { Testimonial, SupportedLanguage } from '@shared/schema';
 import AdminLayout from './AdminLayout';
+import { useSiteContext } from '@/lib/siteContext';
+
+function EmbeddableLayout({ embedded, children }: { embedded?: boolean; children: React.ReactNode }) {
+  if (embedded) return <>{children}</>;
+  return <AdminLayout>{children}</AdminLayout>;
+}
 
 const SUPPORTED_LANGUAGES: SupportedLanguage[] = ['en', 'ar', 'tr', 'fr', 'ru', 'fa', 'zh', 'hi', 'es', 'id'];
 const LANGUAGE_LABELS: Record<SupportedLanguage, string> = {
@@ -74,8 +80,9 @@ const initialFormState: TestimonialForm = {
   },
 };
 
-export default function Testimonials() {
+export default function Testimonials({ embedded }: { embedded?: boolean } = {}) {
   const { toast } = useToast();
+  const { apiSuffix } = useSiteContext();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingTestimonial, setEditingTestimonial] = useState<Testimonial | null>(null);
   const [formData, setFormData] = useState<TestimonialForm>(initialFormState);
@@ -84,19 +91,19 @@ export default function Testimonials() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: testimonials = [], isLoading } = useQuery<Testimonial[]>({
-    queryKey: ['/api/testimonials'],
+    queryKey: ['/api/testimonials' + apiSuffix],
   });
 
   const createMutation = useMutation({
     mutationFn: async (data: TestimonialForm) => {
-      const response = await apiRequest('POST', '/api/testimonials', {
+      const response = await apiRequest('POST', '/api/testimonials' + apiSuffix, {
         ...data,
         tenantId: 'default',
       });
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/testimonials'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/testimonials' + apiSuffix] });
       toast({ title: 'Testimonial created successfully' });
       handleCloseDialog();
     },
@@ -107,11 +114,11 @@ export default function Testimonials() {
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<TestimonialForm> }) => {
-      const response = await apiRequest('PATCH', `/api/testimonials/${id}`, data);
+      const response = await apiRequest('PATCH', `/api/testimonials/${id}${apiSuffix}`, data);
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/testimonials'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/testimonials' + apiSuffix] });
       toast({ title: 'Testimonial updated successfully' });
       handleCloseDialog();
     },
@@ -122,10 +129,10 @@ export default function Testimonials() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      await apiRequest('DELETE', `/api/testimonials/${id}`);
+      await apiRequest('DELETE', `/api/testimonials/${id}${apiSuffix}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/testimonials'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/testimonials' + apiSuffix] });
       toast({ title: 'Testimonial deleted successfully' });
     },
     onError: () => {
@@ -225,7 +232,7 @@ export default function Testimonials() {
   };
 
   return (
-    <AdminLayout>
+    <EmbeddableLayout embedded={embedded}>
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-2">
           <CardTitle>Testimonials</CardTitle>
@@ -495,6 +502,6 @@ export default function Testimonials() {
           )}
         </CardContent>
       </Card>
-    </AdminLayout>
+    </EmbeddableLayout>
   );
 }

@@ -154,6 +154,18 @@ export const trustBadges = pgTable("trust_badges", {
   isEnabled: boolean("is_enabled").default(true),
 });
 
+// Widgets — embed codes / iframe URLs shown on the landing page
+export const widgets = pgTable("widgets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  name: text("name").notNull().default("Widget"),
+  sectionKey: text("section_key").notNull().default("widget"),
+  embedCode: text("embed_code"),
+  iframeUrl: text("iframe_url"),
+  isEnabled: boolean("is_enabled").default(true),
+  displayOrder: integer("display_order").default(0),
+});
+
 // SEO Settings
 export const seoSettings = pgTable("seo_settings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -184,6 +196,7 @@ export const insertFaqItemSchema = createInsertSchema(faqItems).omit({ id: true 
 export const insertTestimonialSchema = createInsertSchema(testimonials).omit({ id: true });
 export const insertTrustBadgeSchema = createInsertSchema(trustBadges).omit({ id: true });
 export const insertSeoSettingsSchema = createInsertSchema(seoSettings).omit({ id: true });
+export const insertWidgetSchema = createInsertSchema(widgets).omit({ id: true });
 
 // Types
 export type Tenant = typeof tenants.$inferSelect;
@@ -210,6 +223,8 @@ export type TrustBadge = typeof trustBadges.$inferSelect;
 export type InsertTrustBadge = z.infer<typeof insertTrustBadgeSchema>;
 export type SeoSettings = typeof seoSettings.$inferSelect;
 export type InsertSeoSettings = z.infer<typeof insertSeoSettingsSchema>;
+export type Widget = typeof widgets.$inferSelect;
+export type InsertWidget = z.infer<typeof insertWidgetSchema>;
 
 // Users table (kept for compatibility)
 export const users = pgTable("users", {

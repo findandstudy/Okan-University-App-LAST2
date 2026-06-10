@@ -6,6 +6,7 @@ import {
   insertTestimonialSchema,
   insertFaqItemSchema,
   insertSeoSettingsSchema,
+  insertWidgetSchema,
   type Tenant,
 } from "@shared/schema";
 import session from "express-session";
@@ -85,6 +86,17 @@ function isDevHost(host: string): boolean {
 // Falls back to 'default' tenant ONLY for known dev/preview hosts.
 // Unknown production domains receive a 404.
 async function resolveTenant(req: Request, res: Response, next: NextFunction) {
+  // Admin _tid override: authenticated admins can target any tenant via ?_tid=
+  if (req.session?.adminId && req.query._tid && typeof req.query._tid === 'string') {
+    try {
+      const overrideTenant = await storage.getTenant(req.query._tid);
+      if (overrideTenant) {
+        req.tenant = overrideTenant;
+        req.tenantId = overrideTenant.id;
+        return next();
+      }
+    } catch { /* fall through to normal resolution */ }
+  }
   try {
     const rawHost = req.headers.host || '';
     const host = rawHost.replace(/^www\./, '').replace(/:\d+$/, '').toLowerCase();
@@ -738,6 +750,146 @@ export async function registerRoutes(
       res.json(seo);
     } catch (error) {
       res.status(500).json({ error: "Failed to save SEO settings" });
+    }
+  });
+
+  // ─── Admin Tenant Management ─────────────────────────────────────────────────
+  app.get("/api/admin/tenants", requireAdmin, async (req, res) => {
+    try {
+      const admin = await storage.getAdminById(req.session.adminId!);
+      if (!admin) return res.status(401).json({ error: "Unauthorized" });
+      if (admin.role !== 'super_admin') return res.status(403).json({ error: "Forbidden" });
+      const tenants = await storage.getAllTenants();
+      res.json(tenants);
+    } catch {
+      res.status(500).json({ error: "Failed to fetch tenants" });
+    }
+  });
+
+  app.get("/api/admin/tenants/:id", requireAdmin, async (req, res) => {
+    const id = req.params.id as string;
+    try {
+      const tenant = await storage.getTenant(id);
+      if (!tenant) return res.status(404).json({ error: "Tenant not found" });
+      res.json(tenant);
+    } catch {
+      res.status(500).json({ error: "Failed to fetch tenant" });
+    }
+  });
+
+  app.post("/api/admin/tenants", requireAdmin, async (req, res) => {
+    try {
+      const admin = await storage.getAdminById(req.session.adminId!);
+      if (!admin || admin.role !== 'super_admin') return res.status(403).json({ error: "Forbidden" });
+      const { universityName, domain } = req.body;
+      if (!universityName || !domain) return res.status(400).json({ error: "universityName and domain are required" });
+      const tenant = await storage.createTenant({ universityName, domain, status: 'taslak' });
+      res.json(tenant);
+    } catch {
+      res.status(500).json({ error: "Failed to create tenant" });
+    }
+  });
+
+  app.patch("/api/admin/tenants/:id", requireAdmin, async (req, res) => {
+    const id = req.params.id as string;
+    try {
+      const tenant = await storage.updateTenant(id, req.body);
+      if (!tenant) return res.status(404).json({ error: "Tenant not found" });
+      res.json(tenant);
+    } catch {
+      res.status(500).json({ error: "Failed to update tenant" });
+    }
+  });
+
+  app.delete("/api/admin/tenants/:id", requireAdmin, async (req, res) => {
+    const id = req.params.id as string;
+    try {
+      const admin = await storage.getAdminById(req.session.adminId!);
+      if (!admin || admin.role !== 'super_admin') return res.status(403).json({ error: "Forbidden" });
+      if (id === 'default') return res.status(400).json({ error: "Cannot delete default tenant" });
+      const ok = await storage.deleteTenant(id);
+      if (!ok) return res.status(404).json({ error: "Tenant not found" });
+      res.json({ success: true });
+    } catch {
+      res.status(500).json({ error: "Failed to delete tenant" });
+    }
+  });
+
+  app.post("/api/admin/tenants/:id/clone", requireAdmin, async (req, res) => {
+    const id = req.params.id as string;
+    try {
+      const admin = await storage.getAdminById(req.session.adminId!);
+      if (!admin || admin.role !== 'super_admin') return res.status(403).json({ error: "Forbidden" });
+      const { universityName, domain } = req.body;
+      if (!universityName || !domain) return res.status(400).json({ error: "universityName and domain are required" });
+      const newTenant = await storage.createTenant({ universityName, domain, status: 'taslak' });
+      // Clone sections from source
+      const srcSections = await storage.getSections(id);
+      for (const s of srcSections) {
+        const { id: _id, tenantId: _tid, ...rest } = s as any;
+        await storage.createSection({ ...rest, tenantId: newTenant.id });
+      }
+      // Clone FAQ items from source
+      const srcFaq = await storage.getFaqItems(id);
+      for (const f of srcFaq) {
+        const { id: _id, tenantId: _tid, ...rest } = f as any;
+        await storage.createFaqItem({ ...rest, tenantId: newTenant.id });
+      }
+      res.json(newTenant);
+    } catch (error) {
+      console.error('Clone error:', error);
+      res.status(500).json({ error: "Failed to clone tenant" });
+    }
+  });
+
+  // ─── Widget routes (admin) ────────────────────────────────────────────────────
+  app.get("/api/admin/widgets", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
+    try {
+      const widgets = await storage.getWidgets(req.tenantId);
+      res.json(widgets);
+    } catch {
+      res.status(500).json({ error: "Failed to fetch widgets" });
+    }
+  });
+
+  app.post("/api/admin/widgets", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
+    try {
+      const widget = await storage.createWidget({ ...req.body, tenantId: req.tenantId });
+      res.json(widget);
+    } catch {
+      res.status(500).json({ error: "Failed to create widget" });
+    }
+  });
+
+  app.patch("/api/admin/widgets/:id", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
+    const id = req.params.id as string;
+    try {
+      const widget = await storage.updateWidget(id, req.body);
+      if (!widget) return res.status(404).json({ error: "Widget not found" });
+      res.json(widget);
+    } catch {
+      res.status(500).json({ error: "Failed to update widget" });
+    }
+  });
+
+  app.delete("/api/admin/widgets/:id", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
+    const id = req.params.id as string;
+    try {
+      const ok = await storage.deleteWidget(id);
+      if (!ok) return res.status(404).json({ error: "Widget not found" });
+      res.json({ success: true });
+    } catch {
+      res.status(500).json({ error: "Failed to delete widget" });
+    }
+  });
+
+  // ─── Widget route (public) ────────────────────────────────────────────────────
+  app.get("/api/widgets", resolveTenant, async (req, res) => {
+    try {
+      const widgets = await storage.getWidgets(req.tenantId);
+      res.json(widgets.filter(w => w.isEnabled));
+    } catch {
+      res.status(500).json({ error: "Failed to fetch widgets" });
     }
   });
 

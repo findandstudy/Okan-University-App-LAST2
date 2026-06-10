@@ -26,7 +26,13 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import AdminLayout from './AdminLayout';
+import { useSiteContext } from '@/lib/siteContext';
 import type { Section, ContentByLang, SupportedLanguage } from '@shared/schema';
+
+function EmbeddableLayout({ embedded, children }: { embedded?: boolean; children: React.ReactNode }) {
+  if (embedded) return <>{children}</>;
+  return <AdminLayout>{children}</AdminLayout>;
+}
 
 const SECTION_TYPES = [
   { key: 'hero', label: 'Hero Section' },
@@ -77,8 +83,9 @@ const emptyContentForm: ContentForm = {
   ctaUrl: '',
 };
 
-export default function Sections() {
+export default function Sections({ embedded }: { embedded?: boolean } = {}) {
   const { toast } = useToast();
+  const { apiSuffix } = useSiteContext();
   const [sectionStates, setSectionStates] = useState<SectionState[]>([]);
   const [editingSection, setEditingSection] = useState<SectionState | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -100,7 +107,7 @@ export default function Sections() {
   });
 
   const { data: sections = [], isLoading } = useQuery<Section[]>({
-    queryKey: ['/api/sections'],
+    queryKey: ['/api/sections' + apiSuffix],
   });
 
   useEffect(() => {
@@ -119,11 +126,11 @@ export default function Sections() {
 
   const updateMutation = useMutation({
     mutationFn: async (updates: Array<{ id: string; isEnabled: boolean }>) => {
-      const response = await apiRequest('PATCH', '/api/sections', { sections: updates });
+      const response = await apiRequest('PATCH', '/api/sections' + apiSuffix, { sections: updates });
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/sections'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/sections' + apiSuffix] });
       toast({
         title: 'Sections saved',
         description: 'Section visibility has been updated.',
@@ -139,11 +146,11 @@ export default function Sections() {
 
   const updateContentMutation = useMutation({
     mutationFn: async ({ id, contentByLang }: { id: string; contentByLang: ContentByLang }) => {
-      const response = await apiRequest('PATCH', `/api/sections/${id}`, { contentByLang });
+      const response = await apiRequest('PATCH', `/api/sections/${id}${apiSuffix}`, { contentByLang });
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/sections'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/sections' + apiSuffix] });
       toast({
         title: 'Content saved',
         description: 'Section content has been updated.',
@@ -161,11 +168,11 @@ export default function Sections() {
 
   const createSectionMutation = useMutation({
     mutationFn: async (data: { sectionKey: string; displayOrder: number }) => {
-      const response = await apiRequest('POST', '/api/sections', data);
+      const response = await apiRequest('POST', '/api/sections' + apiSuffix, data);
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/sections'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/sections' + apiSuffix] });
       toast({
         title: 'Section created',
         description: 'New section has been added.',
@@ -184,10 +191,10 @@ export default function Sections() {
 
   const deleteSectionMutation = useMutation({
     mutationFn: async (id: string) => {
-      await apiRequest('DELETE', `/api/sections/${id}`);
+      await apiRequest('DELETE', `/api/sections/${id}${apiSuffix}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/sections'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/sections' + apiSuffix] });
       toast({
         title: 'Section deleted',
         description: 'Section has been removed.',
@@ -340,7 +347,7 @@ export default function Sections() {
   }
 
   return (
-    <AdminLayout>
+    <EmbeddableLayout embedded={embedded}>
       <div className="p-6 space-y-6">
         <div>
           <h1 className="text-2xl font-bold">Page Sections</h1>
@@ -614,6 +621,6 @@ export default function Sections() {
           </div>
         </DialogContent>
       </Dialog>
-    </AdminLayout>
+    </EmbeddableLayout>
   );
 }

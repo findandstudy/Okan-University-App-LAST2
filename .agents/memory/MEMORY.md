@@ -1,0 +1,3 @@
+- [EmbeddableLayout pattern](embeddable-layout.md) — admin pages with embedded prop need arrow-function wrappers in App.tsx routes to satisfy wouter RouteComponentProps typing
+- [SiteEditor _tid pattern](site-tid-pattern.md) — SiteProvider sets tenantId; resolveTenant checks req.session.adminId + req.query._tid for admin cross-tenant override
+- [Express 5 params typing](express5-params.md) — req.params.id typed as string | string[] in Express 5; always cast with `as string` or destructure with explicit type in route handlers
