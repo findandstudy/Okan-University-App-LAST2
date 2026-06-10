@@ -23,11 +23,7 @@ import {
   Palette,
   LayoutList,
   Image,
-  GraduationCap,
-  FileText,
   Settings,
-  Mail,
-  Activity,
   LogOut,
   ExternalLink,
   FormInput,
@@ -36,12 +32,11 @@ import {
   Sparkles,
   BadgeCheck,
   PanelBottom,
-  Filter,
   Search,
   ChevronDown,
   Globe,
-  Users,
   Wrench,
+  GraduationCap,
   type LucideIcon,
 } from 'lucide-react';
 import type { Tenant } from '@shared/schema';
@@ -50,27 +45,25 @@ interface AdminLayoutProps {
   children: React.ReactNode;
 }
 
-interface MenuItem {
+interface NavItem {
   title: string;
   url: string;
   icon: LucideIcon;
 }
 
-interface MenuGroup {
+interface NavGroup {
   title: string;
   icon: LucideIcon;
-  items: MenuItem[];
+  items: NavItem[];
 }
 
-const menuGroups: MenuGroup[] = [
+const menuGroups: NavGroup[] = [
   {
     title: 'Website Content',
     icon: Globe,
     items: [
       { title: 'Hero Content', url: '/admin/hero', icon: Sparkles },
       { title: 'Why Choose Us', url: '/admin/why-choose-us', icon: BadgeCheck },
-      { title: 'Programs', url: '/admin/programs', icon: GraduationCap },
-      { title: 'Program Filters', url: '/admin/program-filters', icon: Filter },
       { title: 'Testimonials', url: '/admin/testimonials', icon: MessageSquareQuote },
       { title: 'FAQ', url: '/admin/faq', icon: HelpCircle },
       { title: 'Page Sections', url: '/admin/sections', icon: LayoutList },
@@ -84,23 +77,13 @@ const menuGroups: MenuGroup[] = [
       { title: 'Tenant', url: '/admin/tenant', icon: Building },
       { title: 'Theme', url: '/admin/theme', icon: Palette },
       { title: 'SEO Settings', url: '/admin/seo', icon: Search },
-      { title: 'Integrations', url: '/admin/integrations', icon: Settings },
-      { title: 'Email', url: '/admin/email', icon: Mail },
-    ],
-  },
-  {
-    title: 'Leads',
-    icon: Users,
-    items: [
       { title: 'Contact Form', url: '/admin/contact-form', icon: FormInput },
-      { title: 'Applications', url: '/admin/applications', icon: FileText },
     ],
   },
   {
     title: 'System',
     icon: Wrench,
     items: [
-      { title: 'Logs', url: '/admin/logs', icon: Activity },
       { title: 'Media', url: '/admin/media', icon: Image },
     ],
   },
@@ -156,7 +139,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
   const isItemActive = (url: string) => location === url;
 
-  const isGroupActive = (group: MenuGroup) => {
+  const isGroupActive = (group: NavGroup) => {
     return group.items.some(item => location === item.url);
   };
 
@@ -172,9 +155,9 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
           <SidebarHeader className="border-b p-4">
             <div className="flex items-center gap-3">
               {tenant?.logoUrl ? (
-                <img 
-                  src={tenant.logoUrl} 
-                  alt={tenant?.universityName || 'Logo'} 
+                <img
+                  src={tenant.logoUrl}
+                  alt={tenant?.universityName || 'Logo'}
                   className="h-[3.125rem] w-auto max-w-[175px] object-contain"
                 />
               ) : (
@@ -271,7 +254,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                   View Site
                 </Button>
               </Link>
-              <Button variant="ghost" size="sm" onClick={handleLogout}>
+              <Button variant="ghost" size="sm" onClick={handleLogout} data-testid="button-logout">
                 <LogOut className="h-4 w-4" />
               </Button>
             </div>

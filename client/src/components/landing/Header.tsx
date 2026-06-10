@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'wouter';
 import { useI18n } from '@/lib/i18n';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 import { Button } from '@/components/ui/button';
@@ -62,7 +61,6 @@ export function Header({ universityName = 'University', logoUrl }: HeaderProps) 
 
   const navItems = [
     { key: 'nav.home', href: '#hero' },
-    { key: 'nav.programs', href: '#programs' },
     { key: 'nav.faq', href: '#faq' },
     { key: 'nav.contact', href: '#contact' },
   ];
@@ -114,11 +112,14 @@ export function Header({ universityName = 'University', logoUrl }: HeaderProps) 
 
         <div className="flex items-center gap-2">
           <LanguageSwitcher />
-          <Link href="/apply">
-            <Button size="sm" className="hidden sm:flex" data-testid="button-apply-header">
-              {t('nav.apply')}
-            </Button>
-          </Link>
+          <Button
+            size="sm"
+            className="hidden sm:flex"
+            data-testid="button-apply-header"
+            onClick={() => scrollToSection('#contact')}
+          >
+            {t('nav.apply')}
+          </Button>
 
           <Sheet open={isOpen} onOpenChange={setIsOpen}>
             <SheetTrigger asChild className="md:hidden">
@@ -138,11 +139,13 @@ export function Header({ universityName = 'University', logoUrl }: HeaderProps) 
                     {t(item.key)}
                   </Button>
                 ))}
-                <Link href="/apply">
-                  <Button className="w-full mt-4" data-testid="button-apply-mobile">
-                    {t('nav.apply')}
-                  </Button>
-                </Link>
+                <Button
+                  className="w-full mt-4"
+                  data-testid="button-apply-mobile"
+                  onClick={() => scrollToSection('#contact')}
+                >
+                  {t('nav.apply')}
+                </Button>
               </nav>
             </SheetContent>
           </Sheet>

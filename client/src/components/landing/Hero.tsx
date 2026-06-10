@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { Link } from 'wouter';
 import { useQuery } from '@tanstack/react-query';
 import { useI18n } from '@/lib/i18n';
 import { Button } from '@/components/ui/button';
@@ -134,18 +133,23 @@ export function Hero({ title, subtitle, ctaLabel, backgroundImage }: HeroProps) 
             </p>
 
             <div className="flex flex-wrap gap-4 mb-10">
-              <Link href="/apply">
-                <Button size="lg" className="gap-2 text-base px-8" data-testid="button-hero-apply">
-                  {ctaLabel || t('hero.cta')}
-                  <ArrowRight className={`h-5 w-5 ${isRTL ? 'rotate-180' : ''}`} />
-                </Button>
-              </Link>
+              <Button
+                size="lg"
+                className="gap-2 text-base px-8"
+                data-testid="button-hero-apply"
+                onClick={() => {
+                  document.querySelector('#contact')?.scrollIntoView({ behavior: 'smooth' });
+                }}
+              >
+                {ctaLabel || t('hero.cta')}
+                <ArrowRight className={`h-5 w-5 ${isRTL ? 'rotate-180' : ''}`} />
+              </Button>
               <Button
                 variant="outline"
                 size="lg"
                 className="gap-2 text-base"
                 onClick={() => {
-                  document.querySelector('#programs')?.scrollIntoView({ behavior: 'smooth' });
+                  document.querySelector('#faq')?.scrollIntoView({ behavior: 'smooth' });
                 }}
                 data-testid="button-hero-programs"
               >

@@ -1,9 +1,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { z } from "zod";
-import { insertProgramSchema, insertLeadSchema, insertApplicationSchema, insertMediaAssetSchema, insertTestimonialSchema, insertDocumentSchema, insertFaqItemSchema, insertSeoSettingsSchema, insertEmailSettingsSchema } from "@shared/schema";
-import { sendEmail, verifySmtpConnection, sendApplicationEmails, type ApplicationEmailData } from "./email";
+import { insertMediaAssetSchema, insertTestimonialSchema, insertFaqItemSchema, insertSeoSettingsSchema } from "@shared/schema";
 import session from "express-session";
 import MemoryStore from "memorystore";
 import multer from "multer";
@@ -50,13 +48,6 @@ export async function registerRoutes(
   // Trust proxy for Replit's HTTPS termination
   app.set('trust proxy', 1);
   
-  // Allow embedding for /embed/* routes
-  app.use('/embed', (_req, res, next) => {
-    res.setHeader('X-Frame-Options', 'ALLOWALL');
-    res.setHeader('Content-Security-Policy', "frame-ancestors *");
-    next();
-  });
-  
   app.use(session({
     secret: process.env.SESSION_SECRET || 'university-platform-secret-key',
     resave: false,
@@ -84,10 +75,8 @@ export async function registerRoutes(
       const format = (req.query.fmt as string) || 'webp';
       const quality = parseInt(req.query.q as string) || 75;
       
-      // Create cache key
       const cacheKey = `${id}_${width}_${height || 'auto'}_${format}_${quality}`;
       
-      // Check cache
       const cached = imageCache.get(cacheKey);
       if (cached && Date.now() - cached.timestamp < IMAGE_CACHE_TTL) {
         res.set('Content-Type', cached.contentType);
@@ -95,13 +84,11 @@ export async function registerRoutes(
         return res.send(cached.buffer);
       }
       
-      // Fetch original image from object storage
       const objectStorageService = new ObjectStorageService();
       const objectPath = `/objects/uploads/${id}`;
       
       let buffer: Buffer;
       try {
-        // Get file from object storage
         const file = await objectStorageService.getObjectEntityFile(objectPath);
         const [contents] = await file.download();
         buffer = contents;
@@ -110,7 +97,6 @@ export async function registerRoutes(
         return res.status(404).json({ error: "Image not found" });
       }
       
-      // Process with Sharp
       let sharpInstance = sharp(buffer);
       
       if (height) {
@@ -133,7 +119,6 @@ export async function registerRoutes(
         contentType = 'image/png';
       }
       
-      // Cache the result (limit cache size)
       if (imageCache.size >= MAX_CACHE_SIZE) {
         const oldestKey = imageCache.keys().next().value;
         if (oldestKey) imageCache.delete(oldestKey);
@@ -152,7 +137,6 @@ export async function registerRoutes(
   // Bootstrap API - single endpoint for all landing page data
   app.get("/api/bootstrap", async (req, res) => {
     try {
-      // Check cache
       if (bootstrapCache && Date.now() - bootstrapCache.timestamp < BOOTSTRAP_CACHE_TTL) {
         res.set('Cache-Control', 'public, max-age=60');
         return res.json(bootstrapCache.data);
@@ -160,15 +144,13 @@ export async function registerRoutes(
       
       const tenantId = getTenantId(req);
       
-      // Fetch all data in parallel
-      const [tenant, theme, sections, testimonials, faqItems, seoSettings, programs] = await Promise.all([
+      const [tenant, theme, sections, testimonials, faqItems, seoSettings] = await Promise.all([
         storage.getTenantByDomain("okanuniversity.app"),
         storage.getTheme(tenantId),
         storage.getSections(tenantId),
         storage.getTestimonials(tenantId),
         storage.getFaqItems(tenantId),
         storage.getSeoSettings(tenantId),
-        storage.getPrograms(tenantId)
       ]);
       
       const data = {
@@ -178,10 +160,8 @@ export async function registerRoutes(
         testimonials,
         faqItems,
         seoSettings,
-        programs: programs.slice(0, 50) // First 50 programs for initial load
       };
       
-      // Cache the result
       bootstrapCache = { data, timestamp: Date.now() };
       
       res.set('Cache-Control', 'public, max-age=60');
@@ -192,56 +172,10 @@ export async function registerRoutes(
     }
   });
 
-  // Server-side file upload endpoint
+  // Server-side file upload endpoint (admin only — media library)
   const upload = multer({ 
     storage: multer.memoryStorage(),
     limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
-  });
-
-  // Public upload endpoint for application documents (no auth required)
-  app.post("/api/public-upload", upload.single("file"), async (req, res) => {
-    try {
-      const file = req.file;
-      if (!file) {
-        return res.status(400).json({ error: "No file uploaded" });
-      }
-
-      // Validate file type for application documents
-      const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
-      if (!allowedTypes.includes(file.mimetype)) {
-        return res.status(400).json({ error: "Invalid file type. Only JPG, PNG, WEBP, and PDF are allowed." });
-      }
-
-      const objectStorageService = new ObjectStorageService();
-      
-      const uploadURL = await objectStorageService.getObjectEntityUploadURL();
-      const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
-      
-      const response = await fetch(uploadURL, {
-        method: "PUT",
-        body: file.buffer,
-        headers: {
-          "Content-Type": file.mimetype || "application/octet-stream",
-        },
-      });
-
-      if (!response.ok) {
-        console.error("GCS upload failed:", response.status, await response.text());
-        return res.status(500).json({ error: "Failed to upload to storage" });
-      }
-
-      res.json({ 
-        objectPath,
-        metadata: {
-          name: file.originalname,
-          size: file.size,
-          type: file.mimetype,
-        },
-      });
-    } catch (error) {
-      console.error("Upload error:", error);
-      res.status(500).json({ error: "Upload failed" });
-    }
   });
 
   app.post("/api/upload", requireAdmin, upload.single("file"), async (req, res) => {
@@ -253,11 +187,9 @@ export async function registerRoutes(
 
       const objectStorageService = new ObjectStorageService();
       
-      // Get a presigned URL for the upload
       const uploadURL = await objectStorageService.getObjectEntityUploadURL();
       const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
       
-      // Upload the file from server to GCS
       const response = await fetch(uploadURL, {
         method: "PUT",
         body: file.buffer,
@@ -302,7 +234,6 @@ export async function registerRoutes(
       req.session.adminId = admin.id;
       req.session.tenantId = admin.tenantId || undefined;
       
-      // Explicitly save session to ensure cookie is set
       req.session.save((err) => {
         if (err) {
           console.error("Session save error:", err);
@@ -351,399 +282,27 @@ export async function registerRoutes(
     }
   });
 
-  // Dashboard Stats API (protected)
+  // Dashboard Stats API (landing page focused)
   app.get("/api/admin/stats", requireAdmin, async (req, res) => {
     try {
       const tenantId = getTenantId(req);
-      const [programsList, leadsList, applicationsList] = await Promise.all([
-        storage.getPrograms(tenantId),
-        storage.getLeads(tenantId),
-        storage.getApplications(tenantId)
+      const [sections, testimonials, faqItems, mediaAssets] = await Promise.all([
+        storage.getSections(tenantId),
+        storage.getTestimonials(tenantId),
+        storage.getFaqItems(tenantId),
+        storage.getMediaAssets(tenantId),
       ]);
       
-      const submittedApps = applicationsList.filter(a => a.status === 'submitted');
-      const processingApps = applicationsList.filter(a => a.status === 'processing');
-      const approvedApps = applicationsList.filter(a => a.status === 'approved');
-      
       res.json({
-        programs: programsList.length,
-        leads: leadsList.length,
-        applications: applicationsList.length,
-        submitted: submittedApps.length,
-        processing: processingApps.length,
-        approved: approvedApps.length,
-        recentApplications: applicationsList.slice(0, 5),
-        recentLeads: leadsList.slice(0, 5)
+        sections: sections.length,
+        enabledSections: sections.filter(s => s.isEnabled).length,
+        testimonials: testimonials.length,
+        faqItems: faqItems.length,
+        mediaAssets: mediaAssets.length,
       });
     } catch (error) {
       console.error("Error fetching stats:", error);
       res.status(500).json({ error: "Failed to fetch stats" });
-    }
-  });
-
-  // Programs API
-  app.get("/api/programs", async (req, res) => {
-    try {
-      const tenantId = getTenantId(req);
-      const programsList = await storage.getPrograms(tenantId);
-      res.json(programsList);
-    } catch (error) {
-      console.error("Error fetching programs:", error);
-      res.status(500).json({ error: "Failed to fetch programs" });
-    }
-  });
-
-  app.get("/api/programs/:id", async (req, res) => {
-    try {
-      const program = await storage.getProgram(req.params.id as string);
-      if (!program) {
-        return res.status(404).json({ error: "Program not found" });
-      }
-      res.json(program);
-    } catch (error) {
-      console.error("Error fetching program:", error);
-      res.status(500).json({ error: "Failed to fetch program" });
-    }
-  });
-
-  app.post("/api/programs", requireAdmin, async (req, res) => {
-    try {
-      const tenantId = getTenantId(req);
-      const validated = insertProgramSchema.parse({ ...req.body, tenantId });
-      const program = await storage.createProgram(validated);
-      res.status(201).json(program);
-    } catch (error) {
-      console.error("Error creating program:", error);
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: "Validation failed", details: error.errors });
-      }
-      res.status(500).json({ error: "Failed to create program" });
-    }
-  });
-
-  app.patch("/api/programs/:id", requireAdmin, async (req, res) => {
-    try {
-      const program = await storage.updateProgram(req.params.id as string, req.body);
-      if (!program) {
-        return res.status(404).json({ error: "Program not found" });
-      }
-      res.json(program);
-    } catch (error) {
-      console.error("Error updating program:", error);
-      res.status(500).json({ error: "Failed to update program" });
-    }
-  });
-
-  app.delete("/api/programs/:id", requireAdmin, async (req, res) => {
-    try {
-      await storage.deleteProgram(req.params.id as string);
-      res.status(204).send();
-    } catch (error) {
-      console.error("Error deleting program:", error);
-      res.status(500).json({ error: "Failed to delete program" });
-    }
-  });
-
-  // Leads API (GET is admin-only, POST is public for lead capture)
-  app.get("/api/leads", requireAdmin, async (req, res) => {
-    try {
-      const tenantId = getTenantId(req);
-      const leadsList = await storage.getLeads(tenantId);
-      res.json(leadsList);
-    } catch (error) {
-      console.error("Error fetching leads:", error);
-      res.status(500).json({ error: "Failed to fetch leads" });
-    }
-  });
-
-  app.post("/api/leads", async (req, res) => {
-    try {
-      const tenantId = getTenantId(req);
-      const validated = insertLeadSchema.parse({ ...req.body, tenantId });
-      const lead = await storage.createLead(validated);
-      res.status(201).json(lead);
-    } catch (error) {
-      console.error("Error creating lead:", error);
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: "Validation failed", details: error.errors });
-      }
-      res.status(500).json({ error: "Failed to create lead" });
-    }
-  });
-
-  // Applications API (GET is admin-only, POST is public for application submission)
-  app.get("/api/applications", requireAdmin, async (req, res) => {
-    try {
-      const tenantId = getTenantId(req);
-      const applicationsList = await storage.getApplications(tenantId);
-      res.json(applicationsList);
-    } catch (error) {
-      console.error("Error fetching applications:", error);
-      res.status(500).json({ error: "Failed to fetch applications" });
-    }
-  });
-
-  app.get("/api/applications/:id", requireAdmin, async (req, res) => {
-    try {
-      const application = await storage.getApplication(req.params.id as string);
-      if (!application) {
-        return res.status(404).json({ error: "Application not found" });
-      }
-      res.json(application);
-    } catch (error) {
-      console.error("Error fetching application:", error);
-      res.status(500).json({ error: "Failed to fetch application" });
-    }
-  });
-
-  app.post("/api/applications", async (req, res) => {
-    try {
-      const tenantId = getTenantId(req);
-      const validated = insertApplicationSchema.parse({ ...req.body, tenantId });
-      const application = await storage.createApplication(validated);
-
-      // Note: Emails are sent via POST /api/applications/:id/send-notification after documents are uploaded
-
-      res.status(201).json(application);
-    } catch (error) {
-      console.error("Error creating application:", error);
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: "Validation failed", details: error.errors });
-      }
-      res.status(500).json({ error: "Failed to create application" });
-    }
-  });
-
-  app.patch("/api/applications/:id", requireAdmin, async (req, res) => {
-    try {
-      const application = await storage.updateApplication(req.params.id as string, req.body);
-      if (!application) {
-        return res.status(404).json({ error: "Application not found" });
-      }
-      res.json(application);
-    } catch (error) {
-      console.error("Error updating application:", error);
-      res.status(500).json({ error: "Failed to update application" });
-    }
-  });
-
-  app.delete("/api/applications/:id", requireAdmin, async (req, res) => {
-    try {
-      await storage.deleteApplication(req.params.id as string);
-      res.status(204).send();
-    } catch (error) {
-      console.error("Error deleting application:", error);
-      res.status(500).json({ error: "Failed to delete application" });
-    }
-  });
-
-  // Get documents for an application
-  app.get("/api/applications/:id/documents", requireAdmin, async (req, res) => {
-    try {
-      const documents = await storage.getDocumentsByApplication(req.params.id as string);
-      res.json(documents);
-    } catch (error) {
-      console.error("Error fetching documents:", error);
-      res.status(500).json({ error: "Failed to fetch documents" });
-    }
-  });
-
-  // Send application notification emails (called after documents are uploaded)
-  app.post("/api/applications/:id/send-notification", async (req, res) => {
-    try {
-      const applicationId = req.params.id as string;
-      const tenantId = getTenantId(req);
-      
-      // Get application
-      const application = await storage.getApplication(applicationId);
-      if (!application) {
-        return res.status(404).json({ error: "Application not found" });
-      }
-
-      // Get email settings
-      const emailSettings = await storage.getEmailSettings(tenantId);
-      if (!emailSettings?.isEnabled || !emailSettings.smtpPassword) {
-        console.log('Email notifications disabled or not configured');
-        return res.json({ success: false, message: 'Email notifications not configured' });
-      }
-
-      // Get email templates
-      const [internalTemplate, userTemplate] = await Promise.all([
-        storage.getEmailTemplateByKey(tenantId, 'application_internal_notification'),
-        storage.getEmailTemplateByKey(tenantId, 'application_user_confirmation'),
-      ]);
-
-      if (!internalTemplate || !userTemplate) {
-        console.log('Email templates not found');
-        return res.json({ success: false, message: 'Email templates not found' });
-      }
-
-      // Get tenant and applicant data
-      const tenant = await storage.getTenant(tenantId);
-      const applicantData = application.applicantData as { 
-        fullName?: string; 
-        firstName?: string;
-        lastName?: string;
-        email?: string; 
-        phone?: string; 
-        countryCode?: string;
-        nationality?: string;
-        programName?: string;
-        degreeLevel?: string;
-        language?: string;
-        tuitionFee?: string;
-        universityName?: string;
-        intakeTerm?: string;
-      } || {};
-
-      const firstName = applicantData.firstName || (applicantData.fullName || '').split(' ')[0] || '';
-      const lastName = applicantData.lastName || (applicantData.fullName || '').split(' ').slice(1).join(' ') || '';
-
-      // Construct full logo URL
-      const siteUrl = `https://${tenant?.domain || 'okanuniversity.app'}`;
-      let logoUrl = '';
-      if (tenant?.logoUrl) {
-        logoUrl = tenant.logoUrl.startsWith('http') 
-          ? tenant.logoUrl 
-          : `${siteUrl}${tenant.logoUrl.startsWith('/') ? '' : '/'}${tenant.logoUrl}`;
-      }
-
-      const emailData: ApplicationEmailData = {
-        fullName: applicantData.fullName || `${firstName} ${lastName}`,
-        firstName,
-        lastName,
-        email: applicantData.email || '',
-        phone: applicantData.phone || '',
-        countryCode: applicantData.countryCode || '',
-        nationality: applicantData.nationality,
-        programName: applicantData.programName || 'Not specified',
-        degreeLevel: applicantData.degreeLevel || 'Not specified',
-        language: applicantData.language,
-        tuitionFee: applicantData.tuitionFee,
-        intakeTerm: applicantData.intakeTerm,
-      };
-
-      const siteConfig = {
-        siteName: tenant?.universityName || applicantData.universityName || 'Okan University',
-        siteUrl,
-        logoUrl,
-        contactEmail: emailSettings.fromEmail || 'info@findandstudy.com',
-        adminEmail: 'admission@findandstudy.com',
-        dashboardUrl: `${siteUrl}/admin/applications`,
-      };
-
-      // Get documents and download them for attachment
-      const docs = await storage.getDocumentsByApplication(applicationId);
-      const attachments: { filename: string; content: Buffer; contentType?: string }[] = [];
-
-      const objectStorageService = new ObjectStorageService();
-      
-      for (const doc of docs) {
-        try {
-          if (doc.fileUrl) {
-            const file = await objectStorageService.getObjectEntityFile(doc.fileUrl);
-            const [fileContent] = await file.download();
-            const [metadata] = await file.getMetadata();
-            
-            // Determine file extension from original filename or content type
-            const originalExt = doc.fileName?.split('.').pop() || '';
-            const docTypeLabel = doc.documentType?.replace(/_/g, ' ').toUpperCase() || 'DOCUMENT';
-            const filename = `${firstName}_${lastName}_${docTypeLabel}.${originalExt || 'pdf'}`;
-            
-            attachments.push({
-              filename,
-              content: fileContent,
-              contentType: metadata.contentType as string || 'application/octet-stream',
-            });
-          }
-        } catch (docError) {
-          console.error(`Failed to attach document ${doc.documentType}:`, docError);
-        }
-      }
-
-      // Process templates
-      const now = new Date();
-      const variables: Record<string, string> = {
-        siteName: siteConfig.siteName,
-        siteUrl: siteConfig.siteUrl,
-        logoUrl: siteConfig.logoUrl || '',
-        contactEmail: siteConfig.contactEmail,
-        dashboardUrl: siteConfig.dashboardUrl,
-        currentYear: now.getFullYear().toString(),
-        submittedDate: now.toLocaleDateString('en-US', { 
-          weekday: 'long', 
-          year: 'numeric', 
-          month: 'long', 
-          day: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit'
-        }),
-        fullName: emailData.fullName,
-        firstName: emailData.firstName,
-        lastName: emailData.lastName,
-        email: emailData.email,
-        phone: emailData.phone,
-        countryCode: emailData.countryCode,
-        nationality: emailData.nationality || 'Not specified',
-        programName: emailData.programName || 'Not specified',
-        degreeLevel: emailData.degreeLevel || 'Not specified',
-        language: emailData.language || 'Not specified',
-        tuitionFee: emailData.tuitionFee || 'Not specified',
-        intakeTerm: emailData.intakeTerm || 'Not specified',
-      };
-
-      // Import processTemplate from email module
-      const { processTemplate, sendEmail } = await import('./email');
-
-      // Send admin email with attachments
-      const internalProcessed = processTemplate(internalTemplate, 'en', variables);
-      const internalResult = await sendEmail(emailSettings, {
-        to: siteConfig.adminEmail,
-        subject: internalProcessed.subject,
-        text: internalProcessed.textBody,
-        html: internalProcessed.htmlBody,
-        attachments,
-      });
-
-      // Send user confirmation email (no attachments)
-      const userProcessed = processTemplate(userTemplate, 'en', variables);
-      const userResult = await sendEmail(emailSettings, {
-        to: emailData.email,
-        subject: userProcessed.subject,
-        text: userProcessed.textBody,
-        html: userProcessed.htmlBody,
-      });
-
-      console.log('Application emails sent:', {
-        internal: internalResult.success,
-        user: userResult.success,
-        attachments: attachments.length,
-      });
-
-      res.json({ 
-        success: true, 
-        internal: internalResult.success,
-        user: userResult.success,
-        attachmentsCount: attachments.length,
-      });
-    } catch (error) {
-      console.error("Error sending notification emails:", error);
-      res.status(500).json({ error: "Failed to send notification emails" });
-    }
-  });
-
-  // Create document record
-  app.post("/api/documents", async (req, res) => {
-    try {
-      const parsed = insertDocumentSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ error: "Invalid document data", details: parsed.error });
-      }
-      const document = await storage.createDocument(parsed.data);
-      res.status(201).json(document);
-    } catch (error) {
-      console.error("Error creating document:", error);
-      res.status(500).json({ error: "Failed to create document" });
     }
   });
 
@@ -887,7 +446,7 @@ export async function registerRoutes(
     }
   });
 
-  // SEO Routes
+  // SEO routes
   app.get("/sitemap.xml", (req, res) => {
     const baseUrl = "https://okanuniversity.app";
     const languages = ["en", "ar", "tr", "fr", "ru", "fa"];
@@ -970,7 +529,7 @@ Sitemap: https://okanuniversity.app/sitemap.xml`;
     }
   });
 
-  // ==================== TESTIMONIALS ====================
+  // Testimonials API
   app.get("/api/testimonials", async (req, res) => {
     try {
       const tenantId = getTenantId(req);
@@ -1041,7 +600,7 @@ Sitemap: https://okanuniversity.app/sitemap.xml`;
         return res.status(404).json({ error: "Testimonial not found" });
       }
       
-      const success = await storage.deleteTestimonial(id);
+      await storage.deleteTestimonial(id);
       res.json({ success: true });
     } catch (error) {
       console.error("Error deleting testimonial:", error);
@@ -1049,7 +608,7 @@ Sitemap: https://okanuniversity.app/sitemap.xml`;
     }
   });
 
-  // FAQ Items
+  // FAQ Items API
   app.get("/api/faq", async (req, res) => {
     try {
       const tenantId = getTenantId(req);
@@ -1120,7 +679,7 @@ Sitemap: https://okanuniversity.app/sitemap.xml`;
         return res.status(404).json({ error: "FAQ item not found" });
       }
       
-      const success = await storage.deleteFaqItem(id);
+      await storage.deleteFaqItem(id);
       res.json({ success: true });
     } catch (error) {
       console.error("Error deleting FAQ item:", error);
@@ -1128,82 +687,7 @@ Sitemap: https://okanuniversity.app/sitemap.xml`;
     }
   });
 
-  // Email Templates
-  app.get("/api/email-templates", requireAdmin, async (req, res) => {
-    try {
-      const tenantId = getTenantId(req);
-      const templates = await storage.getEmailTemplates(tenantId);
-      res.json(templates);
-    } catch (error) {
-      console.error("Error fetching email templates:", error);
-      res.status(500).json({ error: "Failed to fetch email templates" });
-    }
-  });
-
-  app.get("/api/email-templates/:id", requireAdmin, async (req, res) => {
-    try {
-      const id = req.params.id as string;
-      const template = await storage.getEmailTemplate(id);
-      if (!template) {
-        return res.status(404).json({ error: "Email template not found" });
-      }
-      res.json(template);
-    } catch (error) {
-      console.error("Error fetching email template:", error);
-      res.status(500).json({ error: "Failed to fetch email template" });
-    }
-  });
-
-  app.post("/api/email-templates", requireAdmin, async (req, res) => {
-    try {
-      const tenantId = getTenantId(req);
-      const data = { ...req.body, tenantId };
-      const template = await storage.createEmailTemplate(data);
-      res.json(template);
-    } catch (error) {
-      console.error("Error creating email template:", error);
-      res.status(500).json({ error: "Failed to create email template" });
-    }
-  });
-
-  app.patch("/api/email-templates/:id", requireAdmin, async (req, res) => {
-    try {
-      const id = req.params.id as string;
-      const tenantId = getTenantId(req);
-      
-      const existing = await storage.getEmailTemplate(id);
-      if (!existing || existing.tenantId !== tenantId) {
-        return res.status(404).json({ error: "Email template not found" });
-      }
-      
-      const { tenantId: _, id: __, ...updateData } = req.body;
-      const template = await storage.updateEmailTemplate(id, updateData);
-      res.json(template);
-    } catch (error) {
-      console.error("Error updating email template:", error);
-      res.status(500).json({ error: "Failed to update email template" });
-    }
-  });
-
-  app.delete("/api/email-templates/:id", requireAdmin, async (req, res) => {
-    try {
-      const id = req.params.id as string;
-      const tenantId = getTenantId(req);
-      
-      const existing = await storage.getEmailTemplate(id);
-      if (!existing || existing.tenantId !== tenantId) {
-        return res.status(404).json({ error: "Email template not found" });
-      }
-      
-      const success = await storage.deleteEmailTemplate(id);
-      res.json({ success: true });
-    } catch (error) {
-      console.error("Error deleting email template:", error);
-      res.status(500).json({ error: "Failed to delete email template" });
-    }
-  });
-
-  // SEO Settings (public - for landing page)
+  // SEO Settings API (public)
   app.get("/api/seo-settings", async (req, res) => {
     try {
       const tenantId = getTenantId(req);
@@ -1215,7 +699,7 @@ Sitemap: https://okanuniversity.app/sitemap.xml`;
     }
   });
 
-  // SEO Settings (admin)
+  // SEO Settings API (admin)
   app.get("/api/admin/seo-settings", requireAdmin, async (req, res) => {
     try {
       const tenantId = getTenantId(req);
@@ -1249,115 +733,6 @@ Sitemap: https://okanuniversity.app/sitemap.xml`;
     } catch (error) {
       console.error("Error saving SEO settings:", error);
       res.status(500).json({ error: "Failed to save SEO settings" });
-    }
-  });
-
-  // Email Settings
-  app.get("/api/admin/email-settings", requireAdmin, async (req, res) => {
-    try {
-      const tenantId = getTenantId(req);
-      const settings = await storage.getEmailSettings(tenantId);
-      if (settings) {
-        const { smtpPassword, ...safeSettings } = settings;
-        res.json({ ...safeSettings, smtpPassword: smtpPassword ? '********' : '' });
-      } else {
-        res.json({});
-      }
-    } catch (error) {
-      console.error("Error fetching email settings:", error);
-      res.status(500).json({ error: "Failed to fetch email settings" });
-    }
-  });
-
-  app.post("/api/admin/email-settings", requireAdmin, async (req, res) => {
-    try {
-      const tenantId = getTenantId(req);
-      const { tenantId: _, id: __, smtpPassword, ...data } = req.body;
-      
-      const existing = await storage.getEmailSettings(tenantId);
-      
-      const updateData: any = { ...data };
-      if (smtpPassword && smtpPassword !== '********') {
-        updateData.smtpPassword = smtpPassword;
-      } else if (existing?.smtpPassword) {
-        updateData.smtpPassword = existing.smtpPassword;
-      }
-      
-      if (existing) {
-        const settings = await storage.updateEmailSettings(tenantId, updateData);
-        res.json(settings);
-      } else {
-        const settings = await storage.createEmailSettings({ ...updateData, tenantId });
-        res.json(settings);
-      }
-    } catch (error) {
-      console.error("Error saving email settings:", error);
-      res.status(500).json({ error: "Failed to save email settings" });
-    }
-  });
-
-  app.post("/api/admin/email-settings/test", requireAdmin, async (req, res) => {
-    try {
-      const tenantId = getTenantId(req);
-      const { testEmail, smtpHost, smtpPort, smtpUser, smtpPassword, fromEmail, fromName } = req.body;
-      
-      // Debug log - mask password for security
-      console.log('Test email request:', {
-        smtpHost,
-        smtpPort,
-        smtpUser,
-        smtpPasswordLength: smtpPassword?.length,
-        smtpPasswordMasked: smtpPassword === '********',
-        fromEmail,
-        testEmail
-      });
-      
-      let settings = await storage.getEmailSettings(tenantId);
-      
-      const testSettings = {
-        id: 'test',
-        tenantId,
-        provider: 'smtp',
-        isEnabled: true,
-        smtpHost: smtpHost || settings?.smtpHost,
-        smtpPort: smtpPort || settings?.smtpPort,
-        smtpUser: smtpUser || settings?.smtpUser,
-        smtpPassword: (smtpPassword && smtpPassword !== '********') ? smtpPassword : settings?.smtpPassword,
-        sendgridApiKey: null,
-        fromEmail: fromEmail || settings?.fromEmail,
-        fromName: fromName || settings?.fromName,
-      };
-      
-      if (!testSettings.smtpHost || !testSettings.smtpPort || !testSettings.smtpUser || !testSettings.smtpPassword) {
-        return res.status(400).json({ error: "SMTP settings are incomplete" });
-      }
-      
-      const verifyResult = await verifySmtpConnection(testSettings as any);
-      if (!verifyResult.success) {
-        return res.status(400).json({ error: `SMTP connection failed: ${verifyResult.error}` });
-      }
-      
-      const sendResult = await sendEmail(testSettings as any, {
-        to: testEmail || testSettings.fromEmail || testSettings.smtpUser || '',
-        subject: 'Test Email from University Platform',
-        text: 'This is a test email to verify your SMTP configuration is working correctly.',
-        html: `
-          <div style="font-family: Arial, sans-serif; padding: 20px;">
-            <h2>Test Email</h2>
-            <p>This is a test email to verify your SMTP configuration is working correctly.</p>
-            <p style="color: #666;">Sent from: ${testSettings.fromEmail || testSettings.smtpUser}</p>
-          </div>
-        `,
-      });
-      
-      if (sendResult.success) {
-        res.json({ success: true, messageId: sendResult.messageId });
-      } else {
-        res.status(400).json({ error: sendResult.error });
-      }
-    } catch (error: any) {
-      console.error("Error testing email:", error);
-      res.status(500).json({ error: error.message || "Failed to send test email" });
     }
   });
 
