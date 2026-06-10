@@ -227,6 +227,63 @@ export type InsertSeoSettings = z.infer<typeof insertSeoSettingsSchema>;
 export type Widget = typeof widgets.$inferSelect;
 export type InsertWidget = z.infer<typeof insertWidgetSchema>;
 
+// Blog Post Status
+export const BLOG_POST_STATUSES = ['taslak', 'zamanli', 'yayinda'] as const;
+export type BlogPostStatus = typeof BLOG_POST_STATUSES[number];
+
+// Blog Schedule Mode
+export const BLOG_SCHEDULE_MODES = ['otomatik', 'onay'] as const;
+export type BlogScheduleMode = typeof BLOG_SCHEDULE_MODES[number];
+
+// Blog Posts
+export const blogPosts = pgTable("blog_posts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  status: text("status").default("taslak").notNull(),
+  publishAt: timestamp("publish_at"),
+  keyword: text("keyword"),
+  backlinkSites: text("backlink_sites").array().default(sql`ARRAY[]::text[]`),
+  isAiGenerated: boolean("is_ai_generated").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Blog Post Translations (one per lang per post)
+export const blogPostTranslations = pgTable("blog_post_translations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  postId: varchar("post_id").notNull().references(() => blogPosts.id, { onDelete: 'cascade' }),
+  lang: text("lang").notNull(),
+  title: text("title").notNull(),
+  slug: text("slug").notNull(),
+  content: text("content").notNull(),
+  metaTitle: text("meta_title"),
+  metaDesc: text("meta_desc"),
+}, (t) => ({
+  slugUnique: uniqueIndex("blog_slug_unique").on(t.postId, t.lang),
+}));
+
+// Blog Schedule Settings (one per tenant)
+export const blogSchedule = pgTable("blog_schedule", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id).unique(),
+  dailyLimit: integer("daily_limit").default(1),
+  weekdays: text("weekdays").array().default(sql`ARRAY['1','2','3','4','5']::text[]`),
+  mode: text("mode").default("onay").notNull(),
+  isEnabled: boolean("is_enabled").default(false),
+});
+
+// Insert schemas
+export const insertBlogPostSchema = createInsertSchema(blogPosts).omit({ id: true, createdAt: true });
+export const insertBlogPostTranslationSchema = createInsertSchema(blogPostTranslations).omit({ id: true });
+export const insertBlogScheduleSchema = createInsertSchema(blogSchedule).omit({ id: true });
+
+// Types
+export type BlogPost = typeof blogPosts.$inferSelect;
+export type InsertBlogPost = z.infer<typeof insertBlogPostSchema>;
+export type BlogPostTranslation = typeof blogPostTranslations.$inferSelect;
+export type InsertBlogPostTranslation = z.infer<typeof insertBlogPostTranslationSchema>;
+export type BlogSchedule = typeof blogSchedule.$inferSelect;
+export type InsertBlogSchedule = z.infer<typeof insertBlogScheduleSchema>;
+
 // Users table (kept for compatibility)
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

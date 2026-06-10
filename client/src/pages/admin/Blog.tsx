@@ -1,0 +1,515 @@
+import { useState, useRef } from 'react';
+import { useQuery, useMutation } from '@tanstack/react-query';
+import { queryClient, apiRequest } from '@/lib/queryClient';
+import AdminLayout from './AdminLayout';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from '@/components/ui/table';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
+} from '@/components/ui/dialog';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
+import { useToast } from '@/hooks/use-toast';
+import { Sparkles, Upload, Trash2, CheckCircle, Calendar, Plus } from 'lucide-react';
+import { formatDate } from '@/lib/utils';
+import { useLocation } from 'wouter';
+
+interface BlogPostWithTranslations {
+  id: string;
+  tenantId: string;
+  status: string;
+  publishAt: string | null;
+  createdAt: string;
+  keyword: string | null;
+  backlinkSites: string[];
+  isAiGenerated: boolean;
+  translations: Array<{
+    id: string;
+    lang: string;
+    title: string;
+    slug: string;
+    content: string;
+    metaTitle: string | null;
+    metaDesc: string | null;
+  }>;
+}
+
+interface BlogSchedule {
+  id: string;
+  dailyLimit: number;
+  weekdays: string[];
+  mode: string;
+  isEnabled: boolean;
+}
+
+const STATUS_COLORS: Record<string, string> = {
+  taslak: 'bg-gray-100 text-gray-700',
+  zamanli: 'bg-blue-100 text-blue-700',
+  yayinda: 'bg-green-100 text-green-700',
+};
+
+const WEEKDAY_LABELS: Record<string, string> = {
+  '0': 'Sun', '1': 'Mon', '2': 'Tue', '3': 'Wed', '4': 'Thu', '5': 'Fri', '6': 'Sat',
+};
+
+export default function Blog() {
+  const { toast } = useToast();
+  const [, setLocation] = useLocation();
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
+  const [generatingId, setGeneratingId] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // New post form
+  const [newKeyword, setNewKeyword] = useState('');
+  const [newBacklinks, setNewBacklinks] = useState('');
+  const [newPublishAt, setNewPublishAt] = useState('');
+  const [newStatus, setNewStatus] = useState('taslak');
+
+  // Schedule form
+  const [schedMode, setSchedMode] = useState('onay');
+  const [schedLimit, setSchedLimit] = useState(1);
+  const [schedWeekdays, setSchedWeekdays] = useState(['1','2','3','4','5']);
+  const [schedEnabled, setSchedEnabled] = useState(false);
+
+  const { data: posts = [], isLoading } = useQuery<BlogPostWithTranslations[]>({
+    queryKey: ['/api/admin/blog'],
+  });
+
+  const { data: schedule } = useQuery<BlogSchedule | null>({
+    queryKey: ['/api/admin/blog/schedule'],
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (data: any) => apiRequest('POST', '/api/admin/blog', data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/blog'] });
+      setAddDialogOpen(false);
+      setNewKeyword('');
+      setNewBacklinks('');
+      setNewPublishAt('');
+      setNewStatus('taslak');
+      toast({ title: 'Post created' });
+    },
+    onError: (e: any) => toast({ title: 'Error', description: e.message, variant: 'destructive' }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => apiRequest('DELETE', `/api/admin/blog/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/blog'] });
+      toast({ title: 'Post deleted' });
+    },
+    onError: (e: any) => toast({ title: 'Error', description: e.message, variant: 'destructive' }),
+  });
+
+  const approveMutation = useMutation({
+    mutationFn: (id: string) => apiRequest('POST', `/api/admin/blog/${id}/approve`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/blog'] });
+      toast({ title: 'Post published!' });
+    },
+    onError: (e: any) => toast({ title: 'Error', description: e.message, variant: 'destructive' }),
+  });
+
+  const scheduleMutation = useMutation({
+    mutationFn: (data: any) => apiRequest('POST', '/api/admin/blog/schedule', data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/blog/schedule'] });
+      setScheduleDialogOpen(false);
+      toast({ title: 'Schedule saved' });
+    },
+    onError: (e: any) => toast({ title: 'Error', description: e.message, variant: 'destructive' }),
+  });
+
+  const handleGenerateAI = async (post: BlogPostWithTranslations) => {
+    setGeneratingId(post.id);
+    try {
+      const res = await apiRequest('POST', `/api/admin/blog/${post.id}/generate`, {});
+      const data = await res.json();
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/blog'] });
+      toast({ title: `AI generated ${data.translations?.length || 0} translations` });
+    } catch (e: any) {
+      toast({ title: 'Generation failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setGeneratingId(null);
+    }
+  };
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const res = await fetch('/api/admin/blog/import', {
+        method: 'POST',
+        body: formData,
+        credentials: 'include',
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Import failed');
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/blog'] });
+      toast({ title: `Imported ${data.imported} posts from Excel` });
+    } catch (e: any) {
+      toast({ title: 'Import failed', description: e.message, variant: 'destructive' });
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const toggleWeekday = (day: string) => {
+    setSchedWeekdays(prev =>
+      prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]
+    );
+  };
+
+  const enTitle = (post: BlogPostWithTranslations) =>
+    post.translations.find(t => t.lang === 'en')?.title || post.keyword || '—';
+
+  return (
+    <AdminLayout>
+      <div className="space-y-6 p-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold">Blog Management</h1>
+            <p className="text-muted-foreground text-sm mt-1">
+              Create, generate with AI, and schedule blog posts in 10 languages.
+            </p>
+          </div>
+          <div className="flex gap-2">
+            {/* Schedule dialog */}
+            <Dialog open={scheduleDialogOpen} onOpenChange={setScheduleDialogOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" data-testid="button-blog-schedule">
+                  <Calendar className="w-4 h-4 mr-2" />
+                  Schedule
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Publish Schedule</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 py-2">
+                  <div className="flex items-center justify-between">
+                    <Label>Scheduler Enabled</Label>
+                    <Switch
+                      checked={schedEnabled}
+                      onCheckedChange={setSchedEnabled}
+                      data-testid="switch-schedule-enabled"
+                    />
+                  </div>
+                  <div>
+                    <Label>Mode</Label>
+                    <Select value={schedMode} onValueChange={setSchedMode}>
+                      <SelectTrigger data-testid="select-schedule-mode">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="otomatik">Automatic (publish when due)</SelectItem>
+                        <SelectItem value="onay">Approval Queue (admin approves)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Daily Limit</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={20}
+                      value={schedLimit}
+                      onChange={e => setSchedLimit(Number(e.target.value))}
+                      data-testid="input-schedule-limit"
+                    />
+                  </div>
+                  <div>
+                    <Label>Active Days</Label>
+                    <div className="flex gap-2 mt-2 flex-wrap">
+                      {Object.entries(WEEKDAY_LABELS).map(([day, label]) => (
+                        <button
+                          key={day}
+                          type="button"
+                          onClick={() => toggleWeekday(day)}
+                          data-testid={`day-${day}`}
+                          className={`px-3 py-1 rounded-full text-sm font-medium border transition-colors ${
+                            schedWeekdays.includes(day)
+                              ? 'bg-primary text-primary-foreground border-primary'
+                              : 'border-input text-muted-foreground hover:bg-muted'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <Button
+                    className="w-full"
+                    onClick={() => scheduleMutation.mutate({
+                      mode: schedMode,
+                      dailyLimit: schedLimit,
+                      weekdays: schedWeekdays,
+                      isEnabled: schedEnabled,
+                    })}
+                    disabled={scheduleMutation.isPending}
+                    data-testid="button-save-schedule"
+                  >
+                    Save Schedule
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+
+            {/* Excel Import */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx,.xls"
+              className="hidden"
+              onChange={handleImport}
+              data-testid="input-excel-import"
+            />
+            <Button
+              variant="outline"
+              onClick={() => fileInputRef.current?.click()}
+              data-testid="button-import-excel"
+            >
+              <Upload className="w-4 h-4 mr-2" />
+              Import Excel
+            </Button>
+
+            {/* Add post dialog */}
+            <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
+              <DialogTrigger asChild>
+                <Button data-testid="button-add-post">
+                  <Plus className="w-4 h-4 mr-2" />
+                  New Post
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle>New Blog Post</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 py-2">
+                  <div>
+                    <Label>Keyword *</Label>
+                    <Input
+                      placeholder="e.g. study in Turkey 2025"
+                      value={newKeyword}
+                      onChange={e => setNewKeyword(e.target.value)}
+                      data-testid="input-post-keyword"
+                    />
+                  </div>
+                  <div>
+                    <Label>Backlink Sites (comma-separated)</Label>
+                    <Input
+                      placeholder="e.g. example.edu, partner.org"
+                      value={newBacklinks}
+                      onChange={e => setNewBacklinks(e.target.value)}
+                      data-testid="input-post-backlinks"
+                    />
+                  </div>
+                  <div>
+                    <Label>Status</Label>
+                    <Select value={newStatus} onValueChange={setNewStatus}>
+                      <SelectTrigger data-testid="select-post-status">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="taslak">Draft (taslak)</SelectItem>
+                        <SelectItem value="zamanli">Scheduled (zamanli)</SelectItem>
+                        <SelectItem value="yayinda">Published (yayinda)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Publish At (optional)</Label>
+                    <Input
+                      type="datetime-local"
+                      value={newPublishAt}
+                      onChange={e => setNewPublishAt(e.target.value)}
+                      data-testid="input-post-publish-at"
+                    />
+                  </div>
+                  <Button
+                    className="w-full"
+                    disabled={!newKeyword || createMutation.isPending}
+                    onClick={() => createMutation.mutate({
+                      keyword: newKeyword,
+                      backlinkSites: newBacklinks.split(',').map(s => s.trim()).filter(Boolean),
+                      status: newStatus,
+                      publishAt: newPublishAt || null,
+                    })}
+                    data-testid="button-create-post"
+                  >
+                    Create Post
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
+        </div>
+
+        {/* Excel import hint */}
+        <Card className="border-dashed border-blue-200 bg-blue-50/50">
+          <CardContent className="pt-4 pb-3">
+            <p className="text-sm text-blue-700">
+              <strong>Excel Import:</strong> Upload an .xlsx file with columns: <code>title</code>, <code>keyword</code> (or <code>anahtar_kelime</code>), <code>backlink_siteleri</code>. Each row becomes a draft post. Then click AI Generate to create full articles.
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Posts table */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Blog Posts ({posts.length})</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            {isLoading ? (
+              <div className="p-6 text-center text-muted-foreground">Loading…</div>
+            ) : posts.length === 0 ? (
+              <div className="p-12 text-center text-muted-foreground">
+                <p>No blog posts yet.</p>
+                <p className="text-sm mt-1">Import an Excel file or create posts manually.</p>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Title / Keyword</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Langs</TableHead>
+                    <TableHead>Publish At</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {posts.map(post => (
+                    <TableRow key={post.id} data-testid={`blog-row-${post.id}`}>
+                      <TableCell>
+                        <div className="font-medium text-sm line-clamp-1">{enTitle(post)}</div>
+                        {post.keyword && post.translations.length > 0 && (
+                          <div className="text-xs text-muted-foreground">{post.keyword}</div>
+                        )}
+                        {post.isAiGenerated && (
+                          <Badge variant="secondary" className="text-xs mt-1">
+                            <Sparkles className="w-3 h-3 mr-1" />AI
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <span className={`text-xs px-2 py-1 rounded-full font-medium ${STATUS_COLORS[post.status] || ''}`}>
+                          {post.status}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1">
+                          {post.translations.map(t => (
+                            <span
+                              key={t.lang}
+                              className={`text-xs px-1.5 py-0.5 rounded font-mono ${t.content ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}
+                            >
+                              {t.lang}
+                            </span>
+                          ))}
+                          {post.translations.length === 0 && (
+                            <span className="text-xs text-muted-foreground">none</span>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {post.publishAt ? formatDate(post.publishAt) : '—'}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleGenerateAI(post)}
+                            disabled={generatingId === post.id}
+                            data-testid={`button-generate-${post.id}`}
+                            title="Generate with AI"
+                          >
+                            <Sparkles className="w-3.5 h-3.5 mr-1" />
+                            {generatingId === post.id ? 'Generating…' : 'AI Generate'}
+                          </Button>
+
+                          {post.status !== 'yayinda' && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-green-700 border-green-200 hover:bg-green-50"
+                              onClick={() => approveMutation.mutate(post.id)}
+                              disabled={approveMutation.isPending}
+                              data-testid={`button-approve-${post.id}`}
+                              title="Publish now"
+                            >
+                              <CheckCircle className="w-3.5 h-3.5 mr-1" />
+                              Publish
+                            </Button>
+                          )}
+
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-destructive hover:bg-destructive/10"
+                            onClick={() => deleteMutation.mutate(post.id)}
+                            disabled={deleteMutation.isPending}
+                            data-testid={`button-delete-${post.id}`}
+                            title="Delete"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Approval queue (onay mode) */}
+        {schedule?.mode === 'onay' && schedule?.isEnabled && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Approval Queue</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {posts.filter(p => p.status === 'zamanli').length === 0 ? (
+                <p className="text-sm text-muted-foreground">No posts waiting for approval.</p>
+              ) : (
+                <div className="space-y-2">
+                  {posts.filter(p => p.status === 'zamanli').map(post => (
+                    <div key={post.id} className="flex items-center justify-between rounded-lg border p-3">
+                      <span className="text-sm font-medium">{enTitle(post)}</span>
+                      <Button
+                        size="sm"
+                        onClick={() => approveMutation.mutate(post.id)}
+                        disabled={approveMutation.isPending}
+                        data-testid={`button-queue-approve-${post.id}`}
+                      >
+                        <CheckCircle className="w-4 h-4 mr-1" />
+                        Approve & Publish
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+      </div>
+    </AdminLayout>
+  );
+}

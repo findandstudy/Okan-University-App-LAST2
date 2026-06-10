@@ -26,6 +26,9 @@ import Sites from "@/pages/admin/Sites";
 import SiteEditor from "@/pages/admin/SiteEditor";
 import AISettings from "@/pages/admin/AISettings";
 import ContentGenerator from "@/pages/admin/ContentGenerator";
+import BlogAdmin from "@/pages/admin/Blog";
+import BlogIndex from "@/pages/Blog";
+import BlogPost from "@/pages/BlogPost";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -53,8 +56,15 @@ function Router() {
       <Route path="/admin/seo" component={() => <SEOSettings />} />
       <Route path="/admin/ai-settings" component={() => <AISettings />} />
       <Route path="/admin/content-generator" component={() => <ContentGenerator />} />
+      <Route path="/admin/blog" component={BlogAdmin} />
       <Route path="/admin/sites" component={Sites} />
       <Route path="/admin/sites/:tenantId" component={SiteEditor} />
+
+      {/* Blog public routes — language-prefixed */}
+      <Route path="/blog" component={BlogIndex} />
+      <Route path="/blog/:slug" component={BlogPost} />
+      <Route path="/:lang/blog" component={BlogIndex} />
+      <Route path="/:lang/blog/:slug" component={BlogPost} />
 
       <Route path="/:lang" component={Landing} />
 

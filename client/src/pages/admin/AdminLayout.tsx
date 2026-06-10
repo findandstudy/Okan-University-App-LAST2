@@ -37,6 +37,7 @@ import {
   LayoutGrid,
   Bot,
   Sparkles,
+  BookOpen,
   type LucideIcon,
 } from 'lucide-react';
 import type { Tenant } from '@shared/schema';
@@ -80,6 +81,7 @@ const menuGroups: NavGroup[] = [
     items: [
       { title: 'AI Settings', url: '/admin/ai-settings', icon: Bot },
       { title: 'Content Generator', url: '/admin/content-generator', icon: Sparkles },
+      { title: 'Blog Manager', url: '/admin/blog', icon: BookOpen },
     ],
   },
   {

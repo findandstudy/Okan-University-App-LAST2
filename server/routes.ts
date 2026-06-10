@@ -19,6 +19,7 @@ import { saveUpload, readUpload, serveUpload } from "./localFileStorage";
 import { db } from "./db";
 import { integrationSettings, SUPPORTED_LANGUAGES } from "@shared/schema";
 import { sql, and, eq } from "drizzle-orm";
+import { startBlogScheduler } from "./blogScheduler";
 
 const PgStore = connectPgSimple(session);
 
@@ -600,7 +601,7 @@ export async function registerRoutes(
   </url>`;
       });
 
-      // ── Blog placeholder (Faz 7) ────────────────────────────────────────────
+      // ── Blog index pages ────────────────────────────────────────────────────
       const blogAlternates = [
         `<xhtml:link rel="alternate" hreflang="x-default" href="${baseUrl}/blog" />`,
         ...SUPPORTED_LANGUAGES.map(l =>
@@ -613,7 +614,7 @@ export async function registerRoutes(
     <loc>${baseUrl}/blog</loc>
     ${blogAlternates}
     <lastmod>${today}</lastmod>
-    <changefreq>weekly</changefreq>
+    <changefreq>daily</changefreq>
     <priority>0.7</priority>
   </url>`;
 
@@ -623,10 +624,48 @@ export async function registerRoutes(
     <loc>${baseUrl}/${lang}/blog</loc>
     ${blogAlternates}
     <lastmod>${today}</lastmod>
-    <changefreq>weekly</changefreq>
+    <changefreq>daily</changefreq>
     <priority>0.7</priority>
   </url>`;
       });
+
+      // ── Individual blog posts ────────────────────────────────────────────────
+      try {
+        const publishedPosts = await storage.getPublishedBlogPosts(req.tenantId, 'en');
+        for (const { post, translation: enTranslation } of publishedPosts) {
+          const allTranslations = await storage.getBlogPostTranslations(post.id);
+          const postAlternates = [
+            `<xhtml:link rel="alternate" hreflang="x-default" href="${baseUrl}/blog/${enTranslation.slug}" />`,
+            ...allTranslations.map(t =>
+              `<xhtml:link rel="alternate" hreflang="${t.lang}" href="${baseUrl}/${t.lang === 'en' ? 'blog' : `${t.lang}/blog`}/${t.slug}" />`
+            ),
+          ].join('\n    ');
+          const postDate = post.publishAt
+            ? new Date(post.publishAt).toISOString().split('T')[0]
+            : today;
+
+          sitemap += `
+  <url>
+    <loc>${baseUrl}/blog/${enTranslation.slug}</loc>
+    ${postAlternates}
+    <lastmod>${postDate}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>`;
+
+          // Add non-EN lang-specific URLs
+          for (const t of allTranslations.filter(t => t.lang !== 'en')) {
+            sitemap += `
+  <url>
+    <loc>${baseUrl}/${t.lang}/blog/${t.slug}</loc>
+    ${postAlternates}
+    <lastmod>${postDate}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>`;
+          }
+        }
+      } catch { /* blog posts optional in sitemap */ }
 
       sitemap += '\n</urlset>';
       res.header('Content-Type', 'application/xml');
@@ -1345,6 +1384,240 @@ Rules:
       res.status(500).json({ error: err?.message || 'Failed to localize SEO content' });
     }
   });
+
+  // ─── Public Blog API ──────────────────────────────────────────────────────────
+  app.get("/api/blog", resolveTenant, requirePublished, async (req, res) => {
+    try {
+      const lang = (req.query.lang as string) || 'en';
+      const posts = await storage.getPublishedBlogPosts(req.tenantId, lang);
+      res.json(posts);
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || 'Failed to fetch blog posts' });
+    }
+  });
+
+  app.get("/api/blog/:slug", resolveTenant, requirePublished, async (req, res) => {
+    try {
+      const slug = req.params.slug as string;
+      const lang = (req.query.lang as string) || 'en';
+      const result = await storage.getBlogPostTranslationBySlug(req.tenantId, lang, slug);
+      if (!result) return res.status(404).json({ error: 'Post not found' });
+
+      // Collect alternates (all available translations for this post)
+      const translations = await storage.getBlogPostTranslations(result.post.id);
+      const alternates: Record<string, string> = {};
+      for (const t of translations) {
+        alternates[t.lang] = t.slug;
+      }
+
+      res.json({ ...result, alternates });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || 'Failed to fetch blog post' });
+    }
+  });
+
+  // ─── Admin Blog API ──────────────────────────────────────────────────────────
+  app.get("/api/admin/blog", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
+    try {
+      const posts = await storage.getBlogPosts(req.tenantId);
+      const withTranslations = await Promise.all(posts.map(async (post) => {
+        const translations = await storage.getBlogPostTranslations(post.id);
+        return { ...post, translations };
+      }));
+      res.json(withTranslations);
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || 'Failed to fetch blog posts' });
+    }
+  });
+
+  app.post("/api/admin/blog", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
+    try {
+      const { keyword, backlinkSites, publishAt, status } = req.body;
+      const post = await storage.createBlogPost({
+        tenantId: req.tenantId,
+        keyword: keyword || null,
+        backlinkSites: backlinkSites || [],
+        publishAt: publishAt ? new Date(publishAt) : null,
+        status: status || 'taslak',
+        isAiGenerated: false,
+      });
+      res.status(201).json(post);
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || 'Failed to create blog post' });
+    }
+  });
+
+  app.patch("/api/admin/blog/:id", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
+    try {
+      const id = req.params.id as string;
+      const post = await storage.getBlogPost(id);
+      if (!post || post.tenantId !== req.tenantId) return res.status(404).json({ error: 'Not found' });
+      const updated = await storage.updateBlogPost(id, req.body);
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || 'Failed to update blog post' });
+    }
+  });
+
+  app.delete("/api/admin/blog/:id", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
+    try {
+      const id = req.params.id as string;
+      const post = await storage.getBlogPost(id);
+      if (!post || post.tenantId !== req.tenantId) return res.status(404).json({ error: 'Not found' });
+      await storage.deleteBlogPost(id);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || 'Failed to delete blog post' });
+    }
+  });
+
+  // ─── AI Generate blog post ────────────────────────────────────────────────────
+  app.post("/api/admin/blog/:id/generate", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
+    try {
+      const id = req.params.id as string;
+      const post = await storage.getBlogPost(id);
+      if (!post || post.tenantId !== req.tenantId) return res.status(404).json({ error: 'Not found' });
+
+      const { generateBlogPost, translateBlogPost } = await import('./contentGenerator');
+      const keyword = post.keyword || req.body.keyword || 'university education';
+      const backlinkSites = post.backlinkSites || [];
+
+      // Generate EN content
+      const enContent = await generateBlogPost(keyword, backlinkSites, req.tenantId);
+
+      // Save EN translation
+      await storage.upsertBlogPostTranslation({
+        postId: id,
+        lang: 'en',
+        title: enContent.title,
+        slug: enContent.slug,
+        content: enContent.content,
+        metaTitle: enContent.metaTitle,
+        metaDesc: enContent.metaDesc,
+      });
+
+      // Translate to all other languages
+      const otherLangs = SUPPORTED_LANGUAGES.filter(l => l !== 'en');
+      const translations = await translateBlogPost(enContent, [...otherLangs], req.tenantId);
+
+      for (const [lang, content] of Object.entries(translations)) {
+        await storage.upsertBlogPostTranslation({
+          postId: id,
+          lang,
+          title: content.title,
+          slug: content.slug,
+          content: content.content,
+          metaTitle: content.metaTitle,
+          metaDesc: content.metaDesc,
+        });
+      }
+
+      await storage.updateBlogPost(id, { isAiGenerated: true });
+
+      const allTranslations = await storage.getBlogPostTranslations(id);
+      res.json({ success: true, translations: allTranslations });
+    } catch (err: any) {
+      console.error('Blog generate error:', err);
+      res.status(500).json({ error: err?.message || 'Failed to generate blog post' });
+    }
+  });
+
+  // ─── Approve blog post (onay mode) ───────────────────────────────────────────
+  app.post("/api/admin/blog/:id/approve", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
+    try {
+      const id = req.params.id as string;
+      const post = await storage.getBlogPost(id);
+      if (!post || post.tenantId !== req.tenantId) return res.status(404).json({ error: 'Not found' });
+      const updated = await storage.updateBlogPost(id, { status: 'yayinda' });
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || 'Failed to approve blog post' });
+    }
+  });
+
+  // ─── Excel Import ─────────────────────────────────────────────────────────────
+  const xlsxUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
+
+  app.post("/api/admin/blog/import", requireAdmin, resolveTenant, requireAdminTenantAccess, xlsxUpload.single("file"), async (req, res) => {
+    try {
+      const file = req.file;
+      if (!file) return res.status(400).json({ error: 'No file uploaded' });
+
+      const xlsx = await import('xlsx');
+      const workbook = xlsx.read(file.buffer, { type: 'buffer' });
+      const sheetName = workbook.SheetNames[0];
+      const rows = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName]) as Record<string, any>[];
+
+      const created: any[] = [];
+      for (const row of rows) {
+        const title = row['title'] || row['başlık'] || row['baslik'] || '';
+        const keyword = row['keyword'] || row['anahtar_kelime'] || row['anahtar kelime'] || title;
+        const backlinkRaw = row['backlink_siteleri'] || row['backlink_sites'] || row['backlinks'] || '';
+        const backlinkSites = typeof backlinkRaw === 'string'
+          ? backlinkRaw.split(/[,;]/).map((s: string) => s.trim()).filter(Boolean)
+          : [];
+
+        if (!keyword) continue;
+
+        const post = await storage.createBlogPost({
+          tenantId: req.tenantId,
+          keyword,
+          backlinkSites,
+          publishAt: null,
+          status: 'taslak',
+          isAiGenerated: false,
+        });
+
+        // Save a draft EN translation with just the title
+        if (title) {
+          await storage.upsertBlogPostTranslation({
+            postId: post.id,
+            lang: 'en',
+            title,
+            slug: title.toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]/g, '').substring(0, 80),
+            content: '',
+            metaTitle: title,
+            metaDesc: null,
+          });
+        }
+
+        created.push(post);
+      }
+
+      res.json({ success: true, imported: created.length });
+    } catch (err: any) {
+      console.error('Excel import error:', err);
+      res.status(500).json({ error: err?.message || 'Failed to import Excel file' });
+    }
+  });
+
+  // ─── Blog Schedule API ───────────────────────────────────────────────────────
+  app.get("/api/admin/blog/schedule", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
+    try {
+      const schedule = await storage.getBlogSchedule(req.tenantId);
+      res.json(schedule || null);
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || 'Failed to fetch schedule' });
+    }
+  });
+
+  app.post("/api/admin/blog/schedule", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
+    try {
+      const { dailyLimit, weekdays, mode, isEnabled } = req.body;
+      const schedule = await storage.upsertBlogSchedule(req.tenantId, {
+        dailyLimit: dailyLimit ?? 1,
+        weekdays: weekdays ?? ['1','2','3','4','5'],
+        mode: mode ?? 'onay',
+        isEnabled: isEnabled ?? false,
+      });
+      res.json(schedule);
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || 'Failed to save schedule' });
+    }
+  });
+
+  // ─── Start blog scheduler ────────────────────────────────────────────────────
+  startBlogScheduler();
 
   return httpServer;
 }

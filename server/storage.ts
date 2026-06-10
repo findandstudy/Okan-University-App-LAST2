@@ -1,9 +1,10 @@
 import { db } from './db';
-import { eq, desc, and } from 'drizzle-orm';
+import { eq, desc, and, asc } from 'drizzle-orm';
 import {
   tenants, tenantDomains, tenantThemes, sections, menuItems,
   adminUsers, integrationSettings, mediaAssets, faqItems,
   testimonials, trustBadges, seoSettings, widgets,
+  blogPosts, blogPostTranslations, blogSchedule,
   type Tenant, type InsertTenant,
   type TenantDomain, type InsertTenantDomain,
   type TenantTheme, type InsertTenantTheme,
@@ -15,6 +16,9 @@ import {
   type MediaAsset, type InsertMediaAsset,
   type SeoSettings, type InsertSeoSettings,
   type Widget, type InsertWidget,
+  type BlogPost, type InsertBlogPost,
+  type BlogPostTranslation, type InsertBlogPostTranslation,
+  type BlogSchedule, type InsertBlogSchedule,
 } from '@shared/schema';
 
 export interface IStorage {
@@ -85,6 +89,24 @@ export interface IStorage {
   // AI Settings
   getAISettings(tenantId: string): Promise<{ provider: string; model: string; hasApiKey: boolean; encryptedApiKey?: string } | null>;
   saveAISettings(tenantId: string, data: { provider: string; model: string; encryptedApiKey?: string }): Promise<void>;
+
+  // Blog Posts
+  getBlogPosts(tenantId: string): Promise<BlogPost[]>;
+  getBlogPost(id: string): Promise<BlogPost | undefined>;
+  createBlogPost(post: InsertBlogPost): Promise<BlogPost>;
+  updateBlogPost(id: string, data: Partial<InsertBlogPost>): Promise<BlogPost | undefined>;
+  deleteBlogPost(id: string): Promise<boolean>;
+
+  // Blog Post Translations
+  getBlogPostTranslations(postId: string): Promise<BlogPostTranslation[]>;
+  getBlogPostTranslationBySlug(tenantId: string, lang: string, slug: string): Promise<{ post: BlogPost; translation: BlogPostTranslation } | undefined>;
+  getPublishedBlogPosts(tenantId: string, lang: string): Promise<{ post: BlogPost; translation: BlogPostTranslation }[]>;
+  upsertBlogPostTranslation(data: InsertBlogPostTranslation): Promise<BlogPostTranslation>;
+  deleteBlogPostTranslations(postId: string): Promise<void>;
+
+  // Blog Schedule
+  getBlogSchedule(tenantId: string): Promise<BlogSchedule | undefined>;
+  upsertBlogSchedule(tenantId: string, data: Partial<InsertBlogSchedule>): Promise<BlogSchedule>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -389,6 +411,117 @@ export class DatabaseStorage implements IStorage {
         isEnabled: true,
       });
     }
+  }
+
+  // Blog Posts
+  async getBlogPosts(tenantId: string): Promise<BlogPost[]> {
+    return db.select().from(blogPosts)
+      .where(eq(blogPosts.tenantId, tenantId))
+      .orderBy(desc(blogPosts.createdAt));
+  }
+
+  async getBlogPost(id: string): Promise<BlogPost | undefined> {
+    const [post] = await db.select().from(blogPosts).where(eq(blogPosts.id, id));
+    return post;
+  }
+
+  async createBlogPost(post: InsertBlogPost): Promise<BlogPost> {
+    const [created] = await db.insert(blogPosts).values(post as any).returning();
+    return created;
+  }
+
+  async updateBlogPost(id: string, data: Partial<InsertBlogPost>): Promise<BlogPost | undefined> {
+    const [updated] = await db.update(blogPosts).set(data as any).where(eq(blogPosts.id, id)).returning();
+    return updated;
+  }
+
+  async deleteBlogPost(id: string): Promise<boolean> {
+    // translations cascade-delete via FK
+    const result = await db.delete(blogPosts).where(eq(blogPosts.id, id)).returning();
+    return result.length > 0;
+  }
+
+  // Blog Post Translations
+  async getBlogPostTranslations(postId: string): Promise<BlogPostTranslation[]> {
+    return db.select().from(blogPostTranslations)
+      .where(eq(blogPostTranslations.postId, postId))
+      .orderBy(asc(blogPostTranslations.lang));
+  }
+
+  async getBlogPostTranslationBySlug(
+    tenantId: string, lang: string, slug: string
+  ): Promise<{ post: BlogPost; translation: BlogPostTranslation } | undefined> {
+    const rows = await db
+      .select({ post: blogPosts, translation: blogPostTranslations })
+      .from(blogPostTranslations)
+      .innerJoin(blogPosts, eq(blogPostTranslations.postId, blogPosts.id))
+      .where(and(
+        eq(blogPosts.tenantId, tenantId),
+        eq(blogPosts.status, 'yayinda'),
+        eq(blogPostTranslations.lang, lang),
+        eq(blogPostTranslations.slug, slug),
+      ))
+      .limit(1);
+    return rows[0];
+  }
+
+  async getPublishedBlogPosts(
+    tenantId: string, lang: string
+  ): Promise<{ post: BlogPost; translation: BlogPostTranslation }[]> {
+    return db
+      .select({ post: blogPosts, translation: blogPostTranslations })
+      .from(blogPosts)
+      .innerJoin(blogPostTranslations, and(
+        eq(blogPostTranslations.postId, blogPosts.id),
+        eq(blogPostTranslations.lang, lang),
+      ))
+      .where(and(
+        eq(blogPosts.tenantId, tenantId),
+        eq(blogPosts.status, 'yayinda'),
+      ))
+      .orderBy(desc(blogPosts.publishAt));
+  }
+
+  async upsertBlogPostTranslation(data: InsertBlogPostTranslation): Promise<BlogPostTranslation> {
+    const [existing] = await db.select().from(blogPostTranslations)
+      .where(and(
+        eq(blogPostTranslations.postId, data.postId),
+        eq(blogPostTranslations.lang, data.lang),
+      ));
+    if (existing) {
+      const [updated] = await db.update(blogPostTranslations)
+        .set(data)
+        .where(eq(blogPostTranslations.id, existing.id))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(blogPostTranslations).values(data).returning();
+    return created;
+  }
+
+  async deleteBlogPostTranslations(postId: string): Promise<void> {
+    await db.delete(blogPostTranslations).where(eq(blogPostTranslations.postId, postId));
+  }
+
+  // Blog Schedule
+  async getBlogSchedule(tenantId: string): Promise<BlogSchedule | undefined> {
+    const [schedule] = await db.select().from(blogSchedule).where(eq(blogSchedule.tenantId, tenantId));
+    return schedule;
+  }
+
+  async upsertBlogSchedule(tenantId: string, data: Partial<InsertBlogSchedule>): Promise<BlogSchedule> {
+    const existing = await this.getBlogSchedule(tenantId);
+    if (existing) {
+      const [updated] = await db.update(blogSchedule)
+        .set(data as any)
+        .where(eq(blogSchedule.tenantId, tenantId))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(blogSchedule)
+      .values({ tenantId, ...data } as any)
+      .returning();
+    return created;
   }
 }
 

@@ -1,4 +1,6 @@
 import { callAI } from './aiService';
+import { translateText } from './aiTranslation';
+import { SUPPORTED_LANGUAGES } from '@shared/schema';
 
 export interface GeneratedContent {
   hero: {
@@ -144,4 +146,98 @@ Mark any unverified claims about fees, dates, or statistics with [DOĞRULANMALI]
   const match = raw.match(/\{[\s\S]*\}/);
   if (!match) throw new Error('Invalid content generation response from AI');
   return JSON.parse(match[0]) as GeneratedContent;
+}
+
+export interface BlogContent {
+  title: string;
+  slug: string;
+  content: string;
+  metaTitle: string;
+  metaDesc: string;
+}
+
+function toSlug(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^\w\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .trim()
+    .substring(0, 80);
+}
+
+export async function generateBlogPost(
+  keyword: string,
+  backlinkSites: string[],
+  tenantId: string,
+): Promise<BlogContent> {
+  const backlinkInstruction = backlinkSites.length > 0
+    ? `Naturally mention and link to these sites where contextually appropriate (do NOT fabricate facts about them): ${backlinkSites.join(', ')}.`
+    : '';
+
+  const systemPrompt = `You are an expert SEO content writer for a university recruitment platform. 
+Write factual, well-structured blog articles that help international students.
+Never fabricate statistics, rankings, or specific facts you cannot verify.
+Return ONLY valid JSON, no markdown, no explanation.`;
+
+  const prompt = `Write an SEO-optimized blog article targeting the keyword: "${keyword}"
+
+${backlinkInstruction}
+
+Article requirements:
+- 600-900 words
+- Professional but accessible tone
+- Structured with clear headings (use ## for H2, ### for H3)
+- Include a compelling introduction and a clear conclusion
+- Target international students considering university enrollment
+
+Return this exact JSON structure:
+{
+  "title": "SEO-optimized article title (under 65 chars)",
+  "content": "Full article in Markdown format",
+  "metaTitle": "Meta title (under 60 chars, includes keyword)",
+  "metaDesc": "Meta description (120-155 chars, compelling, includes keyword)"
+}`;
+
+  const raw = await callAI(prompt, tenantId, systemPrompt);
+  const match = raw.match(/\{[\s\S]*\}/);
+  if (!match) throw new Error('Invalid blog generation response from AI');
+  const parsed = JSON.parse(match[0]) as Omit<BlogContent, 'slug'>;
+  return {
+    ...parsed,
+    slug: toSlug(parsed.title),
+  };
+}
+
+export async function translateBlogPost(
+  enContent: BlogContent,
+  targetLangs: string[],
+  tenantId: string,
+): Promise<Record<string, BlogContent>> {
+  const results: Record<string, BlogContent> = {};
+
+  const fieldsToTranslate: Array<keyof BlogContent> = ['title', 'content', 'metaTitle', 'metaDesc'];
+
+  for (const field of fieldsToTranslate) {
+    const text = enContent[field];
+    const translations = await translateText(text, 'en', targetLangs, tenantId);
+
+    for (const lang of targetLangs) {
+      if (!results[lang]) {
+        results[lang] = { ...enContent };
+      }
+      if (translations[lang]) {
+        results[lang][field] = translations[lang];
+      }
+    }
+  }
+
+  // Generate slugs from translated titles
+  for (const lang of targetLangs) {
+    if (results[lang]) {
+      results[lang].slug = toSlug(results[lang].title);
+    }
+  }
+
+  return results;
 }
