@@ -129,8 +129,9 @@ async function resolveTenant(req: Request, res: Response, next: NextFunction) {
 
 // ─── Publish gate middleware ──────────────────────────────────────────────────
 // Blocks public requests to draft/suspended tenants.
-// Admin requests always pass through.
+// Authenticated admins always pass through regardless of status.
 function requirePublished(req: Request, res: Response, next: NextFunction) {
+  if (req.session?.adminId) return next(); // Admins can view/edit draft tenants
   if (req.tenant.status === 'yayinda') return next();
   return res.status(404).json({ status: 'coming_soon', message: 'Bu site henüz yayında değil.' });
 }

@@ -61,7 +61,13 @@ export function WidgetEmbed() {
   });
 
   const enabled = widgets.filter(w => w.isEnabled);
-  if (enabled.length === 0) return null;
+  if (enabled.length === 0) return (
+    <section className="w-full py-8" data-testid="widget-empty-state">
+      <div className="max-w-6xl mx-auto px-4 flex items-center justify-center min-h-24 border-2 border-dashed border-muted-foreground/20 rounded-lg text-muted-foreground text-sm">
+        Widget alanı boş — yönetici panelinden embed kodu ekleyin.
+      </div>
+    </section>
+  );
 
   return (
     <>

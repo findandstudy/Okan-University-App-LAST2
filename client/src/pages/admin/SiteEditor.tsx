@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'wouter';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import AdminLayout from './AdminLayout';
@@ -29,7 +29,7 @@ import HeroContent from './HeroContent';
 import WhyChooseUs from './WhyChooseUs';
 import ContactInfo from './ContactInfo';
 import FooterContent from './FooterContent';
-import { Construction } from 'lucide-react';
+import { Construction, Upload } from 'lucide-react';
 import type { Tenant, Widget } from '@shared/schema';
 
 function PlaceholderTab({ title, description }: { title: string; description: string }) {
@@ -42,6 +42,162 @@ function PlaceholderTab({ title, description }: { title: string; description: st
           <p className="text-muted-foreground text-sm">{description}</p>
         </div>
         <p className="text-xs text-muted-foreground">Coming soon</p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function TenantSettingsTab({ tenantId }: { tenantId: string }) {
+  const { toast } = useToast();
+  const { data: tenant, isLoading } = useQuery<Tenant>({
+    queryKey: ['/api/admin/tenants', tenantId],
+    queryFn: async () => {
+      const res = await fetch(`/api/admin/tenants/${tenantId}`, { credentials: 'include' });
+      if (!res.ok) throw new Error('Failed to fetch tenant');
+      return res.json();
+    },
+  });
+  const [form, setForm] = useState({ universityName: '', domain: '', facebookUrl: '', instagramUrl: '', linkedinUrl: '', youtubeUrl: '' });
+  useEffect(() => {
+    if (tenant) setForm({
+      universityName: tenant.universityName ?? '',
+      domain: tenant.domain ?? '',
+      facebookUrl: (tenant as any).facebookUrl ?? '',
+      instagramUrl: (tenant as any).instagramUrl ?? '',
+      linkedinUrl: (tenant as any).linkedinUrl ?? '',
+      youtubeUrl: (tenant as any).youtubeUrl ?? '',
+    });
+  }, [tenant]);
+  const saveMutation = useMutation({
+    mutationFn: async (data: typeof form) => {
+      const res = await apiRequest('PATCH', `/api/admin/tenants/${tenantId}`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/tenants', tenantId] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/tenants'] });
+      toast({ title: 'Site settings saved' });
+    },
+    onError: () => toast({ title: 'Error', description: 'Failed to save settings', variant: 'destructive' }),
+  });
+  if (isLoading) return <div className="flex items-center justify-center h-32"><Loader2 className="h-6 w-6 animate-spin" /></div>;
+  return (
+    <Card>
+      <CardHeader><CardTitle>Site Settings</CardTitle></CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="universityName">University Name</Label>
+            <Input id="universityName" value={form.universityName} onChange={e => setForm(p => ({ ...p, universityName: e.target.value }))} data-testid="input-university-name" />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="domain">Domain</Label>
+            <Input id="domain" value={form.domain} onChange={e => setForm(p => ({ ...p, domain: e.target.value }))} data-testid="input-domain" />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="facebook">Facebook URL</Label>
+            <Input id="facebook" value={form.facebookUrl} onChange={e => setForm(p => ({ ...p, facebookUrl: e.target.value }))} placeholder="https://facebook.com/..." />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="instagram">Instagram URL</Label>
+            <Input id="instagram" value={form.instagramUrl} onChange={e => setForm(p => ({ ...p, instagramUrl: e.target.value }))} placeholder="https://instagram.com/..." />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="linkedin">LinkedIn URL</Label>
+            <Input id="linkedin" value={form.linkedinUrl} onChange={e => setForm(p => ({ ...p, linkedinUrl: e.target.value }))} placeholder="https://linkedin.com/..." />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="youtube">YouTube URL</Label>
+            <Input id="youtube" value={form.youtubeUrl} onChange={e => setForm(p => ({ ...p, youtubeUrl: e.target.value }))} placeholder="https://youtube.com/..." />
+          </div>
+        </div>
+        <div className="flex justify-end">
+          <Button onClick={() => saveMutation.mutate(form)} disabled={saveMutation.isPending} data-testid="button-save-settings">
+            {saveMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+            Save Settings
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function TenantMediaTab({ tenantId }: { tenantId: string }) {
+  const { toast } = useToast();
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const { data: mediaItems = [], isLoading, refetch } = useQuery<Array<{ id: string; url: string; filename: string; mimeType: string }>>({
+    queryKey: ['/api/media', tenantId],
+    queryFn: async () => {
+      const res = await fetch(`/api/media?_tid=${tenantId}`, { credentials: 'include' });
+      if (!res.ok) return [];
+      return res.json();
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest('DELETE', `/api/media/${id}?_tid=${tenantId}`);
+    },
+    onSuccess: () => { refetch(); toast({ title: 'File deleted' }); },
+    onError: () => toast({ title: 'Error', description: 'Failed to delete file', variant: 'destructive' }),
+  });
+
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch(`/api/upload?_tid=${tenantId}`, { method: 'POST', body: formData, credentials: 'include' });
+      if (!res.ok) throw new Error('Upload failed');
+      refetch();
+      toast({ title: 'File uploaded' });
+    } catch {
+      toast({ title: 'Error', description: 'Failed to upload file', variant: 'destructive' });
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <CardTitle>Media Library</CardTitle>
+          <Button size="sm" className="gap-1.5" onClick={() => fileInputRef.current?.click()} disabled={uploading} data-testid="button-upload-media">
+            {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+            Upload
+          </Button>
+          <input ref={fileInputRef} type="file" className="hidden" onChange={handleUpload} accept="image/*,application/pdf" />
+        </div>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <div className="flex items-center justify-center h-32"><Loader2 className="h-6 w-6 animate-spin" /></div>
+        ) : mediaItems.length === 0 ? (
+          <div className="text-center text-muted-foreground py-12 text-sm">No media files yet. Upload your first file.</div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+            {mediaItems.map(item => (
+              <div key={item.id} className="relative group border rounded overflow-hidden" data-testid={`media-item-${item.id}`}>
+                {item.mimeType?.startsWith('image/') ? (
+                  <img src={item.url} alt={item.filename} className="w-full h-24 object-cover" />
+                ) : (
+                  <div className="w-full h-24 flex items-center justify-center bg-muted text-xs text-muted-foreground">{item.filename}</div>
+                )}
+                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1">
+                  <Button variant="destructive" size="icon" className="h-7 w-7" onClick={() => deleteMutation.mutate(item.id)}>
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -345,6 +501,7 @@ export default function SiteEditor() {
               <TabsTrigger value="widget" data-testid="tab-widget">Widget</TabsTrigger>
               <TabsTrigger value="seo" data-testid="tab-seo">SEO</TabsTrigger>
               <TabsTrigger value="media" data-testid="tab-media">Media</TabsTrigger>
+              <TabsTrigger value="settings" data-testid="tab-settings">Settings</TabsTrigger>
               <TabsTrigger value="blog" data-testid="tab-blog">Blog</TabsTrigger>
               <TabsTrigger value="versions" data-testid="tab-versions">Versions</TabsTrigger>
             </TabsList>
@@ -397,7 +554,11 @@ export default function SiteEditor() {
             </TabsContent>
 
             <TabsContent value="media" className="mt-4">
-              <PlaceholderTab title="Media Library" description="Upload and manage images, logos, and files for this site." />
+              <TenantMediaTab tenantId={tenantId} />
+            </TabsContent>
+
+            <TabsContent value="settings" className="mt-4">
+              <TenantSettingsTab tenantId={tenantId} />
             </TabsContent>
 
             <TabsContent value="blog" className="mt-4">
