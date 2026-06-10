@@ -289,6 +289,19 @@ export type InsertBlogPostTranslation = z.infer<typeof insertBlogPostTranslation
 export type BlogSchedule = typeof blogSchedule.$inferSelect;
 export type InsertBlogSchedule = z.infer<typeof insertBlogScheduleSchema>;
 
+// Site Versions — snapshots of all tenant content (max 10 kept per tenant)
+export const siteVersions = pgTable("site_versions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  label: text("label").notNull().default("Manual snapshot"),
+  snapshotData: jsonb("snapshot_data").notNull().$type<Record<string, any>>(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertSiteVersionSchema = createInsertSchema(siteVersions).omit({ id: true, createdAt: true });
+export type SiteVersion = typeof siteVersions.$inferSelect;
+export type InsertSiteVersion = z.infer<typeof insertSiteVersionSchema>;
+
 // Users table (kept for compatibility)
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

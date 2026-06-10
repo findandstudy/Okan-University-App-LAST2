@@ -4,7 +4,7 @@ import {
   tenants, tenantDomains, tenantThemes, sections, menuItems,
   adminUsers, integrationSettings, mediaAssets, faqItems,
   testimonials, trustBadges, seoSettings, widgets,
-  blogPosts, blogPostTranslations, blogSchedule,
+  blogPosts, blogPostTranslations, blogSchedule, siteVersions,
   type Tenant, type InsertTenant,
   type TenantDomain, type InsertTenantDomain,
   type TenantTheme, type InsertTenantTheme,
@@ -19,6 +19,7 @@ import {
   type BlogPost, type InsertBlogPost,
   type BlogPostTranslation, type InsertBlogPostTranslation,
   type BlogSchedule, type InsertBlogSchedule,
+  type SiteVersion, type InsertSiteVersion,
 } from '@shared/schema';
 
 export interface IStorage {
@@ -107,6 +108,13 @@ export interface IStorage {
   // Blog Schedule
   getBlogSchedule(tenantId: string): Promise<BlogSchedule | undefined>;
   upsertBlogSchedule(tenantId: string, data: Partial<InsertBlogSchedule>): Promise<BlogSchedule>;
+
+  // Site Versions
+  getSiteVersions(tenantId: string): Promise<SiteVersion[]>;
+  getSiteVersion(id: string): Promise<SiteVersion | undefined>;
+  createSiteVersion(version: InsertSiteVersion): Promise<SiteVersion>;
+  deleteSiteVersion(id: string): Promise<boolean>;
+  pruneOldVersions(tenantId: string, keep?: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -533,6 +541,37 @@ export class DatabaseStorage implements IStorage {
       .values({ tenantId, ...data } as any)
       .returning();
     return created;
+  }
+
+  // Site Versions
+  async getSiteVersions(tenantId: string): Promise<SiteVersion[]> {
+    return db.select().from(siteVersions)
+      .where(eq(siteVersions.tenantId, tenantId))
+      .orderBy(desc(siteVersions.createdAt));
+  }
+
+  async getSiteVersion(id: string): Promise<SiteVersion | undefined> {
+    const [v] = await db.select().from(siteVersions).where(eq(siteVersions.id, id));
+    return v;
+  }
+
+  async createSiteVersion(version: InsertSiteVersion): Promise<SiteVersion> {
+    const [created] = await db.insert(siteVersions).values(version as any).returning();
+    return created;
+  }
+
+  async deleteSiteVersion(id: string): Promise<boolean> {
+    const result = await db.delete(siteVersions).where(eq(siteVersions.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async pruneOldVersions(tenantId: string, keep = 10): Promise<void> {
+    const all = await this.getSiteVersions(tenantId);
+    if (all.length <= keep) return;
+    const toDelete = all.slice(keep); // already ordered desc by createdAt
+    for (const v of toDelete) {
+      await db.delete(siteVersions).where(eq(siteVersions.id, v.id));
+    }
   }
 }
 

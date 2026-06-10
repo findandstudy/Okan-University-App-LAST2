@@ -20,6 +20,7 @@ import { db } from "./db";
 import { integrationSettings, SUPPORTED_LANGUAGES } from "@shared/schema";
 import { sql, and, eq } from "drizzle-orm";
 import { startBlogScheduler } from "./blogScheduler";
+import { buildSiteZip, captureSnapshot, restoreSnapshot } from "./zipExporter";
 
 const PgStore = connectPgSimple(session);
 
@@ -1616,6 +1617,70 @@ Rules:
       res.json(schedule);
     } catch (err: any) {
       res.status(500).json({ error: err?.message || 'Failed to save schedule' });
+    }
+  });
+
+  // ─── Site Versions API ───────────────────────────────────────────────────────
+  // List versions for a tenant (admin panel uses ?_tid= override)
+  app.get("/api/admin/sites/:tenantId/versions", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
+    try {
+      const versions = await storage.getSiteVersions(req.tenantId);
+      res.json(versions.map(v => ({ id: v.id, label: v.label, createdAt: v.createdAt })));
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || 'Failed to fetch versions' });
+    }
+  });
+
+  // Create manual snapshot
+  app.post("/api/admin/sites/:tenantId/versions", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
+    try {
+      const label = req.body?.label || `Manual — ${new Date().toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}`;
+      const snapshot = await captureSnapshot(req.tenantId);
+      const version = await storage.createSiteVersion({ tenantId: req.tenantId, label, snapshotData: snapshot });
+      await storage.pruneOldVersions(req.tenantId, 10);
+      res.status(201).json({ id: version.id, label: version.label, createdAt: version.createdAt });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || 'Failed to create version' });
+    }
+  });
+
+  // Restore a version
+  app.post("/api/admin/sites/:tenantId/versions/:versionId/restore", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
+    try {
+      const version = await storage.getSiteVersion(req.params.versionId as string);
+      if (!version || version.tenantId !== req.tenantId) return res.status(404).json({ error: 'Version not found' });
+      await restoreSnapshot(req.tenantId, version.snapshotData);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || 'Failed to restore version' });
+    }
+  });
+
+  // Delete a version
+  app.delete("/api/admin/sites/:tenantId/versions/:versionId", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
+    try {
+      const version = await storage.getSiteVersion(req.params.versionId as string);
+      if (!version || version.tenantId !== req.tenantId) return res.status(404).json({ error: 'Version not found' });
+      await storage.deleteSiteVersion(req.params.versionId as string);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || 'Failed to delete version' });
+    }
+  });
+
+  // ─── ZIP Export ──────────────────────────────────────────────────────────────
+  app.post("/api/admin/sites/:tenantId/export-zip", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
+    try {
+      const zipBuffer = await buildSiteZip(req.tenantId);
+      const tenant = await storage.getTenant(req.tenantId);
+      const filename = `${(tenant?.domain || req.tenantId).replace(/[^a-z0-9]/gi, '-')}-${Date.now()}.zip`;
+      res.set('Content-Type', 'application/zip');
+      res.set('Content-Disposition', `attachment; filename="${filename}"`);
+      res.set('Content-Length', zipBuffer.length.toString());
+      res.send(zipBuffer);
+    } catch (err: any) {
+      console.error('ZIP export error:', err);
+      res.status(500).json({ error: err?.message || 'Failed to generate ZIP' });
     }
   });
 

@@ -12,7 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, Globe, Power, PowerOff, Plus, Trash2, Pencil, Loader2, Code, Link as LinkIcon } from 'lucide-react';
+import { ArrowLeft, Globe, Power, PowerOff, Plus, Trash2, Pencil, Loader2, Code, Link as LinkIcon, Download, History, RotateCcw } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -33,6 +33,160 @@ import AISettings from './AISettings';
 import ContentGenerator from './ContentGenerator';
 import { Construction, Upload } from 'lucide-react';
 import type { Tenant, Widget } from '@shared/schema';
+
+// ─── Versions Tab ─────────────────────────────────────────────────────────────
+interface VersionEntry {
+  id: string;
+  label: string;
+  createdAt: string;
+}
+
+function VersionsTab({ tenantId }: { tenantId: string }) {
+  const { toast } = useToast();
+  const [savingVersion, setSavingVersion] = useState(false);
+  const [restoringId, setRestoringId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [labelInput, setLabelInput] = useState('');
+
+  const { data: versions = [], isLoading, refetch } = useQuery<VersionEntry[]>({
+    queryKey: ['/api/admin/sites', tenantId, 'versions'],
+    queryFn: async () => {
+      const res = await fetch(`/api/admin/sites/${tenantId}/versions?_tid=${tenantId}`, { credentials: 'include' });
+      if (!res.ok) throw new Error('Failed to fetch versions');
+      return res.json();
+    },
+  });
+
+  const handleSave = async () => {
+    setSavingVersion(true);
+    try {
+      const res = await apiRequest('POST', `/api/admin/sites/${tenantId}/versions?_tid=${tenantId}`, { label: labelInput || undefined });
+      if (!res.ok) throw new Error('Failed to save');
+      setLabelInput('');
+      refetch();
+      toast({ title: 'Version saved' });
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' });
+    } finally {
+      setSavingVersion(false);
+    }
+  };
+
+  const handleRestore = async (id: string) => {
+    if (!confirm('Restore this version? Current content will be overwritten.')) return;
+    setRestoringId(id);
+    try {
+      await apiRequest('POST', `/api/admin/sites/${tenantId}/versions/${id}/restore?_tid=${tenantId}`, {});
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/tenants', tenantId] });
+      toast({ title: 'Version restored! Refresh the page to see changes.' });
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' });
+    } finally {
+      setRestoringId(null);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Delete this version?')) return;
+    setDeletingId(id);
+    try {
+      await apiRequest('DELETE', `/api/admin/sites/${tenantId}/versions/${id}?_tid=${tenantId}`);
+      refetch();
+      toast({ title: 'Version deleted' });
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' });
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <History className="h-4 w-4" />
+            Save New Version
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex gap-2">
+            <Input
+              placeholder="Version label (optional)"
+              value={labelInput}
+              onChange={e => setLabelInput(e.target.value)}
+              data-testid="input-version-label"
+              className="max-w-sm"
+            />
+            <Button onClick={handleSave} disabled={savingVersion} data-testid="button-save-version">
+              {savingVersion ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Plus className="h-4 w-4 mr-2" />}
+              Save Snapshot
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground mt-2">
+            Saves the current state of all site content (sections, FAQ, testimonials, theme, SEO). Last 10 versions are kept.
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Version History</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="flex items-center justify-center h-24"><Loader2 className="h-5 w-5 animate-spin" /></div>
+          ) : versions.length === 0 ? (
+            <div className="text-center text-muted-foreground py-10 text-sm">
+              No saved versions yet. Click "Save Snapshot" to create the first one.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {versions.map((v, idx) => (
+                <div key={v.id} className="flex items-center justify-between p-3 border rounded-lg" data-testid={`version-${v.id}`}>
+                  <div>
+                    <p className="font-medium text-sm">{v.label}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {new Date(v.createdAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}
+                      {idx === 0 && <span className="ml-2 inline-block bg-primary/10 text-primary text-[10px] px-1.5 py-0.5 rounded-full">Latest</span>}
+                    </p>
+                  </div>
+                  <div className="flex gap-1">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-blue-600 border-blue-200 hover:bg-blue-50"
+                      onClick={() => handleRestore(v.id)}
+                      disabled={restoringId === v.id}
+                      data-testid={`button-restore-${v.id}`}
+                    >
+                      {restoringId === v.id ? (
+                        <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                      ) : (
+                        <RotateCcw className="h-3.5 w-3.5 mr-1" />
+                      )}
+                      Restore
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-destructive hover:bg-destructive/10"
+                      onClick={() => handleDelete(v.id)}
+                      disabled={deletingId === v.id}
+                      data-testid={`button-delete-version-${v.id}`}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
 
 function PlaceholderTab({ title, description }: { title: string; description: string }) {
   return (
@@ -442,17 +596,55 @@ export default function SiteEditor() {
     enabled: !!tenantId,
   });
 
+  const [exportingZip, setExportingZip] = useState(false);
+
   const statusMutation = useMutation({
     mutationFn: async (status: string) => {
       const res = await apiRequest('PATCH', `/api/admin/tenants/${tenantId}`, { status });
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: async (_data, status) => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/tenants', tenantId] });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/tenants'] });
       toast({ title: 'Status updated' });
+      // Auto-snapshot when publishing
+      if (status === 'yayinda') {
+        try {
+          await apiRequest('POST', `/api/admin/sites/${tenantId}/versions?_tid=${tenantId}`, {
+            label: `Auto — Published ${new Date().toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}`,
+          });
+          queryClient.invalidateQueries({ queryKey: ['/api/admin/sites', tenantId, 'versions'] });
+        } catch { /* non-critical — don't surface */ }
+      }
     },
   });
+
+  const handleExportZip = async () => {
+    setExportingZip(true);
+    try {
+      const res = await fetch(`/api/admin/sites/${tenantId}/export-zip?_tid=${tenantId}`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      if (!res.ok) throw new Error('Export failed');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const cd = res.headers.get('Content-Disposition') || '';
+      const m = cd.match(/filename="([^"]+)"/);
+      a.download = m ? m[1] : 'site-export.zip';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast({ title: 'ZIP downloaded' });
+    } catch (e: any) {
+      toast({ title: 'Export failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setExportingZip(false);
+    }
+  };
 
   const isPublished = tenant?.status === 'yayinda';
 
@@ -489,6 +681,18 @@ export default function SiteEditor() {
               >
                 {isPublished ? <PowerOff className="h-3 w-3" /> : <Power className="h-3 w-3" />}
                 {isPublished ? 'Unpublish' : 'Publish'}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1"
+                onClick={handleExportZip}
+                disabled={exportingZip || isLoading}
+                data-testid="button-export-zip"
+                title="Download full site as ZIP (10 languages)"
+              >
+                {exportingZip ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
+                ZIP
               </Button>
               {tenant?.domain && (
                 <a href={`https://${tenant.domain}`} target="_blank" rel="noopener noreferrer">
@@ -597,7 +801,7 @@ export default function SiteEditor() {
             </TabsContent>
 
             <TabsContent value="versions" className="mt-4">
-              <PlaceholderTab title="Version History" description="View and restore previous versions of this site's content." />
+              <VersionsTab tenantId={tenantId} />
             </TabsContent>
           </Tabs>
         </div>
