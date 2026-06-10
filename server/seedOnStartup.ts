@@ -1,6 +1,9 @@
 import { db } from './db';
 import { tenants, tenantDomains, adminUsers, sections, tenantThemes } from '@shared/schema';
 import { eq } from 'drizzle-orm';
+import bcrypt from 'bcryptjs';
+
+const BCRYPT_ROUNDS = 10;
 
 const defaultTenant = {
   id: 'default',
@@ -14,16 +17,6 @@ const defaultTenantDomain = {
   tenantId: 'default',
   domain: 'okanuniversity.app',
   isPrimary: true,
-};
-
-const demoAdmin = {
-  id: 'admin-1',
-  tenantId: 'default',
-  email: 'admin@okan.edu.tr',
-  passwordHash: 'admin123',
-  name: 'Admin User',
-  role: 'super_admin',
-  isActive: true,
 };
 
 const defaultSections = [
@@ -66,12 +59,31 @@ export async function seedDatabase() {
       await db.insert(tenantDomains).values(defaultTenantDomain);
     }
 
-    // Admin
-    const existingAdmin = await db.select().from(adminUsers).where(eq(adminUsers.email, 'admin@okan.edu.tr'));
-    if (existingAdmin.length === 0) {
+    // Admin — create or migrate password to bcrypt hash
+    const existingAdmins = await db.select().from(adminUsers).where(eq(adminUsers.email, 'admin@okan.edu.tr'));
+    if (existingAdmins.length === 0) {
       console.log('Creating demo admin user...');
-      await db.insert(adminUsers).values(demoAdmin);
+      const passwordHash = await bcrypt.hash('admin123', BCRYPT_ROUNDS);
+      await db.insert(adminUsers).values({
+        id: 'admin-1',
+        tenantId: 'default',
+        email: 'admin@okan.edu.tr',
+        passwordHash,
+        name: 'Admin User',
+        role: 'super_admin',
+        isActive: true,
+      });
       console.log('Created admin user (admin@okan.edu.tr / admin123)');
+    } else {
+      // Migrate plain-text password to bcrypt if needed
+      const existing = existingAdmins[0];
+      if (!existing.passwordHash.startsWith('$2')) {
+        console.log('Migrating admin password to bcrypt hash...');
+        const passwordHash = await bcrypt.hash(existing.passwordHash, BCRYPT_ROUNDS);
+        await db.update(adminUsers)
+          .set({ passwordHash })
+          .where(eq(adminUsers.id, existing.id));
+      }
     }
 
     // Sections

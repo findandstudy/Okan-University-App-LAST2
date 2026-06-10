@@ -5,6 +5,15 @@ import { createServer } from "http";
 import { seedDatabase } from "./seedOnStartup";
 import compression from "compression";
 
+// ─── SESSION_SECRET is mandatory — fail fast if missing ───────────────────────
+if (!process.env.SESSION_SECRET) {
+  console.error(
+    "FATAL: SESSION_SECRET environment variable is not set. " +
+    "Set it in Replit Secrets or your .env file before starting the server."
+  );
+  process.exit(1);
+}
+
 const app = express();
 
 // Enable gzip/brotli compression for all responses

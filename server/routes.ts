@@ -9,12 +9,15 @@ import {
   type Tenant,
 } from "@shared/schema";
 import session from "express-session";
-import MemoryStore from "memorystore";
+import connectPgSimple from "connect-pg-simple";
 import multer from "multer";
 import sharp from "sharp";
-import { registerObjectStorageRoutes, ObjectStorageService } from "./replit_integrations/object_storage";
+import bcrypt from "bcryptjs";
+import rateLimit from "express-rate-limit";
+import { saveUpload, readUpload, serveUpload } from "./localFileStorage";
+import { db } from "./db";
 
-const SessionStore = MemoryStore(session);
+const PgStore = connectPgSimple(session);
 
 // ─── Type augmentation ────────────────────────────────────────────────────────
 declare module 'express-serve-static-core' {
@@ -128,11 +131,35 @@ export async function registerRoutes(
   // Trust proxy for Replit's HTTPS termination
   app.set('trust proxy', 1);
 
+  // ─── Rate limiters ──────────────────────────────────────────────────────────
+  const loginRateLimit = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Too many login attempts. Try again in 15 minutes." },
+  });
+
+  const uploadRateLimit = rateLimit({
+    windowMs: 60 * 1000, // 1 minute
+    max: 30,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Upload rate limit exceeded. Try again shortly." },
+  });
+
+  // ─── PostgreSQL session store ───────────────────────────────────────────────
   app.use(session({
-    secret: process.env.SESSION_SECRET || 'university-platform-secret-key',
+    secret: process.env.SESSION_SECRET!,
     resave: false,
     saveUninitialized: false,
-    store: new SessionStore({ checkPeriod: 86400000 }),
+    store: new PgStore({
+      // Use the same pg Pool from drizzle's db connection
+      conString: process.env.DATABASE_URL,
+      tableName: 'session',
+      createTableIfMissing: true,
+      pruneSessionInterval: 3600, // prune expired sessions every hour
+    }),
     cookie: {
       secure: 'auto',
       httpOnly: true,
@@ -141,8 +168,17 @@ export async function registerRoutes(
     },
   }));
 
-  // Register Object Storage routes
-  registerObjectStorageRoutes(app);
+  // ─── Local file serving (replaces Replit GCS sidecar) ─────────────────────
+  app.get("/objects/{*objectPath}", (req, res) => {
+    try {
+      const pathParam = Array.isArray(req.params.objectPath)
+        ? req.params.objectPath.join('/')
+        : req.params.objectPath;
+      serveUpload(`/objects/uploads/${pathParam}`, res);
+    } catch (error) {
+      res.status(404).json({ error: "Object not found" });
+    }
+  });
 
   // ─── Optimized image endpoint ───────────────────────────────────────────────
   app.get("/api/img/:id", async (req, res) => {
@@ -161,12 +197,9 @@ export async function registerRoutes(
         return res.send(cached.buffer);
       }
 
-      const objectStorageService = new ObjectStorageService();
       let buffer: Buffer;
       try {
-        const file = await objectStorageService.getObjectEntityFile(`/objects/uploads/${id}`);
-        const [contents] = await file.download();
-        buffer = contents;
+        buffer = readUpload(`/objects/uploads/${id}`);
       } catch {
         return res.status(404).json({ error: "Image not found" });
       }
@@ -242,25 +275,12 @@ export async function registerRoutes(
     limits: { fileSize: 10 * 1024 * 1024 },
   });
 
-  app.post("/api/upload", requireAdmin, upload.single("file"), async (req, res) => {
+  app.post("/api/upload", uploadRateLimit, requireAdmin, upload.single("file"), async (req, res) => {
     try {
       const file = req.file;
       if (!file) return res.status(400).json({ error: "No file uploaded" });
 
-      const objectStorageService = new ObjectStorageService();
-      const uploadURL = await objectStorageService.getObjectEntityUploadURL();
-      const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
-
-      const response = await fetch(uploadURL, {
-        method: "PUT",
-        body: file.buffer,
-        headers: { "Content-Type": file.mimetype || "application/octet-stream" },
-      });
-
-      if (!response.ok) {
-        console.error("GCS upload failed:", response.status, await response.text());
-        return res.status(500).json({ error: "Failed to upload to storage" });
-      }
+      const objectPath = saveUpload(file.buffer, file.originalname);
 
       res.json({ objectPath, metadata: { name: file.originalname, size: file.size, contentType: file.mimetype } });
     } catch (error) {
@@ -270,13 +290,20 @@ export async function registerRoutes(
   });
 
   // ─── Admin Authentication ───────────────────────────────────────────────────
-  app.post("/api/admin/login", async (req, res) => {
+  app.post("/api/admin/login", loginRateLimit, async (req, res) => {
     try {
       const { email, password } = req.body;
       if (!email || !password) return res.status(400).json({ error: "Email and password required" });
 
       const admin = await storage.getAdminByEmail(email);
-      if (!admin || admin.passwordHash !== password) return res.status(401).json({ error: "Invalid credentials" });
+      if (!admin) return res.status(401).json({ error: "Invalid credentials" });
+
+      // Support both bcrypt hashes and legacy plain-text passwords during migration
+      const isHashed = admin.passwordHash.startsWith('$2');
+      const valid = isHashed
+        ? await bcrypt.compare(password, admin.passwordHash)
+        : admin.passwordHash === password;
+      if (!valid) return res.status(401).json({ error: "Invalid credentials" });
 
       req.session.adminId = admin.id;
       req.session.tenantId = admin.tenantId || undefined;
