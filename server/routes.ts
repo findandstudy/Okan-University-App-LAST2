@@ -1737,6 +1737,26 @@ Rules:
     }
   });
 
+  // ─── Caddy on-demand TLS domain verification ─────────────────────────────────
+  // Called by Caddy's `on_demand_tls ask` before issuing a certificate.
+  // Returns 200 for domains registered in tenant_domains, 403 otherwise.
+  // This prevents certificate issuance for unknown/rogue domains.
+  app.get("/api/internal/verify-domain", async (req, res) => {
+    try {
+      const domain = typeof req.query.domain === 'string' ? req.query.domain.trim().toLowerCase() : '';
+      if (!domain) return res.status(400).send('domain parameter required');
+
+      const tenant = await storage.getTenantByHostDomain(domain);
+      if (tenant) {
+        return res.status(200).send('OK');
+      }
+      return res.status(403).send('Forbidden');
+    } catch (err) {
+      console.error('verify-domain error:', err);
+      return res.status(500).send('Internal Server Error');
+    }
+  });
+
   // ─── Start blog scheduler ────────────────────────────────────────────────────
   startBlogScheduler();
 
