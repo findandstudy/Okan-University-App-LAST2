@@ -8,6 +8,7 @@ import { I18nProvider } from "@/lib/i18n";
 import type { Tenant as TenantType } from "@shared/schema";
 import Landing from "@/pages/Landing";
 import AdminLogin from "@/pages/admin/AdminLogin";
+import ChangePassword from "@/pages/admin/ChangePassword";
 import Dashboard from "@/pages/admin/Dashboard";
 import Tenant from "@/pages/admin/Tenant";
 import Theme from "@/pages/admin/Theme";
@@ -29,6 +30,10 @@ function Router() {
       <Route path="/" component={Landing} />
 
       <Route path="/admin/login" component={AdminLogin} />
+      <Route path="/admin/change-password" component={() => {
+        const params = new URLSearchParams(window.location.search);
+        return <ChangePassword forced={params.has('forced')} />;
+      }} />
       <Route path="/admin" component={Dashboard} />
       <Route path="/admin/tenant" component={Tenant} />
       <Route path="/admin/theme" component={Theme} />

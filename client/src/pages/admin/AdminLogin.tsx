@@ -35,11 +35,15 @@ export default function AdminLogin() {
       
       if (data.success) {
         localStorage.setItem('adminAuth', JSON.stringify(data.admin));
-        toast({
-          title: 'Welcome!',
-          description: 'You have successfully logged in.',
-        });
-        navigate('/admin');
+        if (data.mustChangePassword) {
+          navigate('/admin/change-password?forced=1');
+        } else {
+          toast({
+            title: 'Welcome!',
+            description: 'You have successfully logged in.',
+          });
+          navigate('/admin');
+        }
       }
     } catch (error) {
       toast({

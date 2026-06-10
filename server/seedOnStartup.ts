@@ -72,8 +72,9 @@ export async function seedDatabase() {
         name: 'Admin User',
         role: 'super_admin',
         isActive: true,
+        mustChangePassword: true,
       });
-      console.log('Created admin user (admin@okan.edu.tr / admin123)');
+      console.log('Created admin user (admin@okan.edu.tr / admin123) — mustChangePassword=true');
     } else {
       // Migrate plain-text password to bcrypt if needed
       const existing = existingAdmins[0];
@@ -81,7 +82,7 @@ export async function seedDatabase() {
         console.log('Migrating admin password to bcrypt hash...');
         const passwordHash = await bcrypt.hash(existing.passwordHash, BCRYPT_ROUNDS);
         await db.update(adminUsers)
-          .set({ passwordHash })
+          .set({ passwordHash, mustChangePassword: true })
           .where(eq(adminUsers.id, existing.id));
       }
     }

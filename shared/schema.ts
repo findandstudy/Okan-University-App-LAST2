@@ -93,6 +93,7 @@ export const adminUsers = pgTable("admin_users", {
   name: text("name").notNull(),
   role: text("role").default("admin"),
   isActive: boolean("is_active").default(true),
+  mustChangePassword: boolean("must_change_password").default(false),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

@@ -33,6 +33,7 @@ export interface IStorage {
   getAdminById(id: string): Promise<AdminUser | undefined>;
   getAdminByEmail(email: string): Promise<AdminUser | undefined>;
   createAdminUser(admin: InsertAdminUser): Promise<AdminUser>;
+  updateAdminPassword(id: string, passwordHash: string, mustChangePassword: boolean): Promise<void>;
 
   // Sections
   getSections(tenantId: string): Promise<Section[]>;
@@ -145,6 +146,12 @@ export class DatabaseStorage implements IStorage {
   async createAdminUser(admin: InsertAdminUser): Promise<AdminUser> {
     const [created] = await db.insert(adminUsers).values(admin).returning();
     return created;
+  }
+
+  async updateAdminPassword(id: string, passwordHash: string, mustChangePassword: boolean): Promise<void> {
+    await db.update(adminUsers)
+      .set({ passwordHash, mustChangePassword })
+      .where(eq(adminUsers.id, id));
   }
 
   // Sections

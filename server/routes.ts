@@ -169,15 +169,12 @@ export async function registerRoutes(
   }));
 
   // ─── Local file serving (replaces Replit GCS sidecar) ─────────────────────
+  // Serve local uploads — pathParam is everything after /objects/, e.g. "uploads/<uuid>.png"
   app.get("/objects/{*objectPath}", (req, res) => {
-    try {
-      const pathParam = Array.isArray(req.params.objectPath)
-        ? req.params.objectPath.join('/')
-        : req.params.objectPath;
-      serveUpload(`/objects/uploads/${pathParam}`, res);
-    } catch (error) {
-      res.status(404).json({ error: "Object not found" });
-    }
+    const pathParam = Array.isArray(req.params.objectPath)
+      ? req.params.objectPath.join('/')
+      : req.params.objectPath;
+    serveUpload(`/objects/${pathParam}`, res);
   });
 
   // ─── Optimized image endpoint ───────────────────────────────────────────────
@@ -307,13 +304,22 @@ export async function registerRoutes(
 
       req.session.adminId = admin.id;
       req.session.tenantId = admin.tenantId || undefined;
+      // If plain-text password was accepted, upgrade to bcrypt hash now
+      if (!admin.passwordHash.startsWith('$2')) {
+        const newHash = await bcrypt.hash(password, 10);
+        await storage.updateAdminPassword(admin.id, newHash, true);
+      }
 
       req.session.save((err) => {
         if (err) {
           console.error("Session save error:", err);
           return res.status(500).json({ error: "Session save failed" });
         }
-        res.json({ success: true, admin: { id: admin.id, email: admin.email, name: admin.name, role: admin.role } });
+        res.json({
+          success: true,
+          mustChangePassword: admin.mustChangePassword ?? false,
+          admin: { id: admin.id, email: admin.email, name: admin.name, role: admin.role, tenantId: admin.tenantId },
+        });
       });
     } catch (error) {
       console.error("Login error:", error);
@@ -326,6 +332,35 @@ export async function registerRoutes(
       if (err) return res.status(500).json({ error: "Logout failed" });
       res.json({ success: true });
     });
+  });
+
+  // ─── Change Password (first-login or voluntary) ─────────────────────────────
+  app.post("/api/admin/change-password", requireAdmin, async (req, res) => {
+    try {
+      const { currentPassword, newPassword } = req.body;
+      if (!currentPassword || !newPassword) {
+        return res.status(400).json({ error: "currentPassword and newPassword required" });
+      }
+      if (newPassword.length < 8) {
+        return res.status(400).json({ error: "New password must be at least 8 characters" });
+      }
+
+      const admin = await storage.getAdminById(req.session.adminId!);
+      if (!admin) return res.status(401).json({ error: "Unauthorized" });
+
+      const isHashed = admin.passwordHash.startsWith('$2');
+      const valid = isHashed
+        ? await bcrypt.compare(currentPassword, admin.passwordHash)
+        : admin.passwordHash === currentPassword;
+      if (!valid) return res.status(401).json({ error: "Current password is incorrect" });
+
+      const newHash = await bcrypt.hash(newPassword, 10);
+      await storage.updateAdminPassword(admin.id, newHash, false);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Change password error:", error);
+      res.status(500).json({ error: "Failed to change password" });
+    }
   });
 
   app.get("/api/admin/me", requireAdmin, async (req, res) => {
