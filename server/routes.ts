@@ -1739,15 +1739,22 @@ Rules:
 
   // ─── Caddy on-demand TLS domain verification ─────────────────────────────────
   // Called by Caddy's `on_demand_tls ask` before issuing a certificate.
-  // Returns 200 for domains registered in tenant_domains, 403 otherwise.
-  // This prevents certificate issuance for unknown/rogue domains.
+  // Returns 200 ONLY for domains explicitly registered in the tenant_domains
+  // table — no fallback to tenants.domain — so only panel-added domains can
+  // ever receive a Let's Encrypt certificate (abuse prevention).
   app.get("/api/internal/verify-domain", async (req, res) => {
     try {
       const domain = typeof req.query.domain === 'string' ? req.query.domain.trim().toLowerCase() : '';
       if (!domain) return res.status(400).send('domain parameter required');
 
-      const tenant = await storage.getTenantByHostDomain(domain);
-      if (tenant) {
+      // Query tenant_domains directly — intentionally no legacy tenants.domain fallback.
+      const { tenantDomains } = await import('@shared/schema');
+      const rows = await db.select({ id: tenantDomains.id })
+        .from(tenantDomains)
+        .where(eq(tenantDomains.domain, domain))
+        .limit(1);
+
+      if (rows.length > 0) {
         return res.status(200).send('OK');
       }
       return res.status(403).send('Forbidden');

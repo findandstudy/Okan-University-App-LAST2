@@ -23,6 +23,11 @@ module.exports = {
       // Built server bundle produced by `npm run build`
       script: 'dist/index.cjs',
 
+      // Load environment variables from .env file in the project root.
+      // Requires Node.js 20.6+.  If your Node version is older, export the
+      // variables manually in your shell or use a .env loader wrapper instead.
+      node_args: '--env-file=.env',
+
       // Cluster mode: one worker per logical CPU core.
       // Change to 'fork' and instances to 1 for single-core VPS to save RAM.
       exec_mode: 'cluster',

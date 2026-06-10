@@ -83,11 +83,21 @@ This creates all tables using Drizzle's push mechanism. On first run it also see
 
 ### 6 — Start with PM2
 
+The `ecosystem.config.cjs` passes `--env-file=.env` as a Node.js argument,
+so PM2 automatically loads your `.env` file into the process environment.
+This requires **Node.js 20.6+** (bundled with Node.js 20 LTS).
+
 ```bash
 pm2 start ecosystem.config.cjs
 pm2 save          # persist process list across reboots
 pm2 startup       # generate and install startup script
 ```
+
+> **Note:** If Node.js 20.6+ is not available, export variables manually
+> before starting PM2:
+> ```bash
+> export $(grep -v '^#' .env | xargs) && pm2 start ecosystem.config.cjs
+> ```
 
 Check logs:
 ```bash
