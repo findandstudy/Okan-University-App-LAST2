@@ -14,13 +14,13 @@ import { SUPPORTED_LANGUAGES, type SupportedLanguage } from '@shared/schema';
 
 interface Badge {
   icon: string;
-  title: Record<SupportedLanguage, string>;
-  description: Record<SupportedLanguage, string>;
+  title: Partial<Record<SupportedLanguage, string>>;
+  description: Partial<Record<SupportedLanguage, string>>;
 }
 
 interface TrustBadgesSettings {
-  sectionTitle: Record<SupportedLanguage, string>;
-  sectionSubtitle: Record<SupportedLanguage, string>;
+  sectionTitle: Partial<Record<SupportedLanguage, string>>;
+  sectionSubtitle: Partial<Record<SupportedLanguage, string>>;
   badges: Badge[];
 }
 
@@ -30,13 +30,17 @@ interface Section {
   settings?: TrustBadgesSettings;
 }
 
-const languageLabels: Record<SupportedLanguage, string> = {
+const languageLabels: Partial<Record<SupportedLanguage, string>> = {
   en: 'English',
   ar: 'العربية',
   tr: 'Türkçe',
   fr: 'Français',
   ru: 'Русский',
   fa: 'فارسی',
+  zh: '中文',
+  hi: 'हिन्दी',
+  es: 'Español',
+  id: 'Bahasa',
 };
 
 const iconOptions = [
@@ -89,8 +93,8 @@ export default function WhyChooseUs() {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<SupportedLanguage>('en');
   const [settings, setSettings] = useState<TrustBadgesSettings>({
-    sectionTitle: { en: 'Why Choose Us', ar: 'لماذا تختارنا', tr: 'Neden Bizi Seçmelisiniz', fr: 'Pourquoi Nous Choisir', ru: 'Почему мы', fa: 'چرا ما را انتخاب کنید' },
-    sectionSubtitle: { en: 'Trusted by thousands of students to guide their educational journey', ar: 'موثوق به من قبل آلاف الطلاب لتوجيه رحلتهم التعليمية', tr: 'Binlerce öğrenci tarafından eğitim yolculuklarında güvenilir', fr: 'Des milliers d\'étudiants nous font confiance pour les guider', ru: 'Тысячи студентов доверяют нам', fa: 'مورد اعتماد هزاران دانشجو برای راهنمایی سفر تحصیلی' },
+    sectionTitle: { en: 'Why Choose Us', ar: 'لماذا تختارنا', tr: 'Neden Bizi Seçmelisiniz', fr: 'Pourquoi Nous Choisir', ru: 'Почему мы', fa: 'چرا ما را انتخاب کنید', zh: '为什么选择我们', hi: 'हमें क्यों चुनें', es: 'Por Qué Elegirnos', id: 'Mengapa Memilih Kami' },
+    sectionSubtitle: { en: 'Trusted by thousands of students to guide their educational journey', ar: 'موثوق به من قبل آلاف الطلاب لتوجيه رحلتهم التعليمية', tr: 'Binlerce öğrenci tarafından eğitim yolculuklarında güvenilir', fr: 'Des milliers d\'étudiants nous font confiance pour les guider', ru: 'Тысячи студентов доверяют нам', fa: 'مورد اعتماد هزاران دانشجو برای راهنمایی سفر تحصیلی', zh: '受到数千名学生信赖', hi: 'हजारों छात्रों द्वारा विश्वसनीय', es: 'La confianza de miles de estudiantes', id: 'Dipercaya ribuan mahasiswa' },
     badges: defaultBadges,
   });
 

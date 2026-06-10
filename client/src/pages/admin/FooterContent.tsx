@@ -13,11 +13,11 @@ import { Save, Loader2 } from 'lucide-react';
 import { SUPPORTED_LANGUAGES, type SupportedLanguage } from '@shared/schema';
 
 interface FooterSettings {
-  description: Record<SupportedLanguage, string>;
-  contactTitle: Record<SupportedLanguage, string>;
+  description: Partial<Record<SupportedLanguage, string>>;
+  contactTitle: Partial<Record<SupportedLanguage, string>>;
   contactEmail: string;
   contactPhone: string;
-  contactAddress: Record<SupportedLanguage, string>;
+  contactAddress: Partial<Record<SupportedLanguage, string>>;
 }
 
 interface Section {
@@ -26,13 +26,17 @@ interface Section {
   settings?: FooterSettings;
 }
 
-const languageLabels: Record<SupportedLanguage, string> = {
+const languageLabels: Partial<Record<SupportedLanguage, string>> = {
   en: 'English',
   ar: 'العربية',
   tr: 'Türkçe',
   fr: 'Français',
   ru: 'Русский',
   fa: 'فارسی',
+  zh: '中文',
+  hi: 'हिन्दी',
+  es: 'Español',
+  id: 'Bahasa',
 };
 
 const defaultSettings: FooterSettings = {
@@ -43,14 +47,14 @@ const defaultSettings: FooterSettings = {
     fr: 'Votre passerelle vers une éducation de classe mondiale. Nous aidons les étudiants du monde entier à réaliser leurs rêves académiques.',
     ru: 'Ваш путь к образованию мирового класса. Мы помогаем студентам со всего мира осуществить их академические мечты.',
     fa: 'دروازه شما به آموزش در سطح جهانی. ما به دانشجویان از سراسر جهان کمک می‌کنیم تا رویاهای تحصیلی خود را محقق کنند.',
+    zh: '您通往世界一流教育的门户。我们帮助全球学生实现学术梦想。',
+    hi: 'विश्व स्तरीय शिक्षा का आपका द्वार। हम दुनिया भर के छात्रों को उनके शैक्षणिक सपने पूरे करने में मदद करते हैं।',
+    es: 'Su puerta hacia una educación de clase mundial. Ayudamos a estudiantes de todo el mundo a alcanzar sus sueños académicos.',
+    id: 'Gerbang Anda menuju pendidikan kelas dunia. Kami membantu mahasiswa dari seluruh dunia mewujudkan impian akademis mereka.',
   },
   contactTitle: {
-    en: 'Contact',
-    ar: 'اتصل بنا',
-    tr: 'İletişim',
-    fr: 'Contact',
-    ru: 'Контакты',
-    fa: 'تماس',
+    en: 'Contact', ar: 'اتصل بنا', tr: 'İletişim', fr: 'Contact', ru: 'Контакты', fa: 'تماس',
+    zh: '联系', hi: 'संपर्क', es: 'Contacto', id: 'Kontak',
   },
   contactEmail: 'apply@okanuniversity.app',
   contactPhone: '+90 552 689 85 15',
@@ -61,6 +65,10 @@ const defaultSettings: FooterSettings = {
     fr: 'Campus de l\'Université Okan d\'Istanbul',
     ru: 'Кампус Стамбульского университета Окан',
     fa: 'پردیس دانشگاه اوکان استانبول',
+    zh: '伊斯坦布尔奥坎大学校园',
+    hi: 'इस्तांबुल ओकान विश्वविद्यालय परिसर',
+    es: 'Campus de la Universidad Okan de Estambul',
+    id: 'Kampus Universitas Okan Istanbul',
   },
 };
 

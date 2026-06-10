@@ -13,13 +13,13 @@ import { SUPPORTED_LANGUAGES, type SupportedLanguage } from '@shared/schema';
 
 interface ContactItem {
   icon: string;
-  label: Record<SupportedLanguage, string>;
+  label: Partial<Record<SupportedLanguage, string>>;
   value: string;
 }
 
 interface ContactSettings {
-  sectionTitle: Record<SupportedLanguage, string>;
-  sectionSubtitle: Record<SupportedLanguage, string>;
+  sectionTitle: Partial<Record<SupportedLanguage, string>>;
+  sectionSubtitle: Partial<Record<SupportedLanguage, string>>;
   items: ContactItem[];
 }
 
@@ -29,13 +29,17 @@ interface Section {
   settings?: ContactSettings;
 }
 
-const languageLabels: Record<SupportedLanguage, string> = {
+const languageLabels: Partial<Record<SupportedLanguage, string>> = {
   en: 'English',
   ar: 'العربية',
   tr: 'Türkçe',
   fr: 'Français',
   ru: 'Русский',
   fa: 'فارسی',
+  zh: '中文',
+  hi: 'हिन्दी',
+  es: 'Español',
+  id: 'Bahasa',
 };
 
 const iconOptions = [
@@ -72,8 +76,8 @@ export default function ContactInfo() {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<SupportedLanguage>('en');
   const [settings, setSettings] = useState<ContactSettings>({
-    sectionTitle: { en: 'Contact Us', ar: 'اتصل بنا', tr: 'İletişim', fr: 'Contactez-nous', ru: 'Контакты', fa: 'تماس با ما' },
-    sectionSubtitle: { en: 'Have questions? Reach out to our admissions team', ar: 'هل لديك أسئلة؟ تواصل مع فريق القبول لدينا', tr: 'Sorularınız mı var? Kabul ekibimizle iletişime geçin', fr: 'Des questions ? Contactez notre équipe d\'admission', ru: 'Есть вопросы? Свяжитесь с нашей приемной комиссией', fa: 'سوالی دارید؟ با تیم پذیرش ما تماس بگیرید' },
+    sectionTitle: { en: 'Contact Us', ar: 'اتصل بنا', tr: 'İletişim', fr: 'Contactez-nous', ru: 'Контакты', fa: 'تماس با ما', zh: '联系我们', hi: 'संपर्क करें', es: 'Contáctenos', id: 'Hubungi Kami' },
+    sectionSubtitle: { en: 'Have questions? Reach out to our admissions team', ar: 'هل لديك أسئلة؟ تواصل مع فريق القبول لدينا', tr: 'Sorularınız mı var? Kabul ekibimizle iletişime geçin', fr: 'Des questions ? Contactez notre équipe d\'admission', ru: 'Есть вопросы? Свяжитесь с нашей приемной комиссией', fa: 'سوالی دارید؟ با تیم پذیرش ما تماس بگیرید', zh: '有问题？联系我们的招生团队', hi: 'प्रश्न हैं? हमारी प्रवेश टीम से संपर्क करें', es: '¿Preguntas? Contacte a nuestro equipo', id: 'Ada pertanyaan? Hubungi tim penerimaan kami' },
     items: defaultItems,
   });
 

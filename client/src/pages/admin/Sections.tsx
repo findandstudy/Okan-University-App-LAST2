@@ -93,6 +93,10 @@ export default function Sections() {
     fr: { ...emptyContentForm },
     ru: { ...emptyContentForm },
     fa: { ...emptyContentForm },
+    zh: { ...emptyContentForm },
+    hi: { ...emptyContentForm },
+    es: { ...emptyContentForm },
+    id: { ...emptyContentForm },
   });
 
   const { data: sections = [], isLoading } = useQuery<Section[]>({
@@ -231,6 +235,10 @@ export default function Sections() {
       fr: { ...emptyContentForm },
       ru: { ...emptyContentForm },
       fa: { ...emptyContentForm },
+      zh: { ...emptyContentForm },
+      hi: { ...emptyContentForm },
+      es: { ...emptyContentForm },
+      id: { ...emptyContentForm },
     };
     
     if (section.contentByLang) {

@@ -13,17 +13,17 @@ import { Save, Plus, Trash2, Loader2 } from 'lucide-react';
 import { SUPPORTED_LANGUAGES, type SupportedLanguage } from '@shared/schema';
 
 interface HeroSettings {
-  badge: Record<SupportedLanguage, string>;
-  title: Record<SupportedLanguage, string>;
-  subtitle: Record<SupportedLanguage, string>;
-  features: Record<SupportedLanguage, string[]>;
+  badge: Partial<Record<SupportedLanguage, string>>;
+  title: Partial<Record<SupportedLanguage, string>>;
+  subtitle: Partial<Record<SupportedLanguage, string>>;
+  features: Partial<Record<SupportedLanguage, string[]>>;
   stats: {
     stat1Value: string;
-    stat1Label: Record<SupportedLanguage, string>;
-    stat1Sublabel: Record<SupportedLanguage, string>;
+    stat1Label: Partial<Record<SupportedLanguage, string>>;
+    stat1Sublabel: Partial<Record<SupportedLanguage, string>>;
     stat2Value: string;
-    stat2Label: Record<SupportedLanguage, string>;
-    stat2Sublabel: Record<SupportedLanguage, string>;
+    stat2Label: Partial<Record<SupportedLanguage, string>>;
+    stat2Sublabel: Partial<Record<SupportedLanguage, string>>;
   };
 }
 
@@ -33,33 +33,37 @@ interface Section {
   settings?: HeroSettings;
 }
 
-const languageLabels: Record<SupportedLanguage, string> = {
+const languageLabels: Partial<Record<SupportedLanguage, string>> = {
   en: 'English',
   ar: 'العربية',
   tr: 'Türkçe',
   fr: 'Français',
   ru: 'Русский',
   fa: 'فارسی',
+  zh: '中文',
+  hi: 'हिन्दी',
+  es: 'Español',
+  id: 'Bahasa',
 };
 
 export default function HeroContent() {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<SupportedLanguage>('en');
   const [settings, setSettings] = useState<HeroSettings>({
-    badge: { en: 'Applications Open for 2026', ar: '', tr: '', fr: '', ru: '', fa: '' },
-    title: { en: 'Start Your Journey to Excellence', ar: '', tr: '', fr: '', ru: '', fa: '' },
-    subtitle: { en: 'Study at top universities with exclusive scholarships and full support', ar: '', tr: '', fr: '', ru: '', fa: '' },
+    badge: { en: 'Applications Open for 2026', ar: '', tr: '', fr: '', ru: '', fa: '', zh: '', hi: '', es: '', id: '' },
+    title: { en: 'Start Your Journey to Excellence', ar: '', tr: '', fr: '', ru: '', fa: '', zh: '', hi: '', es: '', id: '' },
+    subtitle: { en: 'Study at top universities with exclusive scholarships and full support', ar: '', tr: '', fr: '', ru: '', fa: '', zh: '', hi: '', es: '', id: '' },
     features: {
       en: ['Scholarship opportunities up to 50%', 'Full visa and admission support', '48-hour application processing'],
-      ar: [], tr: [], fr: [], ru: [], fa: [],
+      ar: [], tr: [], fr: [], ru: [], fa: [], zh: [], hi: [], es: [], id: [],
     },
     stats: {
       stat1Value: '50+',
-      stat1Label: { en: 'Programs', ar: 'البرامج', tr: 'Programlar', fr: 'Programmes', ru: 'Программы', fa: 'برنامه‌ها' },
-      stat1Sublabel: { en: 'Available', ar: 'متاح', tr: 'Mevcut', fr: 'Disponibles', ru: 'Доступно', fa: 'موجود' },
+      stat1Label: { en: 'Programs', ar: 'البرامج', tr: 'Programlar', fr: 'Programmes', ru: 'Программы', fa: 'برنامه‌ها', zh: '项目', hi: 'कार्यक्रम', es: 'Programas', id: 'Program' },
+      stat1Sublabel: { en: 'Available', ar: 'متاح', tr: 'Mevcut', fr: 'Disponibles', ru: 'Доступно', fa: 'موجود', zh: '可选', hi: 'उपलब्ध', es: 'Disponibles', id: 'Tersedia' },
       stat2Value: '98%',
-      stat2Label: { en: 'Success Rate', ar: 'نسبة النجاح', tr: 'Başarı Oranı', fr: 'Taux de réussite', ru: 'Успех', fa: 'نرخ موفقیت' },
-      stat2Sublabel: { en: 'Visa Approval', ar: 'الموافقة على التأشيرة', tr: 'Vize Onayı', fr: 'Approbation de visa', ru: 'Виза', fa: 'تایید ویزا' },
+      stat2Label: { en: 'Success Rate', ar: 'نسبة النجاح', tr: 'Başarı Oranı', fr: 'Taux de réussite', ru: 'Успех', fa: 'نرخ موفقیت', zh: '成功率', hi: 'सफलता दर', es: 'Tasa de Éxito', id: 'Tingkat Sukses' },
+      stat2Sublabel: { en: 'Visa Approval', ar: 'الموافقة على التأشيرة', tr: 'Vize Onayı', fr: 'Approbation de visa', ru: 'Виза', fa: 'تایید ویزا', zh: '签证批准', hi: 'वीजा अनुमोदन', es: 'Aprobación de Visa', id: 'Persetujuan Visa' },
     },
   });
 

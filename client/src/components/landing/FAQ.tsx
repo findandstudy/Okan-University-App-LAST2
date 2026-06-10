@@ -148,11 +148,11 @@ export function FAQ() {
   };
 
   const getDefaultQuestion = (faq: typeof defaultFAQs[0]): string => {
-    return faq.question[language as SupportedLanguage] || faq.question.en;
+    return (faq.question as Partial<Record<SupportedLanguage, string>>)[language as SupportedLanguage] || faq.question.en;
   };
 
   const getDefaultAnswer = (faq: typeof defaultFAQs[0]): string => {
-    return faq.answer[language as SupportedLanguage] || faq.answer.en;
+    return (faq.answer as Partial<Record<SupportedLanguage, string>>)[language as SupportedLanguage] || faq.answer.en;
   };
 
   const allFaqs = enabledFaqs.length > 0 ? enabledFaqs : null;

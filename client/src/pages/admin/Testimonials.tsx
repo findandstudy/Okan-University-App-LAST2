@@ -36,7 +36,7 @@ import { Plus, Pencil, Trash2, Upload, Star, Loader2, ImageIcon } from 'lucide-r
 import type { Testimonial, SupportedLanguage } from '@shared/schema';
 import AdminLayout from './AdminLayout';
 
-const SUPPORTED_LANGUAGES: SupportedLanguage[] = ['en', 'ar', 'tr', 'fr', 'ru', 'fa'];
+const SUPPORTED_LANGUAGES: SupportedLanguage[] = ['en', 'ar', 'tr', 'fr', 'ru', 'fa', 'zh', 'hi', 'es', 'id'];
 const LANGUAGE_LABELS: Record<SupportedLanguage, string> = {
   en: 'English',
   ar: 'Arabic',
@@ -44,6 +44,10 @@ const LANGUAGE_LABELS: Record<SupportedLanguage, string> = {
   fr: 'French',
   ru: 'Russian',
   fa: 'Farsi',
+  zh: 'Chinese',
+  hi: 'Hindi',
+  es: 'Spanish',
+  id: 'Indonesian',
 };
 
 interface TestimonialForm {
@@ -54,7 +58,7 @@ interface TestimonialForm {
   rating: number;
   displayOrder: number;
   isEnabled: boolean;
-  contentByLang: Record<SupportedLanguage, string>;
+  contentByLang: Partial<Record<SupportedLanguage, string>>;
 }
 
 const initialFormState: TestimonialForm = {
@@ -66,12 +70,7 @@ const initialFormState: TestimonialForm = {
   displayOrder: 0,
   isEnabled: true,
   contentByLang: {
-    en: '',
-    ar: '',
-    tr: '',
-    fr: '',
-    ru: '',
-    fa: '',
+    en: '', ar: '', tr: '', fr: '', ru: '', fa: '', zh: '', hi: '', es: '', id: '',
   },
 };
 
