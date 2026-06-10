@@ -47,6 +47,7 @@ export default function AISettings({ embedded }: { embedded?: boolean } = {}) {
   const [apiKey, setApiKey] = useState('');
   const [showKey, setShowKey] = useState(false);
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle');
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
 
   const { data: settings, isLoading } = useQuery<AISettingsData>({
     queryKey: ['/api/admin/ai-settings' + apiSuffix],
@@ -58,16 +59,19 @@ export default function AISettings({ embedded }: { embedded?: boolean } = {}) {
   });
 
   useEffect(() => {
-    if (settings) {
+    if (settings && !settingsLoaded) {
       setProvider((settings.provider as any) || 'anthropic');
       setModel(settings.model || 'claude-3-5-haiku-20241022');
+      setSettingsLoaded(true);
     }
-  }, [settings]);
+  }, [settings, settingsLoaded]);
 
-  useEffect(() => {
-    if (provider === 'anthropic') setModel('claude-3-5-haiku-20241022');
+  const handleProviderChange = (v: 'anthropic' | 'openai') => {
+    setProvider(v);
+    // Reset model to provider default when user explicitly changes provider
+    if (v === 'anthropic') setModel('claude-3-5-haiku-20241022');
     else setModel('gpt-4o-mini');
-  }, [provider]);
+  };
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -131,7 +135,7 @@ export default function AISettings({ embedded }: { embedded?: boolean } = {}) {
 
                 <div className="space-y-2">
                   <Label>Provider</Label>
-                  <Select value={provider} onValueChange={(v) => setProvider(v as any)}>
+                  <Select value={provider} onValueChange={(v) => handleProviderChange(v as 'anthropic' | 'openai')}>
                     <SelectTrigger data-testid="select-provider">
                       <SelectValue />
                     </SelectTrigger>

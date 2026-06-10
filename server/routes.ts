@@ -17,6 +17,8 @@ import bcrypt from "bcryptjs";
 import rateLimit from "express-rate-limit";
 import { saveUpload, readUpload, serveUpload } from "./localFileStorage";
 import { db } from "./db";
+import { integrationSettings } from "@shared/schema";
+import { sql, and, eq } from "drizzle-orm";
 
 const PgStore = connectPgSimple(session);
 
@@ -975,6 +977,15 @@ export async function registerRoutes(
       const { encryptApiKey } = await import('./aiService');
       const encryptedApiKey = apiKey ? encryptApiKey(apiKey) : undefined;
       await storage.saveAISettings(req.tenantId, { provider, model, encryptedApiKey });
+      // Clean up legacy integration_settings entries for this tenant
+      await db
+        .delete(integrationSettings)
+        .where(
+          and(
+            eq(integrationSettings.tenantId, req.tenantId),
+            sql`${integrationSettings.integrationType} IN ('n8n', 'portal')`,
+          ),
+        );
       res.json({ success: true });
     } catch {
       res.status(500).json({ error: "Failed to save AI settings" });
@@ -1051,7 +1062,7 @@ export async function registerRoutes(
       const { generatedContent } = req.body;
       if (!generatedContent) return res.status(400).json({ error: "generatedContent is required" });
 
-      const { hero, about, faq } = generatedContent;
+      const { hero, about, faq, seo: seoData } = generatedContent;
 
       // Find or create hero section
       const existingSections = await storage.getSections(req.tenantId);
@@ -1077,6 +1088,67 @@ export async function registerRoutes(
           contentByLang: heroContent,
           settings: null,
         });
+      }
+
+      // Apply About section (find or create)
+      if (about?.title || about?.body) {
+        const aboutSection = existingSections.find(s => s.sectionKey === 'about' || s.sectionKey === 'trust_badges');
+        const aboutContent = {
+          en: {
+            title: about?.title || undefined,
+            body: about?.body || undefined,
+          },
+        };
+        if (aboutSection) {
+          const merged = { ...((aboutSection.contentByLang as any) || {}), ...aboutContent };
+          await storage.updateSection(aboutSection.id, { contentByLang: merged });
+        } else {
+          await storage.createSection({
+            tenantId: req.tenantId,
+            sectionKey: 'about',
+            displayOrder: 1,
+            isEnabled: true,
+            contentByLang: aboutContent,
+            settings: null,
+          });
+        }
+      }
+
+      // Apply SEO settings
+      if (seoData?.metaTitle || seoData?.metaDescription || seoData?.keywords) {
+        const allLangs = ['en','ar','tr','fr','ru','fa','zh','hi','es','id'] as const;
+        const emptyLangMap = Object.fromEntries(allLangs.map(l => [l, ''])) as Record<typeof allLangs[number], string>;
+        const existingSeo = await storage.getSeoSettings(req.tenantId);
+        const seoUpdate = {
+          metaTitleByLang: { ...emptyLangMap, en: seoData.metaTitle || '' },
+          metaDescriptionByLang: { ...emptyLangMap, en: seoData.metaDescription || '' },
+          metaKeywordsByLang: { ...emptyLangMap, en: seoData.keywords || '' },
+        };
+        if (existingSeo) {
+          await storage.updateSeoSettings(req.tenantId, seoUpdate);
+        } else {
+          await storage.createSeoSettings({ tenantId: req.tenantId, ...seoUpdate });
+        }
+      }
+
+      // Trigger background translation for hero section EN content
+      if (hero?.title) {
+        const { translateContentByLang } = await import('./aiTranslation');
+        const targetLangs = ['ar','tr','fr','ru','fa','zh','hi','es','id'];
+        translateContentByLang(
+          { title: hero.title, subtitle: hero.subtitle, body: hero.body, ctaLabel: hero.ctaLabel },
+          'en',
+          targetLangs,
+          req.tenantId,
+        ).then(async (translated) => {
+          const fullContent: Record<string, any> = { en: { title: hero.title, subtitle: hero.subtitle, body: hero.body, ctaLabel: hero.ctaLabel } };
+          for (const [lang, content] of Object.entries(translated)) {
+            fullContent[lang] = content;
+          }
+          const sections2 = await storage.getSections(req.tenantId);
+          const heroSec = sections2.find(s => s.sectionKey === 'hero');
+          if (heroSec) await storage.updateSection(heroSec.id, { contentByLang: fullContent });
+        }).catch(() => {/* background — ignore errors */});
       }
 
       // Create FAQ items
