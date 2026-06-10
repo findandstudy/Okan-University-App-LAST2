@@ -23,9 +23,63 @@ export interface GeneratedContent {
   };
 }
 
+const PRIVATE_IP_RANGES = [
+  /^127\./,
+  /^10\./,
+  /^172\.(1[6-9]|2\d|3[01])\./,
+  /^192\.168\./,
+  /^169\.254\./,
+  /^::1$/,
+  /^fc00:/i,
+  /^fe80:/i,
+  /^0\./,
+  /^localhost$/i,
+];
+
+function isPrivateHost(hostname: string): boolean {
+  return PRIVATE_IP_RANGES.some(re => re.test(hostname));
+}
+
 export async function extractTextFromUrl(url: string): Promise<string> {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error('Invalid URL');
+  }
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+    throw new Error('Only http and https URLs are allowed');
+  }
+  if (isPrivateHost(parsed.hostname)) {
+    throw new Error('Requests to private/internal network addresses are not allowed');
+  }
+
   const cheerio = await import('cheerio');
-  const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+  let res: Response;
+  try {
+    res = await fetch(parsed.toString(), {
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+      signal: controller.signal,
+      redirect: 'follow',
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  // Re-check after redirect in case redirect landed on private host
+  if (res.url) {
+    try {
+      const redirected = new URL(res.url);
+      if (isPrivateHost(redirected.hostname)) {
+        throw new Error('Redirect to private/internal network address blocked');
+      }
+    } catch (e: any) {
+      if (e.message.includes('blocked')) throw e;
+    }
+  }
+
   if (!res.ok) throw new Error(`Failed to fetch URL: ${res.statusText}`);
   const html = await res.text();
   const $ = cheerio.load(html);

@@ -58,6 +58,10 @@ const LANGUAGES: { code: SupportedLanguage; label: string }[] = [
   { code: 'fr', label: 'Français' },
   { code: 'ru', label: 'Русский' },
   { code: 'fa', label: 'فارسی' },
+  { code: 'zh', label: '中文' },
+  { code: 'hi', label: 'हिन्दी' },
+  { code: 'es', label: 'Español' },
+  { code: 'id', label: 'Bahasa Indonesia' },
 ];
 
 interface SectionState {

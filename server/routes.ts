@@ -1068,56 +1068,59 @@ export async function registerRoutes(
       const existingSections = await storage.getSections(req.tenantId);
       const heroSection = existingSections.find(s => s.sectionKey === 'hero');
 
-      const heroContent = {
-        en: {
-          title: hero?.title || undefined,
-          subtitle: hero?.subtitle || undefined,
-          body: hero?.body || undefined,
-          ctaLabel: hero?.ctaLabel || undefined,
-        },
+      const ALL_LANGS = ['en','ar','tr','fr','ru','fa','zh','hi','es','id'] as const;
+      const TARGET_LANGS = ['ar','tr','fr','ru','fa','zh','hi','es','id'];
+      const emptyLangMap = Object.fromEntries(ALL_LANGS.map(l => [l, ''])) as Record<typeof ALL_LANGS[number], string>;
+
+      // ── Hero section: merge-safe write (preserve existing non-EN fields) ──────
+      const heroEnContent = {
+        title: hero?.title || '',
+        subtitle: hero?.subtitle || '',
+        body: hero?.body || '',
+        ctaLabel: hero?.ctaLabel || '',
       };
+      const heroExisting = (heroSection?.contentByLang as Record<string, any>) || {};
+      // Merge: keep existing per-lang translations, overwrite only EN
+      const heroMerged: Record<string, any> = { ...heroExisting, en: heroEnContent };
 
       if (heroSection) {
-        await storage.updateSection(heroSection.id, { contentByLang: heroContent });
+        await storage.updateSection(heroSection.id, { contentByLang: heroMerged });
       } else {
         await storage.createSection({
           tenantId: req.tenantId,
           sectionKey: 'hero',
           displayOrder: 0,
           isEnabled: true,
-          contentByLang: heroContent,
+          contentByLang: heroMerged,
           settings: null,
         });
       }
 
-      // Apply About section (find or create)
+      // ── About section: merge-safe write ──────────────────────────────────────
+      let aboutSectionId: string | null = null;
       if (about?.title || about?.body) {
-        const aboutSection = existingSections.find(s => s.sectionKey === 'about' || s.sectionKey === 'trust_badges');
-        const aboutContent = {
-          en: {
-            title: about?.title || undefined,
-            body: about?.body || undefined,
-          },
-        };
+        const aboutSection = existingSections.find(s => s.sectionKey === 'about');
+        const aboutEnContent = { title: about?.title || '', body: about?.body || '' };
+        const aboutExisting = (aboutSection?.contentByLang as Record<string, any>) || {};
+        const aboutMerged: Record<string, any> = { ...aboutExisting, en: aboutEnContent };
         if (aboutSection) {
-          const merged = { ...((aboutSection.contentByLang as any) || {}), ...aboutContent };
-          await storage.updateSection(aboutSection.id, { contentByLang: merged });
+          await storage.updateSection(aboutSection.id, { contentByLang: aboutMerged });
+          aboutSectionId = aboutSection.id;
         } else {
-          await storage.createSection({
+          const created = await storage.createSection({
             tenantId: req.tenantId,
             sectionKey: 'about',
             displayOrder: 1,
             isEnabled: true,
-            contentByLang: aboutContent,
+            contentByLang: aboutMerged,
             settings: null,
           });
+          aboutSectionId = created.id;
         }
       }
 
-      // Apply SEO settings
+      // ── SEO settings ─────────────────────────────────────────────────────────
       if (seoData?.metaTitle || seoData?.metaDescription || seoData?.keywords) {
-        const allLangs = ['en','ar','tr','fr','ru','fa','zh','hi','es','id'] as const;
-        const emptyLangMap = Object.fromEntries(allLangs.map(l => [l, ''])) as Record<typeof allLangs[number], string>;
         const existingSeo = await storage.getSeoSettings(req.tenantId);
         const seoUpdate = {
           metaTitleByLang: { ...emptyLangMap, en: seoData.metaTitle || '' },
@@ -1131,48 +1134,100 @@ export async function registerRoutes(
         }
       }
 
-      // Trigger background translation for hero section EN content
-      if (hero?.title) {
-        const { translateContentByLang } = await import('./aiTranslation');
-        const targetLangs = ['ar','tr','fr','ru','fa','zh','hi','es','id'];
-        translateContentByLang(
-          { title: hero.title, subtitle: hero.subtitle, body: hero.body, ctaLabel: hero.ctaLabel },
-          'en',
-          targetLangs,
-          req.tenantId,
-        ).then(async (translated) => {
-          const fullContent: Record<string, any> = { en: { title: hero.title, subtitle: hero.subtitle, body: hero.body, ctaLabel: hero.ctaLabel } };
-          for (const [lang, content] of Object.entries(translated)) {
-            fullContent[lang] = content;
-          }
-          const sections2 = await storage.getSections(req.tenantId);
-          const heroSec = sections2.find(s => s.sectionKey === 'hero');
-          if (heroSec) await storage.updateSection(heroSec.id, { contentByLang: fullContent });
-        }).catch(() => {/* background — ignore errors */});
-      }
-
-      // Create FAQ items
+      // ── FAQ items ─────────────────────────────────────────────────────────────
+      const createdFaqIds: string[] = [];
       if (Array.isArray(faq) && faq.length > 0) {
         const existingFaq = await storage.getFaqItems(req.tenantId);
         for (const item of faq) {
           if (!item.question) continue;
-          const exists = existingFaq.find(f => {
-            const q = f.questionByLang?.en || '';
-            return q === item.question;
-          });
+          const exists = existingFaq.find(f => (f.questionByLang?.en || '') === item.question);
           if (!exists) {
-            const allLangs = ['en','ar','tr','fr','ru','fa','zh','hi','es','id'] as const;
-            const emptyLangs = Object.fromEntries(allLangs.map(l => [l, ''])) as Record<typeof allLangs[number], string>;
-            await storage.createFaqItem({
+            const created = await storage.createFaqItem({
               tenantId: req.tenantId,
-              questionByLang: { ...emptyLangs, en: item.question },
-              answerByLang: { ...emptyLangs, en: item.answer },
-              displayOrder: existingFaq.length,
+              questionByLang: { ...emptyLangMap, en: item.question },
+              answerByLang: { ...emptyLangMap, en: item.answer },
+              displayOrder: existingFaq.length + createdFaqIds.length,
               isEnabled: true,
             });
+            createdFaqIds.push(created.id);
           }
         }
       }
+
+      // ── Background translation: hero + about + FAQ + SEO ──────────────────────
+      (async () => {
+        try {
+          const { translateContentByLang } = await import('./aiTranslation');
+
+          // Hero translation
+          if (hero?.title) {
+            const heroTranslated = await translateContentByLang(
+              { title: hero.title, subtitle: hero.subtitle || '', body: hero.body || '', ctaLabel: hero.ctaLabel || '' },
+              'en', TARGET_LANGS, req.tenantId,
+            );
+            const heroFull: Record<string, any> = { en: heroEnContent };
+            for (const [lang, content] of Object.entries(heroTranslated)) heroFull[lang] = content;
+            const secs = await storage.getSections(req.tenantId);
+            const heroSec = secs.find(s => s.sectionKey === 'hero');
+            if (heroSec) await storage.updateSection(heroSec.id, { contentByLang: heroFull });
+          }
+
+          // About translation
+          if (aboutSectionId && (about?.title || about?.body)) {
+            const aboutTranslated = await translateContentByLang(
+              { title: about.title || '', body: about.body || '' },
+              'en', TARGET_LANGS, req.tenantId,
+            );
+            const aboutFull: Record<string, any> = { en: { title: about.title || '', body: about.body || '' } };
+            for (const [lang, content] of Object.entries(aboutTranslated)) aboutFull[lang] = content;
+            await storage.updateSection(aboutSectionId, { contentByLang: aboutFull });
+          }
+
+          // FAQ translation (translate each item question+answer)
+          if (createdFaqIds.length > 0 && Array.isArray(faq)) {
+            const newFaqItems = await storage.getFaqItems(req.tenantId);
+            for (const itemId of createdFaqIds) {
+              const faqRow = newFaqItems.find(f => f.id === itemId);
+              if (!faqRow) continue;
+              const enQ = faqRow.questionByLang?.en || '';
+              const enA = faqRow.answerByLang?.en || '';
+              if (!enQ) continue;
+              const qTranslated = await translateContentByLang({ text: enQ }, 'en', TARGET_LANGS, req.tenantId);
+              const aTranslated = await translateContentByLang({ text: enA }, 'en', TARGET_LANGS, req.tenantId);
+              const newQ: Record<string, string> = { ...emptyLangMap, en: enQ };
+              const newA: Record<string, string> = { ...emptyLangMap, en: enA };
+              for (const lang of TARGET_LANGS) {
+                newQ[lang] = (qTranslated[lang] as any)?.text || enQ;
+                newA[lang] = (aTranslated[lang] as any)?.text || enA;
+              }
+              await storage.updateFaqItem(faqRow.id, { questionByLang: newQ as any, answerByLang: newA as any });
+            }
+          }
+
+          // SEO translation
+          if (seoData?.metaTitle) {
+            const seoTranslated = await translateContentByLang(
+              { metaTitle: seoData.metaTitle || '', metaDescription: seoData.metaDescription || '', keywords: seoData.keywords || '' },
+              'en', TARGET_LANGS, req.tenantId,
+            );
+            const titleMap: Record<string, string> = { ...emptyLangMap, en: seoData.metaTitle || '' };
+            const descMap: Record<string, string> = { ...emptyLangMap, en: seoData.metaDescription || '' };
+            const kwMap: Record<string, string> = { ...emptyLangMap, en: seoData.keywords || '' };
+            for (const lang of TARGET_LANGS) {
+              titleMap[lang] = (seoTranslated[lang] as any)?.metaTitle || seoData.metaTitle || '';
+              descMap[lang] = (seoTranslated[lang] as any)?.metaDescription || seoData.metaDescription || '';
+              kwMap[lang] = (seoTranslated[lang] as any)?.keywords || seoData.keywords || '';
+            }
+            await storage.updateSeoSettings(req.tenantId, {
+              metaTitleByLang: titleMap as any,
+              metaDescriptionByLang: descMap as any,
+              metaKeywordsByLang: kwMap as any,
+            });
+          }
+        } catch {
+          // background — ignore errors
+        }
+      })();
 
       res.json({ success: true });
     } catch (err: any) {
