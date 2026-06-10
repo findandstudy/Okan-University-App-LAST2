@@ -17,7 +17,7 @@ import bcrypt from "bcryptjs";
 import rateLimit from "express-rate-limit";
 import { saveUpload, readUpload, serveUpload } from "./localFileStorage";
 import { db } from "./db";
-import { integrationSettings } from "@shared/schema";
+import { integrationSettings, SUPPORTED_LANGUAGES } from "@shared/schema";
 import { sql, and, eq } from "drizzle-orm";
 
 const PgStore = connectPgSimple(session);
@@ -266,16 +266,21 @@ export async function registerRoutes(
         return res.json(cached.data);
       }
 
-      const [tenant, theme, sectionsList, testimonialsList, faqList, seo] = await Promise.all([
+      const [tenant, theme, sectionsList, testimonialsList, faqList, seo, domains] = await Promise.all([
         Promise.resolve(req.tenant),
         storage.getTheme(tenantId),
         storage.getSections(tenantId),
         storage.getTestimonials(tenantId),
         storage.getFaqItems(tenantId),
         storage.getSeoSettings(tenantId),
+        storage.getTenantDomains(tenantId),
       ]);
 
-      const data = { tenant, theme, sections: sectionsList, testimonials: testimonialsList, faqItems: faqList, seoSettings: seo };
+      const primaryDomainRow = domains.find(d => d.isPrimary) || domains[0];
+      const primaryDomain = primaryDomainRow?.domain || tenant.domain;
+      const allDomains = Array.from(new Set([tenant.domain, ...domains.map(d => d.domain)]));
+
+      const data = { tenant, theme, sections: sectionsList, testimonials: testimonialsList, faqItems: faqList, seoSettings: seo, primaryDomain, allDomains };
       bootstrapCache.set(tenantId, { data, timestamp: Date.now() });
 
       res.set('Cache-Control', 'public, max-age=60');
@@ -558,33 +563,66 @@ export async function registerRoutes(
   });
 
   // ─── SEO routes (sitemap + robots) ─────────────────────────────────────────
-  app.get("/sitemap.xml", resolveTenant, requirePublished, (req, res) => {
-    const baseUrl = `https://${req.tenant.domain}`;
-    const languages = ["en", "ar", "tr", "fr", "ru", "fa"];
+  app.get("/sitemap.xml", resolveTenant, requirePublished, async (req, res) => {
+    try {
+      const domains = await storage.getTenantDomains(req.tenantId);
+      const primaryDomainRow = domains.find(d => d.isPrimary) || domains[0];
+      const primaryDomain = primaryDomainRow?.domain || req.tenant.domain;
+      const baseUrl = `https://${primaryDomain}`;
+      const today = new Date().toISOString().split('T')[0];
 
-    let sitemap = `<?xml version="1.0" encoding="UTF-8"?>
+      const allLangAlternates = [
+        `<xhtml:link rel="alternate" hreflang="x-default" href="${baseUrl}/" />`,
+        ...SUPPORTED_LANGUAGES.map(l =>
+          `<xhtml:link rel="alternate" hreflang="${l}" href="${baseUrl}/${l === 'en' ? '' : l}" />`
+        ),
+      ].join('\n    ');
+
+      let sitemap = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
-        xmlns:xhtml="http://www.w3.org/1999/xhtml">`;
-
-    languages.forEach((lang) => {
-      sitemap += `
+        xmlns:xhtml="http://www.w3.org/1999/xhtml">
   <url>
-    <loc>${baseUrl}/${lang}</loc>
-    ${languages.map(l => `<xhtml:link rel="alternate" hreflang="${l}" href="${baseUrl}/${l}" />`).join('\n    ')}
+    <loc>${baseUrl}/</loc>
+    ${allLangAlternates}
+    <lastmod>${today}</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>`;
-    });
 
-    sitemap += "\n</urlset>";
-    res.header("Content-Type", "application/xml");
-    res.send(sitemap);
+      SUPPORTED_LANGUAGES.filter(l => l !== 'en').forEach((lang) => {
+        sitemap += `
+  <url>
+    <loc>${baseUrl}/${lang}</loc>
+    ${allLangAlternates}
+    <lastmod>${today}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>`;
+      });
+
+      sitemap += '\n</urlset>';
+      res.header('Content-Type', 'application/xml');
+      res.header('Cache-Control', 'public, max-age=3600');
+      res.send(sitemap);
+    } catch (err) {
+      console.error('Sitemap error:', err);
+      res.status(500).send('Failed to generate sitemap');
+    }
   });
 
-  app.get("/robots.txt", resolveTenant, requirePublished, (req, res) => {
-    const baseUrl = `https://${req.tenant.domain}`;
-    res.header("Content-Type", "text/plain");
-    res.send(`User-agent: *\nAllow: /\n\nSitemap: ${baseUrl}/sitemap.xml`);
+  app.get("/robots.txt", resolveTenant, requirePublished, async (req, res) => {
+    try {
+      const domains = await storage.getTenantDomains(req.tenantId);
+      const primaryDomainRow = domains.find(d => d.isPrimary) || domains[0];
+      const primaryDomain = primaryDomainRow?.domain || req.tenant.domain;
+      const baseUrl = `https://${primaryDomain}`;
+      res.header('Content-Type', 'text/plain');
+      res.header('Cache-Control', 'public, max-age=3600');
+      res.send(`User-agent: *\nAllow: /\nDisallow: /admin/\nDisallow: /api/admin/\n\nSitemap: ${baseUrl}/sitemap.xml`);
+    } catch (err) {
+      res.header('Content-Type', 'text/plain');
+      res.send(`User-agent: *\nAllow: /\nDisallow: /admin/\n\nSitemap: https://${req.tenant.domain}/sitemap.xml`);
+    }
   });
 
   // ─── Media Assets API ───────────────────────────────────────────────────────
@@ -1232,6 +1270,51 @@ export async function registerRoutes(
       res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ error: err?.message || "Failed to apply content" });
+    }
+  });
+
+  // ─── AI Localize SEO ──────────────────────────────────────────────────────
+  app.post("/api/admin/ai/localize-seo", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
+    try {
+      const { metaTitle, metaDescription, keywords } = req.body;
+      if (!metaTitle) return res.status(400).json({ error: "metaTitle is required" });
+
+      const { callAI } = await import('./aiService');
+      const targetLangs = ['ar','tr','fr','ru','fa','zh','hi','es','id'];
+
+      const systemPrompt = `You are an expert SEO consultant and multilingual copywriter. Create localized (not just translated) SEO meta content for a university landing page. Adapt culturally to be SEO-effective for each language/region.`;
+      const prompt = `Given this English SEO metadata for a university landing page:
+Title: ${metaTitle}
+Description: ${metaDescription || ''}
+Keywords: ${keywords || ''}
+
+Create localized versions for these languages: ${targetLangs.join(', ')}
+
+Return ONLY valid JSON with this exact structure:
+{
+  "ar": { "metaTitle": "...", "metaDescription": "...", "keywords": "..." },
+  "tr": { "metaTitle": "...", "metaDescription": "...", "keywords": "..." },
+  "fr": { "metaTitle": "...", "metaDescription": "...", "keywords": "..." },
+  "ru": { "metaTitle": "...", "metaDescription": "...", "keywords": "..." },
+  "fa": { "metaTitle": "...", "metaDescription": "...", "keywords": "..." },
+  "zh": { "metaTitle": "...", "metaDescription": "...", "keywords": "..." },
+  "hi": { "metaTitle": "...", "metaDescription": "...", "keywords": "..." },
+  "es": { "metaTitle": "...", "metaDescription": "...", "keywords": "..." },
+  "id": { "metaTitle": "...", "metaDescription": "...", "keywords": "..." }
+}
+
+Rules:
+- Localize culturally, adapt for local search intent — not word-for-word translation
+- Keep titles under 60 chars, descriptions under 160 chars
+- Keywords should be comma-separated in the target language`;
+
+      const raw = await callAI(prompt, req.tenantId, systemPrompt);
+      const match = raw.match(/\{[\s\S]*\}/);
+      if (!match) throw new Error('Invalid AI response format');
+      const localized = JSON.parse(match[0]);
+      res.json({ localized });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || 'Failed to localize SEO content' });
     }
   });
 

@@ -12,7 +12,9 @@ import { Footer } from '@/components/landing/Footer';
 import { Preloader } from '@/components/Preloader';
 import TrackingScripts from '@/components/TrackingScripts';
 import SEOMetaTags from '@/components/SEOMetaTags';
-import type { Tenant, Section, TenantTheme } from '@shared/schema';
+import JsonLd from '@/components/JsonLd';
+import { useI18n } from '@/lib/i18n';
+import type { Tenant, Section, TenantTheme, SupportedLanguage } from '@shared/schema';
 
 // Convert hex color to HSL values for CSS variables
 function hexToHSL(hex: string): string {
@@ -41,6 +43,7 @@ function hexToHSL(hex: string): string {
 }
 
 export default function Landing() {
+  const { language } = useI18n();
   const { data: tenant, isLoading: isTenantLoading } = useQuery<Tenant>({
     queryKey: ['/api/tenant'],
   });
@@ -106,7 +109,8 @@ export default function Landing() {
   return (
     <div className="min-h-screen flex flex-col">
       <TrackingScripts />
-      <SEOMetaTags />
+      <SEOMetaTags lang={language as SupportedLanguage} primaryDomain={tenant?.domain} />
+      <JsonLd primaryDomain={tenant?.domain} />
       <Header universityName={universityName} logoUrl={logoUrl} />
       <main className="flex-1">
         <Hero />
