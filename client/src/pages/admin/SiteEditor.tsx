@@ -41,12 +41,29 @@ interface VersionEntry {
   createdAt: string;
 }
 
+interface VersionPreview {
+  id: string;
+  label: string;
+  createdAt: string;
+  summary: {
+    universityName: string;
+    domain: string;
+    sections: string[];
+    faqCount: number;
+    testimonialCount: number;
+    capturedAt: string;
+  };
+}
+
 function VersionsTab({ tenantId }: { tenantId: string }) {
   const { toast } = useToast();
   const [savingVersion, setSavingVersion] = useState(false);
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [labelInput, setLabelInput] = useState('');
+  const [previewVersion, setPreviewVersion] = useState<VersionPreview | null>(null);
+  const [loadingPreviewId, setLoadingPreviewId] = useState<string | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   const { data: versions = [], isLoading, refetch } = useQuery<VersionEntry[]>({
     queryKey: ['/api/admin/sites', tenantId, 'versions'],
@@ -100,91 +117,167 @@ function VersionsTab({ tenantId }: { tenantId: string }) {
     }
   };
 
-  return (
-    <div className="space-y-4">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <History className="h-4 w-4" />
-            Save New Version
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex gap-2">
-            <Input
-              placeholder="Version label (optional)"
-              value={labelInput}
-              onChange={e => setLabelInput(e.target.value)}
-              data-testid="input-version-label"
-              className="max-w-sm"
-            />
-            <Button onClick={handleSave} disabled={savingVersion} data-testid="button-save-version">
-              {savingVersion ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Plus className="h-4 w-4 mr-2" />}
-              Save Snapshot
-            </Button>
-          </div>
-          <p className="text-xs text-muted-foreground mt-2">
-            Saves the current state of all site content (sections, FAQ, testimonials, theme, SEO). Last 10 versions are kept.
-          </p>
-        </CardContent>
-      </Card>
+  const handlePreview = async (id: string) => {
+    setLoadingPreviewId(id);
+    try {
+      const res = await fetch(`/api/admin/sites/${tenantId}/versions/${id}/preview?_tid=${tenantId}`, { credentials: 'include' });
+      if (!res.ok) throw new Error('Failed to load preview');
+      const data = await res.json();
+      setPreviewVersion(data);
+      setPreviewOpen(true);
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' });
+    } finally {
+      setLoadingPreviewId(null);
+    }
+  };
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Version History</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="flex items-center justify-center h-24"><Loader2 className="h-5 w-5 animate-spin" /></div>
-          ) : versions.length === 0 ? (
-            <div className="text-center text-muted-foreground py-10 text-sm">
-              No saved versions yet. Click "Save Snapshot" to create the first one.
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {versions.map((v, idx) => (
-                <div key={v.id} className="flex items-center justify-between p-3 border rounded-lg" data-testid={`version-${v.id}`}>
-                  <div>
-                    <p className="font-medium text-sm">{v.label}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {new Date(v.createdAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}
-                      {idx === 0 && <span className="ml-2 inline-block bg-primary/10 text-primary text-[10px] px-1.5 py-0.5 rounded-full">Latest</span>}
-                    </p>
-                  </div>
-                  <div className="flex gap-1">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="text-blue-600 border-blue-200 hover:bg-blue-50"
-                      onClick={() => handleRestore(v.id)}
-                      disabled={restoringId === v.id}
-                      data-testid={`button-restore-${v.id}`}
-                    >
-                      {restoringId === v.id ? (
-                        <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-                      ) : (
-                        <RotateCcw className="h-3.5 w-3.5 mr-1" />
-                      )}
-                      Restore
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="text-destructive hover:bg-destructive/10"
-                      onClick={() => handleDelete(v.id)}
-                      disabled={deletingId === v.id}
-                      data-testid={`button-delete-version-${v.id}`}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
+  return (
+    <>
+      {/* Preview dialog */}
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Version Preview</DialogTitle>
+          </DialogHeader>
+          {previewVersion && (
+            <div className="space-y-3 text-sm">
+              <div>
+                <p className="font-semibold text-base">{previewVersion.label}</p>
+                <p className="text-xs text-muted-foreground">
+                  Saved {new Date(previewVersion.createdAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-2 border rounded-lg p-3 bg-muted/30">
+                <div><span className="text-muted-foreground">University</span><p className="font-medium">{previewVersion.summary.universityName}</p></div>
+                <div><span className="text-muted-foreground">Domain</span><p className="font-medium">{previewVersion.summary.domain}</p></div>
+                <div><span className="text-muted-foreground">FAQ items</span><p className="font-medium">{previewVersion.summary.faqCount}</p></div>
+                <div><span className="text-muted-foreground">Testimonials</span><p className="font-medium">{previewVersion.summary.testimonialCount}</p></div>
+              </div>
+              {previewVersion.summary.sections.length > 0 && (
+                <div>
+                  <p className="text-muted-foreground mb-1">Active sections ({previewVersion.summary.sections.length})</p>
+                  <div className="flex flex-wrap gap-1">
+                    {previewVersion.summary.sections.map(s => (
+                      <span key={s} className="bg-primary/10 text-primary text-[11px] px-2 py-0.5 rounded-full">{s}</span>
+                    ))}
                   </div>
                 </div>
-              ))}
+              )}
+              <div className="pt-2 flex justify-end gap-2">
+                <Button variant="outline" size="sm" onClick={() => setPreviewOpen(false)}>Close</Button>
+                <Button
+                  size="sm"
+                  className="text-blue-600 border-blue-200 hover:bg-blue-50"
+                  variant="outline"
+                  onClick={() => { setPreviewOpen(false); handleRestore(previewVersion.id); }}
+                  data-testid="button-preview-restore"
+                >
+                  <RotateCcw className="h-3.5 w-3.5 mr-1" />
+                  Bu Sürüme Dön
+                </Button>
+              </div>
             </div>
           )}
-        </CardContent>
-      </Card>
-    </div>
+        </DialogContent>
+      </Dialog>
+
+      <div className="space-y-4">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <History className="h-4 w-4" />
+              Save New Version
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex gap-2">
+              <Input
+                placeholder="Version label (optional)"
+                value={labelInput}
+                onChange={e => setLabelInput(e.target.value)}
+                data-testid="input-version-label"
+                className="max-w-sm"
+              />
+              <Button onClick={handleSave} disabled={savingVersion} data-testid="button-save-version">
+                {savingVersion ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Plus className="h-4 w-4 mr-2" />}
+                Save Snapshot
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              Saves the current state of all site content (sections, FAQ, testimonials, theme, SEO). Last 10 versions are kept.
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Version History</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <div className="flex items-center justify-center h-24"><Loader2 className="h-5 w-5 animate-spin" /></div>
+            ) : versions.length === 0 ? (
+              <div className="text-center text-muted-foreground py-10 text-sm">
+                No saved versions yet. Click "Save Snapshot" to create the first one.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {versions.map((v, idx) => (
+                  <div key={v.id} className="flex items-center justify-between p-3 border rounded-lg" data-testid={`version-${v.id}`}>
+                    <div>
+                      <p className="font-medium text-sm">{v.label}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(v.createdAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}
+                        {idx === 0 && <span className="ml-2 inline-block bg-primary/10 text-primary text-[10px] px-1.5 py-0.5 rounded-full">Latest</span>}
+                      </p>
+                    </div>
+                    <div className="flex gap-1">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-muted-foreground hover:text-foreground"
+                        onClick={() => handlePreview(v.id)}
+                        disabled={loadingPreviewId === v.id}
+                        data-testid={`button-preview-${v.id}`}
+                      >
+                        {loadingPreviewId === v.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                        Önizle
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-blue-600 border-blue-200 hover:bg-blue-50"
+                        onClick={() => handleRestore(v.id)}
+                        disabled={restoringId === v.id}
+                        data-testid={`button-restore-${v.id}`}
+                      >
+                        {restoringId === v.id ? (
+                          <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                        ) : (
+                          <RotateCcw className="h-3.5 w-3.5 mr-1" />
+                        )}
+                        Bu Sürüme Dön
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-destructive hover:bg-destructive/10"
+                        onClick={() => handleDelete(v.id)}
+                        disabled={deletingId === v.id}
+                        data-testid={`button-delete-version-${v.id}`}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </>
   );
 }
 
@@ -622,23 +715,32 @@ export default function SiteEditor() {
   const handleExportZip = async () => {
     setExportingZip(true);
     try {
-      const res = await fetch(`/api/admin/sites/${tenantId}/export-zip?_tid=${tenantId}`, {
-        method: 'POST',
-        credentials: 'include',
+      // Start async export job
+      const startRes = await fetch(`/api/admin/sites/${tenantId}/export-zip?_tid=${tenantId}`, {
+        method: 'POST', credentials: 'include',
       });
-      if (!res.ok) throw new Error('Export failed');
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
+      if (!startRes.ok) throw new Error('Export failed to start');
+      const { jobId } = await startRes.json();
+
+      // Poll until ready (max ~60s)
+      let downloadUrl: string | null = null;
+      for (let i = 0; i < 30; i++) {
+        await new Promise(r => setTimeout(r, 2000));
+        const poll = await fetch(`/api/admin/sites/${tenantId}/export-zip/${jobId}?_tid=${tenantId}`, { credentials: 'include' });
+        const data = await poll.json();
+        if (data.status === 'ready') { downloadUrl = data.downloadUrl; break; }
+        if (data.status === 'error') throw new Error(data.error || 'Export failed');
+      }
+      if (!downloadUrl) throw new Error('ZIP generation timed out');
+
+      // Trigger browser download
       const a = document.createElement('a');
-      a.href = url;
-      const cd = res.headers.get('Content-Disposition') || '';
-      const m = cd.match(/filename="([^"]+)"/);
-      a.download = m ? m[1] : 'site-export.zip';
+      a.href = downloadUrl;
+      a.download = downloadUrl.split('/').pop() || 'site-export.zip';
       document.body.appendChild(a);
       a.click();
       a.remove();
-      URL.revokeObjectURL(url);
-      toast({ title: 'ZIP downloaded' });
+      toast({ title: 'ZIP downloaded', description: 'All 10 language pages + assets included.' });
     } catch (e: any) {
       toast({ title: 'Export failed', description: e.message, variant: 'destructive' });
     } finally {

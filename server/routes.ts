@@ -20,7 +20,7 @@ import { db } from "./db";
 import { integrationSettings, SUPPORTED_LANGUAGES } from "@shared/schema";
 import { sql, and, eq } from "drizzle-orm";
 import { startBlogScheduler } from "./blogScheduler";
-import { buildSiteZip, captureSnapshot, restoreSnapshot } from "./zipExporter";
+import { startExportJob, getExportJob, captureSnapshot, restoreSnapshot } from "./zipExporter";
 
 const PgStore = connectPgSimple(session);
 
@@ -196,6 +196,20 @@ export async function registerRoutes(
     const pathParam = Array.isArray(req.params.objectPath)
       ? req.params.objectPath.join('/')
       : req.params.objectPath;
+    if (!pathParam) return res.status(400).json({ error: 'Invalid path' });
+    // Export ZIPs stored under uploads/exports/ — serve directly
+    if (pathParam.startsWith('exports/')) {
+      const fs = require('fs') as typeof import('fs');
+      const nodePath = require('path') as typeof import('path');
+      const { getUploadsDir } = require('./localFileStorage') as typeof import('./localFileStorage');
+      const fname = pathParam.slice('exports/'.length);
+      if (!fname || fname.includes('..')) return res.status(400).json({ error: 'Invalid path' });
+      const fullPath = nodePath.join(getUploadsDir(), 'exports', fname);
+      if (!fs.existsSync(fullPath)) return res.status(404).json({ error: 'File not found' });
+      res.set('Content-Type', 'application/zip');
+      res.set('Content-Disposition', `attachment; filename="${fname}"`);
+      return fs.createReadStream(fullPath).pipe(res);
+    }
     serveUpload(`/objects/${pathParam}`, res);
   });
 
@@ -1668,19 +1682,58 @@ Rules:
     }
   });
 
-  // ─── ZIP Export ──────────────────────────────────────────────────────────────
+  // ─── ZIP Export (async job-based) ────────────────────────────────────────────
+  // Start export job — returns immediately with { jobId }
   app.post("/api/admin/sites/:tenantId/export-zip", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
     try {
-      const zipBuffer = await buildSiteZip(req.tenantId);
-      const tenant = await storage.getTenant(req.tenantId);
-      const filename = `${(tenant?.domain || req.tenantId).replace(/[^a-z0-9]/gi, '-')}-${Date.now()}.zip`;
-      res.set('Content-Type', 'application/zip');
-      res.set('Content-Disposition', `attachment; filename="${filename}"`);
-      res.set('Content-Length', zipBuffer.length.toString());
-      res.send(zipBuffer);
+      const job = startExportJob(req.tenantId);
+      res.json({ jobId: job.id });
     } catch (err: any) {
-      console.error('ZIP export error:', err);
-      res.status(500).json({ error: err?.message || 'Failed to generate ZIP' });
+      console.error('ZIP export start error:', err);
+      res.status(500).json({ error: err?.message || 'Failed to start export' });
+    }
+  });
+
+  // Poll export job status
+  app.get("/api/admin/sites/:tenantId/export-zip/:jobId", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
+    try {
+      const job = getExportJob(req.params.jobId as string);
+      if (!job || job.tenantId !== req.tenantId) {
+        return res.status(404).json({ error: 'Job not found' });
+      }
+      if (job.status === 'ready') {
+        return res.json({ status: 'ready', downloadUrl: job.downloadUrl });
+      }
+      if (job.status === 'error') {
+        return res.json({ status: 'error', error: job.error });
+      }
+      return res.json({ status: 'pending' });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || 'Failed to get job status' });
+    }
+  });
+
+  // Get version preview (snapshot summary)
+  app.get("/api/admin/sites/:tenantId/versions/:versionId/preview", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
+    try {
+      const version = await storage.getSiteVersion(req.params.versionId as string);
+      if (!version || version.tenantId !== req.tenantId) return res.status(404).json({ error: 'Version not found' });
+      const snap = version.snapshotData as any;
+      res.json({
+        id: version.id,
+        label: version.label,
+        createdAt: version.createdAt,
+        summary: {
+          universityName: snap.tenant?.universityName || '—',
+          domain: snap.tenant?.domain || '—',
+          sections: (snap.sections || []).filter((s: any) => s.isEnabled).map((s: any) => s.sectionKey),
+          faqCount: (snap.faqItems || []).length,
+          testimonialCount: (snap.testimonials || []).length,
+          capturedAt: snap.capturedAt,
+        },
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || 'Failed to get version preview' });
     }
   });
 
