@@ -86,14 +86,19 @@ function isDevHost(host: string): boolean {
 // Falls back to 'default' tenant ONLY for known dev/preview hosts.
 // Unknown production domains receive a 404.
 async function resolveTenant(req: Request, res: Response, next: NextFunction) {
-  // Admin _tid override: authenticated admins can target any tenant via ?_tid=
+  // Admin _tid override: only super_admin or admin's own tenant can override via ?_tid=
   if (req.session?.adminId && req.query._tid && typeof req.query._tid === 'string') {
     try {
-      const overrideTenant = await storage.getTenant(req.query._tid);
-      if (overrideTenant) {
-        req.tenant = overrideTenant;
-        req.tenantId = overrideTenant.id;
-        return next();
+      const admin = await storage.getAdminById(req.session.adminId);
+      const isSuperAdmin = admin?.role === 'super_admin';
+      const isOwnTenant = admin?.tenantId === req.query._tid;
+      if (isSuperAdmin || isOwnTenant) {
+        const overrideTenant = await storage.getTenant(req.query._tid);
+        if (overrideTenant) {
+          req.tenant = overrideTenant;
+          req.tenantId = overrideTenant.id;
+          return next();
+        }
       }
     } catch { /* fall through to normal resolution */ }
   }
