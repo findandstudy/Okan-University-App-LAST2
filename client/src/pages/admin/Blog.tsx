@@ -18,7 +18,7 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
-import { Sparkles, Upload, Trash2, CheckCircle, Calendar, Plus } from 'lucide-react';
+import { Sparkles, Upload, Trash2, CheckCircle, Calendar, Plus, ChevronLeft, ChevronRight, LayoutList } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
 import { useLocation } from 'wouter';
 
@@ -60,12 +60,118 @@ const WEEKDAY_LABELS: Record<string, string> = {
   '0': 'Sun', '1': 'Mon', '2': 'Tue', '3': 'Wed', '4': 'Thu', '5': 'Fri', '6': 'Sat',
 };
 
+// ---- Calendar View Helper ----
+function BlogCalendar({ posts }: { posts: BlogPostWithTranslations[] }) {
+  const today = new Date();
+  const [calYear, setCalYear] = useState(today.getFullYear());
+  const [calMonth, setCalMonth] = useState(today.getMonth()); // 0-based
+
+  const firstDay = new Date(calYear, calMonth, 1).getDay();
+  const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+
+  // Build a map: "YYYY-MM-DD" -> post[]
+  const postsByDate: Record<string, BlogPostWithTranslations[]> = {};
+  for (const post of posts) {
+    if (!post.publishAt) continue;
+    const d = new Date(post.publishAt);
+    if (d.getFullYear() === calYear && d.getMonth() === calMonth) {
+      const key = d.toISOString().slice(0, 10);
+      if (!postsByDate[key]) postsByDate[key] = [];
+      postsByDate[key].push(post);
+    }
+  }
+
+  const prevMonth = () => {
+    if (calMonth === 0) { setCalYear(y => y - 1); setCalMonth(11); }
+    else setCalMonth(m => m - 1);
+  };
+  const nextMonth = () => {
+    if (calMonth === 11) { setCalYear(y => y + 1); setCalMonth(0); }
+    else setCalMonth(m => m + 1);
+  };
+
+  const monthName = new Date(calYear, calMonth, 1).toLocaleString('en', { month: 'long', year: 'numeric' });
+  const enTitle = (post: BlogPostWithTranslations) =>
+    post.translations.find(t => t.lang === 'en')?.title || post.keyword || '—';
+
+  const cells: React.ReactNode[] = [];
+  // Blank cells before first day
+  for (let i = 0; i < firstDay; i++) {
+    cells.push(<div key={`blank-${i}`} />);
+  }
+  // Day cells
+  for (let day = 1; day <= daysInMonth; day++) {
+    const key = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const dayPosts = postsByDate[key] || [];
+    const isToday = day === today.getDate() && calMonth === today.getMonth() && calYear === today.getFullYear();
+    cells.push(
+      <div
+        key={key}
+        data-testid={`calendar-day-${key}`}
+        className={`min-h-[72px] border rounded-lg p-1.5 flex flex-col gap-1 ${isToday ? 'border-primary bg-primary/5' : 'border-border bg-background'}`}
+      >
+        <span className={`text-xs font-semibold self-start px-1 rounded ${isToday ? 'text-primary' : 'text-muted-foreground'}`}>{day}</span>
+        {dayPosts.map(post => (
+          <div
+            key={post.id}
+            title={enTitle(post)}
+            className={`text-[10px] leading-tight truncate px-1.5 py-0.5 rounded font-medium ${
+              post.status === 'yayinda' ? 'bg-green-100 text-green-700' :
+              post.status === 'zamanli' ? 'bg-blue-100 text-blue-700' :
+              'bg-gray-100 text-gray-600'
+            }`}
+          >
+            {enTitle(post)}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Calendar className="w-4 h-4" /> Publish Calendar
+          </CardTitle>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="ghost" onClick={prevMonth} data-testid="button-cal-prev">
+              <ChevronLeft className="w-4 h-4" />
+            </Button>
+            <span className="text-sm font-medium w-36 text-center">{monthName}</span>
+            <Button size="sm" variant="ghost" onClick={nextMonth} data-testid="button-cal-next">
+              <ChevronRight className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+        <div className="flex gap-3 mt-2 text-xs text-muted-foreground">
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded bg-green-200 inline-block" />Published</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded bg-blue-200 inline-block" />Scheduled</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded bg-gray-200 inline-block" />Draft</span>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-7 gap-1 mb-1">
+          {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d => (
+            <div key={d} className="text-center text-xs text-muted-foreground font-medium py-1">{d}</div>
+          ))}
+        </div>
+        <div className="grid grid-cols-7 gap-1">
+          {cells}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function Blog() {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
   const [generatingId, setGeneratingId] = useState<string | null>(null);
+  const [view, setView] = useState<'list' | 'calendar'>('list');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // New post form
@@ -188,6 +294,28 @@ export default function Blog() {
             </p>
           </div>
           <div className="flex gap-2">
+            {/* View toggle */}
+            <div className="flex rounded-md border overflow-hidden">
+              <Button
+                size="sm"
+                variant={view === 'list' ? 'default' : 'ghost'}
+                className="rounded-none border-0"
+                onClick={() => setView('list')}
+                data-testid="button-view-list"
+              >
+                <LayoutList className="w-4 h-4 mr-1" />List
+              </Button>
+              <Button
+                size="sm"
+                variant={view === 'calendar' ? 'default' : 'ghost'}
+                className="rounded-none border-0"
+                onClick={() => setView('calendar')}
+                data-testid="button-view-calendar"
+              >
+                <Calendar className="w-4 h-4 mr-1" />Calendar
+              </Button>
+            </div>
+
             {/* Schedule dialog */}
             <Dialog open={scheduleDialogOpen} onOpenChange={setScheduleDialogOpen}>
               <DialogTrigger asChild>
@@ -360,124 +488,131 @@ export default function Blog() {
         </div>
 
         {/* Excel import hint */}
-        <Card className="border-dashed border-blue-200 bg-blue-50/50">
-          <CardContent className="pt-4 pb-3">
-            <p className="text-sm text-blue-700">
-              <strong>Excel Import:</strong> Upload an .xlsx file with columns: <code>title</code>, <code>keyword</code> (or <code>anahtar_kelime</code>), <code>backlink_siteleri</code>. Each row becomes a draft post. Then click AI Generate to create full articles.
-            </p>
-          </CardContent>
-        </Card>
+        {view === 'list' && (
+          <Card className="border-dashed border-blue-200 bg-blue-50/50">
+            <CardContent className="pt-4 pb-3">
+              <p className="text-sm text-blue-700">
+                <strong>Excel Import:</strong> Upload an .xlsx file with columns: <code>title</code>, <code>keyword</code> (or <code>anahtar_kelime</code>), <code>backlink_siteleri</code>. Each row becomes a draft post. Then click AI Generate to create full articles.
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Calendar view */}
+        {view === 'calendar' && <BlogCalendar posts={posts} />}
 
         {/* Posts table */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Blog Posts ({posts.length})</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            {isLoading ? (
-              <div className="p-6 text-center text-muted-foreground">Loading…</div>
-            ) : posts.length === 0 ? (
-              <div className="p-12 text-center text-muted-foreground">
-                <p>No blog posts yet.</p>
-                <p className="text-sm mt-1">Import an Excel file or create posts manually.</p>
-              </div>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Title / Keyword</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Langs</TableHead>
-                    <TableHead>Publish At</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {posts.map(post => (
-                    <TableRow key={post.id} data-testid={`blog-row-${post.id}`}>
-                      <TableCell>
-                        <div className="font-medium text-sm line-clamp-1">{enTitle(post)}</div>
-                        {post.keyword && post.translations.length > 0 && (
-                          <div className="text-xs text-muted-foreground">{post.keyword}</div>
-                        )}
-                        {post.isAiGenerated && (
-                          <Badge variant="secondary" className="text-xs mt-1">
-                            <Sparkles className="w-3 h-3 mr-1" />AI
-                          </Badge>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <span className={`text-xs px-2 py-1 rounded-full font-medium ${STATUS_COLORS[post.status] || ''}`}>
-                          {post.status}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-wrap gap-1">
-                          {post.translations.map(t => (
-                            <span
-                              key={t.lang}
-                              className={`text-xs px-1.5 py-0.5 rounded font-mono ${t.content ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}
-                            >
-                              {t.lang}
-                            </span>
-                          ))}
-                          {post.translations.length === 0 && (
-                            <span className="text-xs text-muted-foreground">none</span>
+        {view === 'list' && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Blog Posts ({posts.length})</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              {isLoading ? (
+                <div className="p-6 text-center text-muted-foreground">Loading…</div>
+              ) : posts.length === 0 ? (
+                <div className="p-12 text-center text-muted-foreground">
+                  <p>No blog posts yet.</p>
+                  <p className="text-sm mt-1">Import an Excel file or create posts manually.</p>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Title / Keyword</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Langs</TableHead>
+                      <TableHead>Publish At</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {posts.map(post => (
+                      <TableRow key={post.id} data-testid={`blog-row-${post.id}`}>
+                        <TableCell>
+                          <div className="font-medium text-sm line-clamp-1">{enTitle(post)}</div>
+                          {post.keyword && post.translations.length > 0 && (
+                            <div className="text-xs text-muted-foreground">{post.keyword}</div>
                           )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {post.publishAt ? formatDate(post.publishAt) : '—'}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleGenerateAI(post)}
-                            disabled={generatingId === post.id}
-                            data-testid={`button-generate-${post.id}`}
-                            title="Generate with AI"
-                          >
-                            <Sparkles className="w-3.5 h-3.5 mr-1" />
-                            {generatingId === post.id ? 'Generating…' : 'AI Generate'}
-                          </Button>
-
-                          {post.status !== 'yayinda' && (
+                          {post.isAiGenerated && (
+                            <Badge variant="secondary" className="text-xs mt-1">
+                              <Sparkles className="w-3 h-3 mr-1" />AI
+                            </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <span className={`text-xs px-2 py-1 rounded-full font-medium ${STATUS_COLORS[post.status] || ''}`}>
+                            {post.status}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1">
+                            {post.translations.map(t => (
+                              <span
+                                key={t.lang}
+                                className={`text-xs px-1.5 py-0.5 rounded font-mono ${t.content ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}
+                              >
+                                {t.lang}
+                              </span>
+                            ))}
+                            {post.translations.length === 0 && (
+                              <span className="text-xs text-muted-foreground">none</span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {post.publishAt ? formatDate(post.publishAt) : '—'}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1">
                             <Button
                               size="sm"
                               variant="outline"
-                              className="text-green-700 border-green-200 hover:bg-green-50"
-                              onClick={() => approveMutation.mutate(post.id)}
-                              disabled={approveMutation.isPending}
-                              data-testid={`button-approve-${post.id}`}
-                              title="Publish now"
+                              onClick={() => handleGenerateAI(post)}
+                              disabled={generatingId === post.id}
+                              data-testid={`button-generate-${post.id}`}
+                              title="Generate with AI"
                             >
-                              <CheckCircle className="w-3.5 h-3.5 mr-1" />
-                              Publish
+                              <Sparkles className="w-3.5 h-3.5 mr-1" />
+                              {generatingId === post.id ? 'Generating…' : 'AI Generate'}
                             </Button>
-                          )}
 
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="text-destructive hover:bg-destructive/10"
-                            onClick={() => deleteMutation.mutate(post.id)}
-                            disabled={deleteMutation.isPending}
-                            data-testid={`button-delete-${post.id}`}
-                            title="Delete"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
+                            {post.status !== 'yayinda' && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-green-700 border-green-200 hover:bg-green-50"
+                                onClick={() => approveMutation.mutate(post.id)}
+                                disabled={approveMutation.isPending}
+                                data-testid={`button-approve-${post.id}`}
+                                title="Publish now"
+                              >
+                                <CheckCircle className="w-3.5 h-3.5 mr-1" />
+                                Publish
+                              </Button>
+                            )}
+
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-destructive hover:bg-destructive/10"
+                              onClick={() => deleteMutation.mutate(post.id)}
+                              disabled={deleteMutation.isPending}
+                              data-testid={`button-delete-${post.id}`}
+                              title="Delete"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Approval queue (onay mode) */}
         {schedule?.mode === 'onay' && schedule?.isEnabled && (

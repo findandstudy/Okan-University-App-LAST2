@@ -1,9 +1,9 @@
+import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'wouter';
 import { useI18n } from '@/lib/i18n';
 import { formatDate } from '@/lib/utils';
 import type { Tenant } from '@shared/schema';
-import { SUPPORTED_LANGUAGES } from '@shared/schema';
 
 interface BlogPostDetail {
   post: {
@@ -20,27 +20,60 @@ interface BlogPostDetail {
     metaDesc: string | null;
     lang: string;
   };
-  alternates?: Record<string, string>; // lang -> slug
+  alternates?: Record<string, string>;
 }
 
-function renderMarkdown(md: string): string {
-  return md
-    .replace(/^### (.+)$/gm, '<h3 class="text-xl font-semibold mt-6 mb-2">$1</h3>')
-    .replace(/^## (.+)$/gm, '<h2 class="text-2xl font-bold mt-8 mb-3">$1</h2>')
-    .replace(/^# (.+)$/gm, '<h1 class="text-3xl font-bold mt-8 mb-4">$1</h1>')
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    .replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2" class="text-primary underline" target="_blank" rel="noopener">$1</a>')
-    .replace(/\n\n/g, '</p><p class="mb-4">')
-    .replace(/^(.+)$/gm, (line) => {
-      if (line.startsWith('<')) return line;
-      return line;
-    });
+// Safe, no-external-dep markdown → HTML converter
+// Only produces a strict allowlist of tags; no raw HTML pass-through
+function safeMarkdownToHtml(md: string): string {
+  const lines = md.split('\n');
+  const out: string[] = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    let line = lines[i];
+
+    // Escape HTML entities first to prevent XSS
+    line = line
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+
+    // Headings
+    if (line.startsWith('### ')) {
+      out.push(`<h3 class="text-xl font-semibold mt-6 mb-2">${line.slice(4)}</h3>`);
+      continue;
+    }
+    if (line.startsWith('## ')) {
+      out.push(`<h2 class="text-2xl font-bold mt-8 mb-3">${line.slice(3)}</h2>`);
+      continue;
+    }
+    if (line.startsWith('# ')) {
+      out.push(`<h1 class="text-3xl font-bold mt-8 mb-4">${line.slice(2)}</h1>`);
+      continue;
+    }
+
+    // Empty line = paragraph break
+    if (line.trim() === '') {
+      out.push('');
+      continue;
+    }
+
+    // Inline: bold, italic, links (only http/https)
+    line = line.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    line = line.replace(/\*(.+?)\*/g, '<em>$1</em>');
+    line = line.replace(/\[([^\]<>]+)\]\((https?:\/\/[^\s)<>"]+)\)/g,
+      '<a href="$2" class="text-primary underline" target="_blank" rel="noopener noreferrer">$1</a>');
+
+    out.push(`<p class="mb-4">${line}</p>`);
+  }
+
+  return out.join('\n');
 }
 
 export default function BlogPost() {
   const { language } = useI18n();
-  const params = useParams<{ slug: string; lang?: string }>();
+  const params = useParams<{ slug: string }>();
   const slug = params.slug;
   const lang = language;
 
@@ -58,12 +91,14 @@ export default function BlogPost() {
   const langPrefix = lang === 'en' ? '' : `/${lang}`;
 
   // Inject meta tags for blog post
-  if (data?.translation) {
-    const t = data.translation;
-    if (t.metaTitle) document.title = t.metaTitle;
-    const desc = document.querySelector('meta#seo-description') as HTMLMetaElement | null;
-    if (desc && t.metaDesc) desc.content = t.metaDesc;
-  }
+  useEffect(() => {
+    if (data?.translation) {
+      const t = data.translation;
+      if (t.metaTitle) document.title = t.metaTitle;
+      const desc = document.getElementById('seo-description') as HTMLMetaElement | null;
+      if (desc && t.metaDesc) desc.content = t.metaDesc;
+    }
+  }, [data]);
 
   if (isLoading) {
     return (
@@ -84,14 +119,14 @@ export default function BlogPost() {
 
   const { post, translation, alternates } = data;
 
+  const safeHtml = safeMarkdownToHtml(translation.content);
+
   return (
     <div className="min-h-screen bg-background">
       {/* hreflang for blog post alternates */}
       {alternates && Object.entries(alternates).map(([l, s]) => {
         const href = `${window.location.origin}${l === 'en' ? '' : `/${l}`}/blog/${s}`;
-        return (
-          <link key={l} rel="alternate" hrefLang={l} href={href} />
-        );
+        return <link key={l} rel="alternate" hrefLang={l} href={href} />;
       })}
 
       {/* Header */}
@@ -124,14 +159,12 @@ export default function BlogPost() {
 
           <div
             className="prose prose-neutral max-w-none text-foreground leading-relaxed"
-            dangerouslySetInnerHTML={{
-              __html: `<p class="mb-4">${renderMarkdown(translation.content)}</p>`,
-            }}
+            dangerouslySetInnerHTML={{ __html: safeHtml }}
             data-testid="blog-post-content"
           />
         </article>
 
-        {/* JSON-LD Article schema */}
+        {/* JSON-LD BlogPosting schema */}
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{

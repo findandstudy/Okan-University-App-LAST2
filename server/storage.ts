@@ -495,6 +495,17 @@ export class DatabaseStorage implements IStorage {
         .returning();
       return updated;
     }
+    // Ensure slug uniqueness within tenant+lang — append suffix if conflict
+    const slugConflict = await db.select().from(blogPostTranslations).where(
+      and(
+        eq(blogPostTranslations.tenantId, data.tenantId),
+        eq(blogPostTranslations.lang, data.lang),
+        eq(blogPostTranslations.slug, data.slug),
+      )
+    ).limit(1);
+    if (slugConflict.length > 0) {
+      data = { ...data, slug: `${data.slug}-${Date.now().toString(36)}` };
+    }
     const [created] = await db.insert(blogPostTranslations).values(data).returning();
     return created;
   }

@@ -248,9 +248,11 @@ export const blogPosts = pgTable("blog_posts", {
 });
 
 // Blog Post Translations (one per lang per post)
+// tenantId is denormalized here to allow a global unique slug constraint per tenant+lang
 export const blogPostTranslations = pgTable("blog_post_translations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   postId: varchar("post_id").notNull().references(() => blogPosts.id, { onDelete: 'cascade' }),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
   lang: text("lang").notNull(),
   title: text("title").notNull(),
   slug: text("slug").notNull(),
@@ -258,7 +260,10 @@ export const blogPostTranslations = pgTable("blog_post_translations", {
   metaTitle: text("meta_title"),
   metaDesc: text("meta_desc"),
 }, (t) => ({
-  slugUnique: uniqueIndex("blog_slug_unique").on(t.postId, t.lang),
+  // Unique slug per tenant + lang (routing correctness)
+  slugTenantUnique: uniqueIndex("blog_slug_tenant_unique").on(t.tenantId, t.lang, t.slug),
+  // One translation per post+lang
+  postLangUnique: uniqueIndex("blog_post_lang_unique").on(t.postId, t.lang),
 }));
 
 // Blog Schedule Settings (one per tenant)

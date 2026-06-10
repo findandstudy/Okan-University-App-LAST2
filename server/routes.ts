@@ -1488,6 +1488,7 @@ Rules:
       // Save EN translation
       await storage.upsertBlogPostTranslation({
         postId: id,
+        tenantId: req.tenantId,
         lang: 'en',
         title: enContent.title,
         slug: enContent.slug,
@@ -1503,6 +1504,7 @@ Rules:
       for (const [lang, content] of Object.entries(translations)) {
         await storage.upsertBlogPostTranslation({
           postId: id,
+          tenantId: req.tenantId,
           lang,
           title: content.title,
           slug: content.slug,
@@ -1572,6 +1574,7 @@ Rules:
         if (title) {
           await storage.upsertBlogPostTranslation({
             postId: post.id,
+            tenantId: req.tenantId,
             lang: 'en',
             title,
             slug: title.toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]/g, '').substring(0, 80),
