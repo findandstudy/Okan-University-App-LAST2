@@ -6,7 +6,6 @@ import { TrustBadges } from '@/components/landing/TrustBadges';
 import { Steps } from '@/components/landing/Steps';
 import { Testimonials } from '@/components/landing/Testimonials';
 import { FAQ } from '@/components/landing/FAQ';
-import { Contact } from '@/components/landing/Contact';
 import { Disclaimer } from '@/components/landing/Disclaimer';
 import { WidgetEmbed } from '@/components/landing/WidgetEmbed';
 import { Footer } from '@/components/landing/Footer';
@@ -116,7 +115,6 @@ export default function Landing() {
         <Testimonials />
         <FAQ />
         <WidgetEmbed />
-        <Contact />
       </main>
       <Disclaimer />
       <Footer 

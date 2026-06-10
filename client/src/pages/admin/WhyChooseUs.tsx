@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useLocation } from 'wouter';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { queryClient, apiRequest } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
@@ -97,7 +98,9 @@ const defaultBadges: Badge[] = [
 
 export default function WhyChooseUs({ embedded }: { embedded?: boolean } = {}) {
   const { toast } = useToast();
-  const { apiSuffix } = useSiteContext();
+  const { apiSuffix, tenantId } = useSiteContext();
+  const [, navigate] = useLocation();
+  useEffect(() => { if (!embedded && !tenantId) navigate('/admin/sites'); }, [embedded, tenantId]);
   const [activeTab, setActiveTab] = useState<SupportedLanguage>('en');
   const [settings, setSettings] = useState<TrustBadgesSettings>({
     sectionTitle: { en: 'Why Choose Us', ar: 'لماذا تختارنا', tr: 'Neden Bizi Seçmelisiniz', fr: 'Pourquoi Nous Choisir', ru: 'Почему мы', fa: 'چرا ما را انتخاب کنید', zh: '为什么选择我们', hi: 'हमें क्यों चुनें', es: 'Por Qué Elegirnos', id: 'Mengapa Memilih Kami' },

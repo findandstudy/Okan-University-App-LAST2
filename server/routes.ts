@@ -789,17 +789,17 @@ export async function registerRoutes(
       // Create primary domain record
       await storage.createTenantDomain({ tenantId: tenant.id, domain, isPrimary: true });
       // Seed baseline sections for the new tenant
-      const defaultSections = [
-        { tenantId: tenant.id, sectionKey: 'hero', title: 'Hero', enabled: true, order: 10, settings: {} },
-        { tenantId: tenant.id, sectionKey: 'trust_badges', title: 'Why Choose Us', enabled: true, order: 20, settings: {} },
-        { tenantId: tenant.id, sectionKey: 'steps', title: 'Steps', enabled: true, order: 30, settings: {} },
-        { tenantId: tenant.id, sectionKey: 'testimonials', title: 'Testimonials', enabled: true, order: 40, settings: {} },
-        { tenantId: tenant.id, sectionKey: 'faq', title: 'FAQ', enabled: true, order: 50, settings: {} },
-        { tenantId: tenant.id, sectionKey: 'contact', title: 'Contact', enabled: true, order: 60, settings: {} },
-        { tenantId: tenant.id, sectionKey: 'footer', title: 'Footer', enabled: true, order: 70, settings: {} },
+      const defaultSections: Array<{ tenantId: string; sectionKey: string; isEnabled: boolean; displayOrder: number; settings: Record<string, unknown> }> = [
+        { tenantId: tenant.id, sectionKey: 'hero', isEnabled: true, displayOrder: 10, settings: {} },
+        { tenantId: tenant.id, sectionKey: 'trust_badges', isEnabled: true, displayOrder: 20, settings: {} },
+        { tenantId: tenant.id, sectionKey: 'steps', isEnabled: true, displayOrder: 30, settings: {} },
+        { tenantId: tenant.id, sectionKey: 'testimonials', isEnabled: true, displayOrder: 40, settings: {} },
+        { tenantId: tenant.id, sectionKey: 'faq', isEnabled: true, displayOrder: 50, settings: {} },
+        { tenantId: tenant.id, sectionKey: 'contact', isEnabled: true, displayOrder: 60, settings: {} },
+        { tenantId: tenant.id, sectionKey: 'footer', isEnabled: true, displayOrder: 70, settings: {} },
       ];
       for (const section of defaultSections) {
-        await storage.createSection(section);
+        await storage.createSection(section as any);
       }
       res.json(tenant);
     } catch {
@@ -850,6 +850,8 @@ export async function registerRoutes(
       const { universityName, domain } = req.body;
       if (!universityName || !domain) return res.status(400).json({ error: "universityName and domain are required" });
       const newTenant = await storage.createTenant({ universityName, domain, status: 'taslak' });
+      // Create primary domain record for the cloned tenant
+      await storage.createTenantDomain({ tenantId: newTenant.id, domain, isPrimary: true });
       // Clone sections from source
       const srcSections = await storage.getSections(id);
       for (const s of srcSections) {

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useLocation } from 'wouter';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { queryClient, apiRequest } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
@@ -80,7 +81,9 @@ const defaultItems: ContactItem[] = [
 
 export default function ContactInfo({ embedded }: { embedded?: boolean } = {}) {
   const { toast } = useToast();
-  const { apiSuffix } = useSiteContext();
+  const { apiSuffix, tenantId } = useSiteContext();
+  const [, navigate] = useLocation();
+  useEffect(() => { if (!embedded && !tenantId) navigate('/admin/sites'); }, [embedded, tenantId]);
   const [activeTab, setActiveTab] = useState<SupportedLanguage>('en');
   const [settings, setSettings] = useState<ContactSettings>({
     sectionTitle: { en: 'Contact Us', ar: 'اتصل بنا', tr: 'İletişim', fr: 'Contactez-nous', ru: 'Контакты', fa: 'تماس با ما', zh: '联系我们', hi: 'संपर्क करें', es: 'Contáctenos', id: 'Hubungi Kami' },

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useLocation } from 'wouter';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { queryClient, apiRequest } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
@@ -54,7 +55,9 @@ const languageLabels: Partial<Record<SupportedLanguage, string>> = {
 
 export default function HeroContent({ embedded }: { embedded?: boolean } = {}) {
   const { toast } = useToast();
-  const { apiSuffix } = useSiteContext();
+  const { apiSuffix, tenantId } = useSiteContext();
+  const [, navigate] = useLocation();
+  useEffect(() => { if (!embedded && !tenantId) navigate('/admin/sites'); }, [embedded, tenantId]);
   const [activeTab, setActiveTab] = useState<SupportedLanguage>('en');
   const [settings, setSettings] = useState<HeroSettings>({
     badge: { en: 'Applications Open for 2026', ar: '', tr: '', fr: '', ru: '', fa: '', zh: '', hi: '', es: '', id: '' },
