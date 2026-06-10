@@ -24,7 +24,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Plus, Settings2, Copy, Trash2, Globe, Loader2, ExternalLink } from 'lucide-react';
+import { Plus, Settings2, Copy, Trash2, Globe, Loader2, ExternalLink, Eye, Power, PowerOff } from 'lucide-react';
 import type { Tenant } from '@shared/schema';
 
 const STATUS_LABELS: Record<string, string> = {
@@ -181,6 +181,7 @@ export default function Sites() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-12">Logo</TableHead>
                     <TableHead>University</TableHead>
                     <TableHead>Domain</TableHead>
                     <TableHead>Status</TableHead>
@@ -188,114 +189,151 @@ export default function Sites() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {tenants.map(tenant => (
-                    <TableRow key={tenant.id} data-testid={`row-tenant-${tenant.id}`}>
-                      <TableCell className="font-medium">{tenant.universityName}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1 text-muted-foreground text-sm">
-                          <Globe className="h-3 w-3" />
-                          {tenant.domain}
-                          {tenant.domain && (
-                            <a
-                              href={`https://${tenant.domain}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="hover:text-foreground"
-                            >
-                              <ExternalLink className="h-3 w-3" />
-                            </a>
+                  {tenants.map(tenant => {
+                    const isPublished = tenant.status === 'yayinda';
+                    const logoUrl = tenant.logoUrl;
+                    return (
+                      <TableRow key={tenant.id} data-testid={`row-tenant-${tenant.id}`}>
+                        <TableCell>
+                          {logoUrl ? (
+                            <img
+                              src={logoUrl}
+                              alt={tenant.universityName}
+                              className="h-8 w-8 rounded object-contain border bg-white"
+                              data-testid={`img-logo-${tenant.id}`}
+                            />
+                          ) : (
+                            <div className="h-8 w-8 rounded border bg-muted flex items-center justify-center text-xs font-bold text-muted-foreground">
+                              {tenant.universityName.charAt(0)}
+                            </div>
                           )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={STATUS_VARIANTS[tenant.status as string] ?? 'secondary'}
-                          className="cursor-pointer"
-                          onClick={() => {
-                            const nextStatus = tenant.status === 'yayinda' ? 'taslak' : 'yayinda';
-                            statusMutation.mutate({ id: tenant.id, status: nextStatus });
-                          }}
-                          data-testid={`badge-status-${tenant.id}`}
-                        >
-                          {STATUS_LABELS[tenant.status as string] ?? tenant.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <Link href={`/admin/sites/${tenant.id}`}>
-                            <Button variant="ghost" size="icon" data-testid={`button-edit-${tenant.id}`}>
-                              <Settings2 className="h-4 w-4" />
-                            </Button>
-                          </Link>
-
-                          <Dialog
-                            open={cloneDialogOpen === tenant.id}
-                            onOpenChange={open => {
-                              setCloneDialogOpen(open ? tenant.id : null);
-                              if (open) setCloneForm({ universityName: `${tenant.universityName} (Copy)`, domain: '' });
-                            }}
+                        </TableCell>
+                        <TableCell className="font-medium">{tenant.universityName}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1 text-muted-foreground text-sm">
+                            <Globe className="h-3 w-3" />
+                            <span>{tenant.domain}</span>
+                            {tenant.domain && (
+                              <a
+                                href={`https://${tenant.domain}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="hover:text-foreground"
+                                data-testid={`link-visit-${tenant.id}`}
+                              >
+                                <ExternalLink className="h-3 w-3" />
+                              </a>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={STATUS_VARIANTS[tenant.status as string] ?? 'secondary'}
+                            data-testid={`badge-status-${tenant.id}`}
                           >
-                            <DialogTrigger asChild>
-                              <Button variant="ghost" size="icon" data-testid={`button-clone-${tenant.id}`}>
-                                <Copy className="h-4 w-4" />
+                            {STATUS_LABELS[tenant.status as string] ?? tenant.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <Link href={`/admin/sites/${tenant.id}`}>
+                              <Button variant="ghost" size="sm" className="gap-1.5" data-testid={`button-edit-${tenant.id}`}>
+                                <Settings2 className="h-3.5 w-3.5" />
+                                Edit
                               </Button>
-                            </DialogTrigger>
-                            <DialogContent>
-                              <DialogHeader>
-                                <DialogTitle>Clone: {tenant.universityName}</DialogTitle>
-                              </DialogHeader>
-                              <div className="space-y-4 py-2">
-                                <div className="space-y-2">
-                                  <Label>New University Name</Label>
-                                  <Input
-                                    data-testid="input-clone-name"
-                                    value={cloneForm.universityName}
-                                    onChange={e => setCloneForm(p => ({ ...p, universityName: e.target.value }))}
-                                  />
-                                </div>
-                                <div className="space-y-2">
-                                  <Label>New Domain</Label>
-                                  <Input
-                                    data-testid="input-clone-domain"
-                                    placeholder="e.g. newuniversity.app"
-                                    value={cloneForm.domain}
-                                    onChange={e => setCloneForm(p => ({ ...p, domain: e.target.value }))}
-                                  />
-                                </div>
-                                <div className="flex justify-end gap-2">
-                                  <Button variant="outline" onClick={() => setCloneDialogOpen(null)}>Cancel</Button>
-                                  <Button
-                                    data-testid="button-confirm-clone"
-                                    onClick={() => cloneMutation.mutate({ sourceId: tenant.id, data: cloneForm })}
-                                    disabled={cloneMutation.isPending || !cloneForm.universityName || !cloneForm.domain}
-                                  >
-                                    {cloneMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                                    Clone
-                                  </Button>
-                                </div>
-                              </div>
-                            </DialogContent>
-                          </Dialog>
+                            </Link>
 
-                          {tenant.id !== 'default' && (
+                            {tenant.domain && (
+                              <a href={`https://${tenant.domain}`} target="_blank" rel="noopener noreferrer">
+                                <Button variant="ghost" size="sm" className="gap-1.5" data-testid={`button-preview-${tenant.id}`}>
+                                  <Eye className="h-3.5 w-3.5" />
+                                  Preview
+                                </Button>
+                              </a>
+                            )}
+
                             <Button
                               variant="ghost"
-                              size="icon"
-                              data-testid={`button-delete-${tenant.id}`}
-                              onClick={() => {
-                                if (confirm(`Delete "${tenant.universityName}"? This cannot be undone.`)) {
-                                  deleteMutation.mutate(tenant.id);
-                                }
-                              }}
-                              disabled={deleteMutation.isPending}
+                              size="sm"
+                              className="gap-1.5"
+                              data-testid={`button-toggle-status-${tenant.id}`}
+                              onClick={() => statusMutation.mutate({ id: tenant.id, status: isPublished ? 'taslak' : 'yayinda' })}
+                              disabled={statusMutation.isPending}
                             >
-                              <Trash2 className="h-4 w-4 text-destructive" />
+                              {isPublished ? <PowerOff className="h-3.5 w-3.5" /> : <Power className="h-3.5 w-3.5" />}
+                              {isPublished ? 'Unpublish' : 'Publish'}
                             </Button>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+
+                            <Dialog
+                              open={cloneDialogOpen === tenant.id}
+                              onOpenChange={open => {
+                                setCloneDialogOpen(open ? tenant.id : null);
+                                if (open) setCloneForm({ universityName: `${tenant.universityName} (Copy)`, domain: '' });
+                              }}
+                            >
+                              <DialogTrigger asChild>
+                                <Button variant="ghost" size="sm" className="gap-1.5" data-testid={`button-clone-${tenant.id}`}>
+                                  <Copy className="h-3.5 w-3.5" />
+                                  Clone
+                                </Button>
+                              </DialogTrigger>
+                              <DialogContent>
+                                <DialogHeader>
+                                  <DialogTitle>Clone: {tenant.universityName}</DialogTitle>
+                                </DialogHeader>
+                                <div className="space-y-4 py-2">
+                                  <div className="space-y-2">
+                                    <Label>New University Name</Label>
+                                    <Input
+                                      data-testid="input-clone-name"
+                                      value={cloneForm.universityName}
+                                      onChange={e => setCloneForm(p => ({ ...p, universityName: e.target.value }))}
+                                    />
+                                  </div>
+                                  <div className="space-y-2">
+                                    <Label>New Domain</Label>
+                                    <Input
+                                      data-testid="input-clone-domain"
+                                      placeholder="e.g. newuniversity.app"
+                                      value={cloneForm.domain}
+                                      onChange={e => setCloneForm(p => ({ ...p, domain: e.target.value }))}
+                                    />
+                                  </div>
+                                  <div className="flex justify-end gap-2">
+                                    <Button variant="outline" onClick={() => setCloneDialogOpen(null)}>Cancel</Button>
+                                    <Button
+                                      data-testid="button-confirm-clone"
+                                      onClick={() => cloneMutation.mutate({ sourceId: tenant.id, data: cloneForm })}
+                                      disabled={cloneMutation.isPending || !cloneForm.universityName || !cloneForm.domain}
+                                    >
+                                      {cloneMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                                      Clone
+                                    </Button>
+                                  </div>
+                                </div>
+                              </DialogContent>
+                            </Dialog>
+
+                            {tenant.id !== 'default' && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                data-testid={`button-delete-${tenant.id}`}
+                                onClick={() => {
+                                  if (confirm(`Delete "${tenant.universityName}"? This cannot be undone.`)) {
+                                    deleteMutation.mutate(tenant.id);
+                                  }
+                                }}
+                                disabled={deleteMutation.isPending}
+                              >
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             )}

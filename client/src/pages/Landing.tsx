@@ -8,6 +8,7 @@ import { Testimonials } from '@/components/landing/Testimonials';
 import { FAQ } from '@/components/landing/FAQ';
 import { Contact } from '@/components/landing/Contact';
 import { Disclaimer } from '@/components/landing/Disclaimer';
+import { WidgetEmbed } from '@/components/landing/WidgetEmbed';
 import { Footer } from '@/components/landing/Footer';
 import { Preloader } from '@/components/Preloader';
 import TrackingScripts from '@/components/TrackingScripts';
@@ -115,6 +116,7 @@ export default function Landing() {
         <Testimonials />
         <FAQ />
         <Contact />
+        <WidgetEmbed />
       </main>
       <Disclaimer />
       <Footer 

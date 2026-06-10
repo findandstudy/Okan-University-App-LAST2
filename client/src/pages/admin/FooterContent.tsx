@@ -3,6 +3,7 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { queryClient, apiRequest } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import AdminLayout from './AdminLayout';
+import { useSiteContext } from '@/lib/siteContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,6 +12,11 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Save, Loader2 } from 'lucide-react';
 import { SUPPORTED_LANGUAGES, type SupportedLanguage } from '@shared/schema';
+
+function EmbeddableLayout({ embedded, children }: { embedded?: boolean; children: React.ReactNode }) {
+  if (embedded) return <>{children}</>;
+  return <AdminLayout>{children}</AdminLayout>;
+}
 
 interface FooterSettings {
   description: Partial<Record<SupportedLanguage, string>>;
@@ -72,13 +78,14 @@ const defaultSettings: FooterSettings = {
   },
 };
 
-export default function FooterContent() {
+export default function FooterContent({ embedded }: { embedded?: boolean } = {}) {
   const { toast } = useToast();
+  const { apiSuffix } = useSiteContext();
   const [activeTab, setActiveTab] = useState<SupportedLanguage>('en');
   const [settings, setSettings] = useState<FooterSettings>(defaultSettings);
 
   const { data: sections = [], isLoading } = useQuery<Section[]>({
-    queryKey: ['/api/sections'],
+    queryKey: ['/api/sections' + apiSuffix],
   });
 
   useEffect(() => {
@@ -92,9 +99,9 @@ export default function FooterContent() {
     mutationFn: async (data: FooterSettings) => {
       const footerSection = sections.find(s => s.sectionKey === 'footer');
       if (footerSection) {
-        await apiRequest('PATCH', `/api/sections/${footerSection.id}`, { settings: data });
+        await apiRequest('PATCH', `/api/sections/${footerSection.id}${apiSuffix}`, { settings: data });
       } else {
-        await apiRequest('POST', '/api/sections', {
+        await apiRequest('POST', `/api/sections${apiSuffix}`, {
           sectionKey: 'footer',
           title: 'Footer',
           enabled: true,
@@ -104,7 +111,7 @@ export default function FooterContent() {
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/sections'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/sections' + apiSuffix] });
       toast({ title: 'Footer content saved', description: 'Your changes have been saved successfully.' });
     },
     onError: () => {
@@ -118,16 +125,16 @@ export default function FooterContent() {
 
   if (isLoading) {
     return (
-      <AdminLayout>
+      <EmbeddableLayout embedded={embedded}>
         <div className="flex items-center justify-center h-64">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
-      </AdminLayout>
+      </EmbeddableLayout>
     );
   }
 
   return (
-    <AdminLayout>
+    <EmbeddableLayout embedded={embedded}>
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
@@ -226,6 +233,6 @@ export default function FooterContent() {
           ))}
         </Tabs>
       </div>
-    </AdminLayout>
+    </EmbeddableLayout>
   );
 }

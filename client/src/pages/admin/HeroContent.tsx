@@ -3,6 +3,7 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { queryClient, apiRequest } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import AdminLayout from './AdminLayout';
+import { useSiteContext } from '@/lib/siteContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,6 +12,11 @@ import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Save, Plus, Trash2, Loader2 } from 'lucide-react';
 import { SUPPORTED_LANGUAGES, type SupportedLanguage } from '@shared/schema';
+
+function EmbeddableLayout({ embedded, children }: { embedded?: boolean; children: React.ReactNode }) {
+  if (embedded) return <>{children}</>;
+  return <AdminLayout>{children}</AdminLayout>;
+}
 
 interface HeroSettings {
   badge: Partial<Record<SupportedLanguage, string>>;
@@ -46,8 +52,9 @@ const languageLabels: Partial<Record<SupportedLanguage, string>> = {
   id: 'Bahasa',
 };
 
-export default function HeroContent() {
+export default function HeroContent({ embedded }: { embedded?: boolean } = {}) {
   const { toast } = useToast();
+  const { apiSuffix } = useSiteContext();
   const [activeTab, setActiveTab] = useState<SupportedLanguage>('en');
   const [settings, setSettings] = useState<HeroSettings>({
     badge: { en: 'Applications Open for 2026', ar: '', tr: '', fr: '', ru: '', fa: '', zh: '', hi: '', es: '', id: '' },
@@ -68,7 +75,7 @@ export default function HeroContent() {
   });
 
   const { data: sections = [], isLoading } = useQuery<Section[]>({
-    queryKey: ['/api/sections'],
+    queryKey: ['/api/sections' + apiSuffix],
   });
 
   const heroSection = sections.find(s => s.sectionKey === 'hero');
@@ -99,10 +106,10 @@ export default function HeroContent() {
   const updateMutation = useMutation({
     mutationFn: async () => {
       if (!heroSection) return;
-      return apiRequest('PATCH', `/api/sections/${heroSection.id}`, { settings });
+      return apiRequest('PATCH', `/api/sections/${heroSection.id}${apiSuffix}`, { settings });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/sections'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/sections' + apiSuffix] });
       toast({ title: 'Success', description: 'Hero content updated successfully' });
     },
     onError: () => {
@@ -167,16 +174,16 @@ export default function HeroContent() {
 
   if (isLoading) {
     return (
-      <AdminLayout>
+      <EmbeddableLayout embedded={embedded}>
         <div className="flex items-center justify-center h-64">
           <Loader2 className="h-8 w-8 animate-spin" />
         </div>
-      </AdminLayout>
+      </EmbeddableLayout>
     );
   }
 
   return (
-    <AdminLayout>
+    <EmbeddableLayout embedded={embedded}>
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
@@ -339,6 +346,6 @@ export default function HeroContent() {
           </CardContent>
         </Card>
       </div>
-    </AdminLayout>
+    </EmbeddableLayout>
   );
 }

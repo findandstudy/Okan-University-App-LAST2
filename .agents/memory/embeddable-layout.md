@@ -1,16 +1,28 @@
 ---
 name: EmbeddableLayout pattern
-description: Admin pages that accept an `embedded` prop must be wrapped in arrow functions when used as wouter Route components
+description: How admin pages support both standalone (/admin/hero) and embedded (SiteEditor tab) rendering
 ---
 
-## Rule
-When an admin page component has a signature like `function Page({ embedded }: { embedded?: boolean } = {})`, it cannot be passed directly as `component={Page}` to wouter's `<Route>`. Wouter expects `ComponentType<RouteComponentProps<...>>` and the custom prop signature is incompatible.
-
-**Fix:** Use an arrow function wrapper in App.tsx:
+Each embeddable admin page defines a local `EmbeddableLayout` component:
 ```tsx
-<Route path="/admin/sections" component={() => <Sections />} />
+function EmbeddableLayout({ embedded, children }: { embedded?: boolean; children: React.ReactNode }) {
+  if (embedded) return <>{children}</>;
+  return <AdminLayout>{children}</AdminLayout>;
+}
 ```
 
-**Why:** Wouter's RouteComponentProps passes route params to the component. A component with a custom prop type (even with default) doesn't satisfy `FunctionComponent<RouteComponentProps<...>>` because the parameter types are incompatible.
+**Function signature** uses default destructuring so the page works with and without props:
+```tsx
+export default function HeroContent({ embedded }: { embedded?: boolean } = {}) {
+```
 
-**How to apply:** Any time you add `embedded` (or any custom prop) to an admin page and register it as a wouter Route, always wrap it: `component={() => <YourPage />}`.
+**App.tsx** wraps these pages in arrow functions to satisfy wouter's RouteComponentProps typing:
+```tsx
+<Route path="/admin/hero" component={() => <HeroContent />} />
+```
+
+**apiSuffix** from `useSiteContext()` is appended to ALL queryKeys and mutation URLs so each tenant's data is isolated when embedded in SiteEditor.
+
+**Why:** Without EmbeddableLayout, embedding inside SiteEditor would show double AdminLayout chrome. Without apiSuffix, all tenant editors would share the same React Query cache key and mutate the wrong tenant.
+
+**How to apply:** Any new admin page that should appear as a SiteEditor tab must follow this exact pattern. Add it to SiteEditor's `<Tabs>` section with `embedded` prop.

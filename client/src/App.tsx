@@ -44,10 +44,10 @@ function Router() {
       <Route path="/admin/media" component={Media} />
       <Route path="/admin/testimonials" component={() => <Testimonials />} />
       <Route path="/admin/faq" component={() => <FAQ />} />
-      <Route path="/admin/hero" component={HeroContent} />
-      <Route path="/admin/why-choose-us" component={WhyChooseUs} />
-      <Route path="/admin/contact-info" component={ContactInfo} />
-      <Route path="/admin/footer" component={FooterContent} />
+      <Route path="/admin/hero" component={() => <HeroContent />} />
+      <Route path="/admin/why-choose-us" component={() => <WhyChooseUs />} />
+      <Route path="/admin/contact-info" component={() => <ContactInfo />} />
+      <Route path="/admin/footer" component={() => <FooterContent />} />
       <Route path="/admin/seo" component={() => <SEOSettings />} />
       <Route path="/admin/sites" component={Sites} />
       <Route path="/admin/sites/:tenantId" component={SiteEditor} />

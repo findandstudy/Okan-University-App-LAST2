@@ -3,6 +3,7 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { queryClient, apiRequest } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import AdminLayout from './AdminLayout';
+import { useSiteContext } from '@/lib/siteContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,6 +12,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Save, Loader2, Shield, Clock, Users, Award, Globe, HeartHandshake, Sparkles, GraduationCap, BookOpen, Building } from 'lucide-react';
 import { SUPPORTED_LANGUAGES, type SupportedLanguage } from '@shared/schema';
+
+function EmbeddableLayout({ embedded, children }: { embedded?: boolean; children: React.ReactNode }) {
+  if (embedded) return <>{children}</>;
+  return <AdminLayout>{children}</AdminLayout>;
+}
 
 interface Badge {
   icon: string;
@@ -89,8 +95,9 @@ const defaultBadges: Badge[] = [
   },
 ];
 
-export default function WhyChooseUs() {
+export default function WhyChooseUs({ embedded }: { embedded?: boolean } = {}) {
   const { toast } = useToast();
+  const { apiSuffix } = useSiteContext();
   const [activeTab, setActiveTab] = useState<SupportedLanguage>('en');
   const [settings, setSettings] = useState<TrustBadgesSettings>({
     sectionTitle: { en: 'Why Choose Us', ar: 'لماذا تختارنا', tr: 'Neden Bizi Seçmelisiniz', fr: 'Pourquoi Nous Choisir', ru: 'Почему мы', fa: 'چرا ما را انتخاب کنید', zh: '为什么选择我们', hi: 'हमें क्यों चुनें', es: 'Por Qué Elegirnos', id: 'Mengapa Memilih Kami' },
@@ -99,7 +106,7 @@ export default function WhyChooseUs() {
   });
 
   const { data: sections = [], isLoading } = useQuery<Section[]>({
-    queryKey: ['/api/sections'],
+    queryKey: ['/api/sections' + apiSuffix],
   });
 
   const trustSection = sections.find(s => s.sectionKey === 'trust_badges');
@@ -118,10 +125,10 @@ export default function WhyChooseUs() {
   const updateMutation = useMutation({
     mutationFn: async () => {
       if (!trustSection) return;
-      return apiRequest('PATCH', `/api/sections/${trustSection.id}`, { settings });
+      return apiRequest('PATCH', `/api/sections/${trustSection.id}${apiSuffix}`, { settings });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/sections'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/sections' + apiSuffix] });
       toast({ title: 'Success', description: 'Why Choose Us section updated successfully' });
     },
     onError: () => {
@@ -151,16 +158,16 @@ export default function WhyChooseUs() {
 
   if (isLoading) {
     return (
-      <AdminLayout>
+      <EmbeddableLayout embedded={embedded}>
         <div className="flex items-center justify-center h-64">
           <Loader2 className="h-8 w-8 animate-spin" />
         </div>
-      </AdminLayout>
+      </EmbeddableLayout>
     );
   }
 
   return (
-    <AdminLayout>
+    <EmbeddableLayout embedded={embedded}>
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
@@ -290,6 +297,6 @@ export default function WhyChooseUs() {
           ))}
         </Tabs>
       </div>
-    </AdminLayout>
+    </EmbeddableLayout>
   );
 }

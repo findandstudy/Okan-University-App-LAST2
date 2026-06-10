@@ -835,6 +835,24 @@ export async function registerRoutes(
         const { id: _id, tenantId: _tid, ...rest } = f as any;
         await storage.createFaqItem({ ...rest, tenantId: newTenant.id });
       }
+      // Clone testimonials from source
+      const srcTestimonials = await storage.getTestimonials(id);
+      for (const t of srcTestimonials) {
+        const { id: _id, tenantId: _tid, ...rest } = t as any;
+        await storage.createTestimonial({ ...rest, tenantId: newTenant.id });
+      }
+      // Clone theme from source
+      const srcTheme = await storage.getTheme(id);
+      if (srcTheme) {
+        const { id: _id, tenantId: _tid, ...rest } = srcTheme as any;
+        await storage.createTheme({ ...rest, tenantId: newTenant.id });
+      }
+      // Clone widgets from source
+      const srcWidgets = await storage.getWidgets(id);
+      for (const w of srcWidgets) {
+        const { id: _id, tenantId: _tid, ...rest } = w as any;
+        await storage.createWidget({ ...rest, tenantId: newTenant.id });
+      }
       res.json(newTenant);
     } catch (error) {
       console.error('Clone error:', error);
@@ -864,8 +882,10 @@ export async function registerRoutes(
   app.patch("/api/admin/widgets/:id", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
     const id = req.params.id as string;
     try {
+      const existing = await storage.getWidget(id);
+      if (!existing) return res.status(404).json({ error: "Widget not found" });
+      if (existing.tenantId !== req.tenantId) return res.status(403).json({ error: "Forbidden" });
       const widget = await storage.updateWidget(id, req.body);
-      if (!widget) return res.status(404).json({ error: "Widget not found" });
       res.json(widget);
     } catch {
       res.status(500).json({ error: "Failed to update widget" });
@@ -875,6 +895,9 @@ export async function registerRoutes(
   app.delete("/api/admin/widgets/:id", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
     const id = req.params.id as string;
     try {
+      const existing = await storage.getWidget(id);
+      if (!existing) return res.status(404).json({ error: "Widget not found" });
+      if (existing.tenantId !== req.tenantId) return res.status(403).json({ error: "Forbidden" });
       const ok = await storage.deleteWidget(id);
       if (!ok) return res.status(404).json({ error: "Widget not found" });
       res.json({ success: true });

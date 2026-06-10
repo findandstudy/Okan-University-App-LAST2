@@ -3,6 +3,7 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { queryClient, apiRequest } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import AdminLayout from './AdminLayout';
+import { useSiteContext } from '@/lib/siteContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,6 +11,11 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Save, Loader2, Phone, MapPin, MessageCircle, Mail } from 'lucide-react';
 import { SUPPORTED_LANGUAGES, type SupportedLanguage } from '@shared/schema';
+
+function EmbeddableLayout({ embedded, children }: { embedded?: boolean; children: React.ReactNode }) {
+  if (embedded) return <>{children}</>;
+  return <AdminLayout>{children}</AdminLayout>;
+}
 
 interface ContactItem {
   icon: string;
@@ -72,8 +78,9 @@ const defaultItems: ContactItem[] = [
   },
 ];
 
-export default function ContactInfo() {
+export default function ContactInfo({ embedded }: { embedded?: boolean } = {}) {
   const { toast } = useToast();
+  const { apiSuffix } = useSiteContext();
   const [activeTab, setActiveTab] = useState<SupportedLanguage>('en');
   const [settings, setSettings] = useState<ContactSettings>({
     sectionTitle: { en: 'Contact Us', ar: 'اتصل بنا', tr: 'İletişim', fr: 'Contactez-nous', ru: 'Контакты', fa: 'تماس با ما', zh: '联系我们', hi: 'संपर्क करें', es: 'Contáctenos', id: 'Hubungi Kami' },
@@ -82,7 +89,7 @@ export default function ContactInfo() {
   });
 
   const { data: sections = [], isLoading } = useQuery<Section[]>({
-    queryKey: ['/api/sections'],
+    queryKey: ['/api/sections' + apiSuffix],
   });
 
   useEffect(() => {
@@ -96,9 +103,9 @@ export default function ContactInfo() {
     mutationFn: async (data: ContactSettings) => {
       const contactSection = sections.find(s => s.sectionKey === 'contact');
       if (contactSection) {
-        await apiRequest('PATCH', `/api/sections/${contactSection.id}`, { settings: data });
+        await apiRequest('PATCH', `/api/sections/${contactSection.id}${apiSuffix}`, { settings: data });
       } else {
-        await apiRequest('POST', '/api/sections', {
+        await apiRequest('POST', `/api/sections${apiSuffix}`, {
           sectionKey: 'contact',
           title: 'Contact',
           enabled: true,
@@ -108,7 +115,7 @@ export default function ContactInfo() {
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/sections'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/sections' + apiSuffix] });
       toast({ title: 'Contact info saved', description: 'Your changes have been saved successfully.' });
     },
     onError: () => {
@@ -142,16 +149,16 @@ export default function ContactInfo() {
 
   if (isLoading) {
     return (
-      <AdminLayout>
+      <EmbeddableLayout embedded={embedded}>
         <div className="flex items-center justify-center h-64">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
-      </AdminLayout>
+      </EmbeddableLayout>
     );
   }
 
   return (
-    <AdminLayout>
+    <EmbeddableLayout embedded={embedded}>
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
@@ -253,6 +260,6 @@ export default function ContactInfo() {
           ))}
         </Tabs>
       </div>
-    </AdminLayout>
+    </EmbeddableLayout>
   );
 }

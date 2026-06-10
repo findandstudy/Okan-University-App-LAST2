@@ -25,7 +25,27 @@ import FAQ from './FAQ';
 import Testimonials from './Testimonials';
 import Theme from './Theme';
 import SEOSettings from './SEOSettings';
+import HeroContent from './HeroContent';
+import WhyChooseUs from './WhyChooseUs';
+import ContactInfo from './ContactInfo';
+import FooterContent from './FooterContent';
+import { Construction } from 'lucide-react';
 import type { Tenant, Widget } from '@shared/schema';
+
+function PlaceholderTab({ title, description }: { title: string; description: string }) {
+  return (
+    <Card>
+      <CardContent className="flex flex-col items-center justify-center py-16 text-center gap-3">
+        <Construction className="h-10 w-10 text-muted-foreground opacity-50" />
+        <div>
+          <p className="font-semibold text-lg">{title}</p>
+          <p className="text-muted-foreground text-sm">{description}</p>
+        </div>
+        <p className="text-xs text-muted-foreground">Coming soon</p>
+      </CardContent>
+    </Card>
+  );
+}
 
 const STATUS_VARIANTS: Record<string, 'default' | 'secondary' | 'destructive'> = {
   yayinda: 'default',
@@ -316,17 +336,44 @@ export default function SiteEditor() {
           </div>
 
           <Tabs defaultValue="sections">
-            <TabsList className="flex-wrap h-auto">
+            <TabsList className="flex-wrap h-auto gap-0.5">
               <TabsTrigger value="sections" data-testid="tab-sections">Sections</TabsTrigger>
+              <TabsTrigger value="content" data-testid="tab-content">Content</TabsTrigger>
               <TabsTrigger value="faq" data-testid="tab-faq">FAQ</TabsTrigger>
               <TabsTrigger value="testimonials" data-testid="tab-testimonials">Testimonials</TabsTrigger>
               <TabsTrigger value="theme" data-testid="tab-theme">Theme</TabsTrigger>
               <TabsTrigger value="widget" data-testid="tab-widget">Widget</TabsTrigger>
               <TabsTrigger value="seo" data-testid="tab-seo">SEO</TabsTrigger>
+              <TabsTrigger value="media" data-testid="tab-media">Media</TabsTrigger>
+              <TabsTrigger value="blog" data-testid="tab-blog">Blog</TabsTrigger>
+              <TabsTrigger value="versions" data-testid="tab-versions">Versions</TabsTrigger>
             </TabsList>
 
             <TabsContent value="sections" className="mt-4">
               <Sections embedded />
+            </TabsContent>
+
+            <TabsContent value="content" className="mt-4">
+              <Tabs defaultValue="hero">
+                <TabsList>
+                  <TabsTrigger value="hero">Hero</TabsTrigger>
+                  <TabsTrigger value="trust">Why Choose Us</TabsTrigger>
+                  <TabsTrigger value="contact">Contact</TabsTrigger>
+                  <TabsTrigger value="footer">Footer</TabsTrigger>
+                </TabsList>
+                <TabsContent value="hero" className="mt-4">
+                  <HeroContent embedded />
+                </TabsContent>
+                <TabsContent value="trust" className="mt-4">
+                  <WhyChooseUs embedded />
+                </TabsContent>
+                <TabsContent value="contact" className="mt-4">
+                  <ContactInfo embedded />
+                </TabsContent>
+                <TabsContent value="footer" className="mt-4">
+                  <FooterContent embedded />
+                </TabsContent>
+              </Tabs>
             </TabsContent>
 
             <TabsContent value="faq" className="mt-4">
@@ -347,6 +394,18 @@ export default function SiteEditor() {
 
             <TabsContent value="seo" className="mt-4">
               <SEOSettings embedded />
+            </TabsContent>
+
+            <TabsContent value="media" className="mt-4">
+              <PlaceholderTab title="Media Library" description="Upload and manage images, logos, and files for this site." />
+            </TabsContent>
+
+            <TabsContent value="blog" className="mt-4">
+              <PlaceholderTab title="Blog" description="Create and publish blog posts and articles for this site." />
+            </TabsContent>
+
+            <TabsContent value="versions" className="mt-4">
+              <PlaceholderTab title="Version History" description="View and restore previous versions of this site's content." />
             </TabsContent>
           </Tabs>
         </div>
