@@ -48,6 +48,22 @@ function requireAdmin(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
+// ─── Admin tenant isolation middleware ────────────────────────────────────────
+// Must run AFTER both requireAdmin and resolveTenant.
+// Superadmins (role === 'super_admin') may operate on any tenant.
+// Regular admins are restricted to their own tenant (session.tenantId === req.tenantId).
+async function requireAdminTenantAccess(req: Request, res: Response, next: NextFunction) {
+  const admin = await storage.getAdminById(req.session.adminId || '');
+  if (!admin) return res.status(401).json({ error: "Unauthorized" });
+
+  if (admin.role === 'super_admin') return next();
+
+  if (!req.session.tenantId || req.session.tenantId !== req.tenantId) {
+    return res.status(403).json({ error: "Forbidden: tenant mismatch" });
+  }
+  next();
+}
+
 // ─── Dev host detection ───────────────────────────────────────────────────────
 // Returns true for hosts where it's safe to fall back to the default tenant
 // (local development and Replit preview environments).
@@ -296,7 +312,7 @@ export async function registerRoutes(
   });
 
   // ─── Admin Stats ────────────────────────────────────────────────────────────
-  app.get("/api/admin/stats", requireAdmin, resolveTenant, async (req, res) => {
+  app.get("/api/admin/stats", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
     try {
       const tenantId = req.tenantId;
       const [sectionsList, testimonialsList, faqList, media] = await Promise.all([
@@ -323,7 +339,7 @@ export async function registerRoutes(
     res.json(req.tenant);
   });
 
-  app.patch("/api/tenant", requireAdmin, resolveTenant, async (req, res) => {
+  app.patch("/api/tenant", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
     try {
       const updated = await storage.updateTenant(req.tenantId, req.body);
       // Invalidate bootstrap cache for this tenant
@@ -336,7 +352,7 @@ export async function registerRoutes(
   });
 
   // ─── Tenant Domains API ─────────────────────────────────────────────────────
-  app.get("/api/admin/tenant-domains", requireAdmin, resolveTenant, async (req, res) => {
+  app.get("/api/admin/tenant-domains", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
     try {
       const domains = await storage.getTenantDomains(req.tenantId);
       res.json(domains);
@@ -345,7 +361,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/admin/tenant-domains", requireAdmin, resolveTenant, async (req, res) => {
+  app.post("/api/admin/tenant-domains", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
     try {
       const { domain, isPrimary } = req.body;
       if (!domain) return res.status(400).json({ error: "domain is required" });
@@ -357,7 +373,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/admin/tenant-domains/:id", requireAdmin, resolveTenant, async (req, res) => {
+  app.delete("/api/admin/tenant-domains/:id", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
     try {
       const domains = await storage.getTenantDomains(req.tenantId);
       const domain = domains.find(d => d.id === req.params.id);
@@ -381,7 +397,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/theme", requireAdmin, resolveTenant, async (req, res) => {
+  app.patch("/api/theme", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
     try {
       let theme = await storage.getTheme(req.tenantId);
       if (!theme) {
@@ -407,7 +423,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/sections", requireAdmin, resolveTenant, async (req, res) => {
+  app.post("/api/sections", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
     try {
       const { sectionKey, displayOrder, isEnabled, contentByLang, settings } = req.body;
       if (!sectionKey) return res.status(400).json({ error: "sectionKey is required" });
@@ -426,7 +442,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/sections/:id", requireAdmin, resolveTenant, async (req, res) => {
+  app.delete("/api/sections/:id", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
     try {
       const deleted = await storage.deleteSection(req.params.id as string, req.tenantId);
       if (!deleted) return res.status(404).json({ error: "Section not found" });
@@ -437,7 +453,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/sections/:id", requireAdmin, resolveTenant, async (req, res) => {
+  app.patch("/api/sections/:id", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
     try {
       const section = await storage.updateSection(req.params.id as string, req.body);
       if (!section) return res.status(404).json({ error: "Section not found" });
@@ -448,7 +464,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/sections", requireAdmin, resolveTenant, async (req, res) => {
+  app.patch("/api/sections", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
     try {
       const updates = req.body.sections as Array<{ id: string; isEnabled: boolean }>;
       const result = await storage.updateSections(updates);
@@ -499,7 +515,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/media", requireAdmin, resolveTenant, async (req, res) => {
+  app.post("/api/media", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
     try {
       const parsed = insertMediaAssetSchema.safeParse({ ...req.body, tenantId: req.tenantId });
       if (!parsed.success) return res.status(400).json({ error: "Invalid media data", details: parsed.error });
@@ -510,7 +526,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/media/:id", requireAdmin, resolveTenant, async (req, res) => {
+  app.delete("/api/media/:id", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
     try {
       const asset = await storage.getMediaAsset(req.params.id as string);
       if (!asset || asset.tenantId !== req.tenantId) return res.status(404).json({ error: "Media not found" });
@@ -530,7 +546,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/testimonials/:id", resolveTenant, async (req, res) => {
+  app.get("/api/testimonials/:id", resolveTenant, requirePublished, async (req, res) => {
     try {
       const t = await storage.getTestimonial(req.params.id as string);
       if (!t || t.tenantId !== req.tenantId) return res.status(404).json({ error: "Testimonial not found" });
@@ -540,7 +556,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/testimonials", requireAdmin, resolveTenant, async (req, res) => {
+  app.post("/api/testimonials", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
     try {
       const parsed = insertTestimonialSchema.safeParse({ ...req.body, tenantId: req.tenantId });
       if (!parsed.success) return res.status(400).json({ error: "Invalid testimonial data", details: parsed.error });
@@ -551,7 +567,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/testimonials/:id", requireAdmin, resolveTenant, async (req, res) => {
+  app.patch("/api/testimonials/:id", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
     try {
       const existing = await storage.getTestimonial(req.params.id as string);
       if (!existing || existing.tenantId !== req.tenantId) return res.status(404).json({ error: "Testimonial not found" });
@@ -563,7 +579,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/testimonials/:id", requireAdmin, resolveTenant, async (req, res) => {
+  app.delete("/api/testimonials/:id", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
     try {
       const existing = await storage.getTestimonial(req.params.id as string);
       if (!existing || existing.tenantId !== req.tenantId) return res.status(404).json({ error: "Testimonial not found" });
@@ -584,7 +600,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/faq/:id", resolveTenant, async (req, res) => {
+  app.get("/api/faq/:id", resolveTenant, requirePublished, async (req, res) => {
     try {
       const faq = await storage.getFaqItem(req.params.id as string);
       if (!faq || faq.tenantId !== req.tenantId) return res.status(404).json({ error: "FAQ item not found" });
@@ -594,7 +610,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/faq", requireAdmin, resolveTenant, async (req, res) => {
+  app.post("/api/faq", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
     try {
       const parsed = insertFaqItemSchema.safeParse({ ...req.body, tenantId: req.tenantId });
       if (!parsed.success) return res.status(400).json({ error: "Invalid FAQ data", details: parsed.error });
@@ -605,7 +621,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/faq/:id", requireAdmin, resolveTenant, async (req, res) => {
+  app.patch("/api/faq/:id", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
     try {
       const existing = await storage.getFaqItem(req.params.id as string);
       if (!existing || existing.tenantId !== req.tenantId) return res.status(404).json({ error: "FAQ item not found" });
@@ -617,7 +633,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/faq/:id", requireAdmin, resolveTenant, async (req, res) => {
+  app.delete("/api/faq/:id", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
     try {
       const existing = await storage.getFaqItem(req.params.id as string);
       if (!existing || existing.tenantId !== req.tenantId) return res.status(404).json({ error: "FAQ item not found" });
@@ -638,7 +654,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/admin/seo-settings", requireAdmin, resolveTenant, async (req, res) => {
+  app.get("/api/admin/seo-settings", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
     try {
       res.json(await storage.getSeoSettings(req.tenantId) || {});
     } catch (error) {
@@ -646,7 +662,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/admin/seo-settings", requireAdmin, resolveTenant, async (req, res) => {
+  app.post("/api/admin/seo-settings", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
     try {
       const { tenantId: _, id: __, ...data } = req.body;
       const parsed = insertSeoSettingsSchema.omit({ tenantId: true }).safeParse(data);
