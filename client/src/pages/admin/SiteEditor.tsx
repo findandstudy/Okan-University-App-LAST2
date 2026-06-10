@@ -510,6 +510,7 @@ export default function SiteEditor() {
               <TabsTrigger value="seo" data-testid="tab-seo">SEO</TabsTrigger>
               <TabsTrigger value="media" data-testid="tab-media">Media</TabsTrigger>
               <TabsTrigger value="settings" data-testid="tab-settings">Settings</TabsTrigger>
+              <TabsTrigger value="translations" data-testid="tab-translations">Çeviriler</TabsTrigger>
               <TabsTrigger value="blog" data-testid="tab-blog">Blog</TabsTrigger>
               <TabsTrigger value="versions" data-testid="tab-versions">Versions</TabsTrigger>
             </TabsList>
@@ -567,6 +568,10 @@ export default function SiteEditor() {
 
             <TabsContent value="settings" className="mt-4">
               <TenantSettingsTab tenantId={tenantId} />
+            </TabsContent>
+
+            <TabsContent value="translations" className="mt-4">
+              <PlaceholderTab title="Çeviriler" description="Manage multi-language translations for all site content across supported languages." />
             </TabsContent>
 
             <TabsContent value="blog" className="mt-4">

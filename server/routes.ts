@@ -784,9 +784,10 @@ export async function registerRoutes(
     try {
       const admin = await storage.getAdminById(req.session.adminId!);
       if (!admin || admin.role !== 'super_admin') return res.status(403).json({ error: "Forbidden" });
-      const { universityName, domain } = req.body;
+      const { universityName, domain, languages } = req.body;
       if (!universityName || !domain) return res.status(400).json({ error: "universityName and domain are required" });
-      const tenant = await storage.createTenant({ universityName, domain, status: 'taslak' });
+      const supportedLanguages = Array.isArray(languages) && languages.length > 0 ? languages : ['en'];
+      const tenant = await storage.createTenant({ universityName, domain, status: 'taslak', supportedLanguages });
       // Create primary domain record
       await storage.createTenantDomain({ tenantId: tenant.id, domain, isPrimary: true });
       // Seed baseline sections for the new tenant
@@ -798,6 +799,7 @@ export async function registerRoutes(
         { tenantId: tenant.id, sectionKey: 'faq', isEnabled: true, displayOrder: 50, settings: {} },
         { tenantId: tenant.id, sectionKey: 'contact', isEnabled: true, displayOrder: 60, settings: {} },
         { tenantId: tenant.id, sectionKey: 'footer', isEnabled: true, displayOrder: 70, settings: {} },
+        { tenantId: tenant.id, sectionKey: 'disclaimer', isEnabled: true, displayOrder: 80, settings: {} },
       ];
       for (const section of defaultSections) {
         await storage.createSection(section as any);
@@ -816,10 +818,14 @@ export async function registerRoutes(
       const body = req.body;
       const tenant = await storage.updateTenant(id, body);
       if (!tenant) return res.status(404).json({ error: "Tenant not found" });
-      // On publish: ensure at least one domain record exists for the tenant
-      if (body.status === 'yayinda' && tenant.domain) {
+      // Sync primary domain: on publish, or whenever domain changes, upsert primary domain record
+      if (tenant.domain && (body.status === 'yayinda' || body.domain)) {
         const domains = await storage.getTenantDomains(id);
-        if (domains.length === 0) {
+        const primaryDomain = domains.find(d => d.isPrimary);
+        if (!primaryDomain) {
+          await storage.createTenantDomain({ tenantId: id, domain: tenant.domain, isPrimary: true });
+        } else if (primaryDomain.domain !== tenant.domain) {
+          await storage.deleteTenantDomain(primaryDomain.id);
           await storage.createTenantDomain({ tenantId: id, domain: tenant.domain, isPrimary: true });
         }
       }

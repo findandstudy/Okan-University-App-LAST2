@@ -28,6 +28,7 @@ export const tenants = pgTable("tenants", {
   youtubeUrl: text("youtube_url"),
   contactFormEmbed: text("contact_form_embed"),
   heroVideoUrl: text("hero_video_url"),
+  supportedLanguages: text("supported_languages").array().default(sql`ARRAY['en']::text[]`),
   isActive: boolean("is_active").default(true),
   createdAt: timestamp("created_at").defaultNow(),
 });

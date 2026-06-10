@@ -269,7 +269,7 @@ export default function Sites() {
                           </Badge>
                         </TableCell>
                         <TableCell className="text-center text-sm text-muted-foreground" data-testid={`cell-lang-count-${tenant.id}`}>
-                          {(((tenant as any).settings as any)?.languages?.length) ?? 1}
+                          {(tenant as any).supportedLanguages?.length ?? 1}
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground" data-testid={`cell-created-${tenant.id}`}>
                           {tenant.createdAt ? new Date(tenant.createdAt).toLocaleDateString() : '—'}
