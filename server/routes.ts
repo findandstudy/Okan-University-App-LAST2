@@ -1,7 +1,13 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertMediaAssetSchema, insertTestimonialSchema, insertFaqItemSchema, insertSeoSettingsSchema } from "@shared/schema";
+import {
+  insertMediaAssetSchema,
+  insertTestimonialSchema,
+  insertFaqItemSchema,
+  insertSeoSettingsSchema,
+  type Tenant,
+} from "@shared/schema";
 import session from "express-session";
 import MemoryStore from "memorystore";
 import multer from "multer";
@@ -10,14 +16,13 @@ import { registerObjectStorageRoutes, ObjectStorageService } from "./replit_inte
 
 const SessionStore = MemoryStore(session);
 
-// In-memory cache for optimized images and bootstrap data
-const imageCache = new Map<string, { buffer: Buffer; contentType: string; timestamp: number }>();
-const IMAGE_CACHE_TTL = 3600000; // 1 hour
-const MAX_CACHE_SIZE = 100;
-
-// Bootstrap data cache
-let bootstrapCache: { data: any; timestamp: number } | null = null;
-const BOOTSTRAP_CACHE_TTL = 60000; // 60 seconds
+// ─── Type augmentation ────────────────────────────────────────────────────────
+declare module 'express-serve-static-core' {
+  interface Request {
+    tenantId: string;
+    tenant: Tenant;
+  }
+}
 
 declare module 'express-session' {
   interface SessionData {
@@ -26,13 +31,16 @@ declare module 'express-session' {
   }
 }
 
-const DEFAULT_TENANT_ID = 'default';
+// ─── Image cache ──────────────────────────────────────────────────────────────
+const imageCache = new Map<string, { buffer: Buffer; contentType: string; timestamp: number }>();
+const IMAGE_CACHE_TTL = 3600000; // 1 hour
+const MAX_CACHE_SIZE = 100;
 
-function getTenantId(req: Request): string {
-  const host = req.headers.host || '';
-  return DEFAULT_TENANT_ID;
-}
+// ─── Bootstrap cache — keyed by tenantId ──────────────────────────────────────
+const bootstrapCache = new Map<string, { data: any; timestamp: number }>();
+const BOOTSTRAP_CACHE_TTL = 60000; // 60 seconds
 
+// ─── Admin middleware ─────────────────────────────────────────────────────────
 function requireAdmin(req: Request, res: Response, next: NextFunction) {
   if (!req.session?.adminId) {
     return res.status(401).json({ error: "Unauthorized" });
@@ -40,33 +48,71 @@ function requireAdmin(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
+// ─── resolveTenant middleware ─────────────────────────────────────────────────
+// Resolves tenant from Host header and attaches req.tenant + req.tenantId.
+// Falls back to 'default' tenant when running on localhost/Replit dev domain.
+async function resolveTenant(req: Request, res: Response, next: NextFunction) {
+  try {
+    const rawHost = req.headers.host || '';
+    const host = rawHost.replace(/^www\./, '').replace(/:\d+$/, '').toLowerCase();
+
+    // Always resolve from DB
+    const tenant = await storage.getTenantByHostDomain(host);
+
+    if (tenant) {
+      req.tenant = tenant;
+      req.tenantId = tenant.id;
+      return next();
+    }
+
+    // Dev/Replit fallback — load 'default' tenant without publish gate
+    const defaultTenant = await storage.getTenant('default');
+    if (defaultTenant) {
+      req.tenant = defaultTenant;
+      req.tenantId = defaultTenant.id;
+      return next();
+    }
+
+    return res.status(404).json({ error: "Tenant not found" });
+  } catch (err) {
+    console.error("resolveTenant error:", err);
+    return res.status(500).json({ error: "Failed to resolve tenant" });
+  }
+}
+
+// ─── Publish gate middleware ──────────────────────────────────────────────────
+// Blocks public requests to draft/suspended tenants.
+// Admin requests always pass through.
+function requirePublished(req: Request, res: Response, next: NextFunction) {
+  if (req.tenant.status === 'yayinda') return next();
+  return res.status(404).json({ status: 'coming_soon', message: 'Bu site henüz yayında değil.' });
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  
+
   // Trust proxy for Replit's HTTPS termination
   app.set('trust proxy', 1);
-  
+
   app.use(session({
     secret: process.env.SESSION_SECRET || 'university-platform-secret-key',
     resave: false,
     saveUninitialized: false,
-    store: new SessionStore({
-      checkPeriod: 86400000
-    }),
+    store: new SessionStore({ checkPeriod: 86400000 }),
     cookie: {
       secure: 'auto',
       httpOnly: true,
       sameSite: 'lax',
-      maxAge: 24 * 60 * 60 * 1000
-    }
+      maxAge: 24 * 60 * 60 * 1000,
+    },
   }));
 
   // Register Object Storage routes
   registerObjectStorageRoutes(app);
 
-  // Optimized image endpoint with Sharp
+  // ─── Optimized image endpoint ───────────────────────────────────────────────
   app.get("/api/img/:id", async (req, res) => {
     try {
       const { id } = req.params;
@@ -74,40 +120,34 @@ export async function registerRoutes(
       const height = req.query.h ? parseInt(req.query.h as string) : undefined;
       const format = (req.query.fmt as string) || 'webp';
       const quality = parseInt(req.query.q as string) || 75;
-      
+
       const cacheKey = `${id}_${width}_${height || 'auto'}_${format}_${quality}`;
-      
       const cached = imageCache.get(cacheKey);
       if (cached && Date.now() - cached.timestamp < IMAGE_CACHE_TTL) {
         res.set('Content-Type', cached.contentType);
         res.set('Cache-Control', 'public, max-age=86400');
         return res.send(cached.buffer);
       }
-      
+
       const objectStorageService = new ObjectStorageService();
-      const objectPath = `/objects/uploads/${id}`;
-      
       let buffer: Buffer;
       try {
-        const file = await objectStorageService.getObjectEntityFile(objectPath);
+        const file = await objectStorageService.getObjectEntityFile(`/objects/uploads/${id}`);
         const [contents] = await file.download();
         buffer = contents;
-      } catch (fetchError) {
-        console.error("Failed to fetch image from storage:", fetchError);
+      } catch {
         return res.status(404).json({ error: "Image not found" });
       }
-      
+
       let sharpInstance = sharp(buffer);
-      
       if (height) {
         sharpInstance = sharpInstance.resize(width, height, { fit: 'cover' });
       } else {
         sharpInstance = sharpInstance.resize(width, undefined, { withoutEnlargement: true });
       }
-      
+
       let outputBuffer: Buffer;
       let contentType: string;
-      
       if (format === 'webp') {
         outputBuffer = await sharpInstance.webp({ quality }).toBuffer();
         contentType = 'image/webp';
@@ -118,13 +158,13 @@ export async function registerRoutes(
         outputBuffer = await sharpInstance.png({ quality }).toBuffer();
         contentType = 'image/png';
       }
-      
+
       if (imageCache.size >= MAX_CACHE_SIZE) {
         const oldestKey = imageCache.keys().next().value;
         if (oldestKey) imageCache.delete(oldestKey);
       }
       imageCache.set(cacheKey, { buffer: outputBuffer, contentType, timestamp: Date.now() });
-      
+
       res.set('Content-Type', contentType);
       res.set('Cache-Control', 'public, max-age=86400');
       res.send(outputBuffer);
@@ -134,36 +174,28 @@ export async function registerRoutes(
     }
   });
 
-  // Bootstrap API - single endpoint for all landing page data
-  app.get("/api/bootstrap", async (req, res) => {
+  // ─── Bootstrap API ──────────────────────────────────────────────────────────
+  app.get("/api/bootstrap", resolveTenant, requirePublished, async (req, res) => {
     try {
-      if (bootstrapCache && Date.now() - bootstrapCache.timestamp < BOOTSTRAP_CACHE_TTL) {
+      const tenantId = req.tenantId;
+      const cached = bootstrapCache.get(tenantId);
+      if (cached && Date.now() - cached.timestamp < BOOTSTRAP_CACHE_TTL) {
         res.set('Cache-Control', 'public, max-age=60');
-        return res.json(bootstrapCache.data);
+        return res.json(cached.data);
       }
-      
-      const tenantId = getTenantId(req);
-      
-      const [tenant, theme, sections, testimonials, faqItems, seoSettings] = await Promise.all([
-        storage.getTenantByDomain("okanuniversity.app"),
+
+      const [tenant, theme, sectionsList, testimonialsList, faqList, seo] = await Promise.all([
+        Promise.resolve(req.tenant),
         storage.getTheme(tenantId),
         storage.getSections(tenantId),
         storage.getTestimonials(tenantId),
         storage.getFaqItems(tenantId),
         storage.getSeoSettings(tenantId),
       ]);
-      
-      const data = {
-        tenant,
-        theme,
-        sections,
-        testimonials,
-        faqItems,
-        seoSettings,
-      };
-      
-      bootstrapCache = { data, timestamp: Date.now() };
-      
+
+      const data = { tenant, theme, sections: sectionsList, testimonials: testimonialsList, faqItems: faqList, seoSettings: seo };
+      bootstrapCache.set(tenantId, { data, timestamp: Date.now() });
+
       res.set('Cache-Control', 'public, max-age=60');
       res.json(data);
     } catch (error) {
@@ -172,30 +204,25 @@ export async function registerRoutes(
     }
   });
 
-  // Server-side file upload endpoint (admin only — media library)
-  const upload = multer({ 
+  // ─── File upload (admin only) ───────────────────────────────────────────────
+  const upload = multer({
     storage: multer.memoryStorage(),
-    limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
+    limits: { fileSize: 10 * 1024 * 1024 },
   });
 
   app.post("/api/upload", requireAdmin, upload.single("file"), async (req, res) => {
     try {
       const file = req.file;
-      if (!file) {
-        return res.status(400).json({ error: "No file uploaded" });
-      }
+      if (!file) return res.status(400).json({ error: "No file uploaded" });
 
       const objectStorageService = new ObjectStorageService();
-      
       const uploadURL = await objectStorageService.getObjectEntityUploadURL();
       const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
-      
+
       const response = await fetch(uploadURL, {
         method: "PUT",
         body: file.buffer,
-        headers: {
-          "Content-Type": file.mimetype || "application/octet-stream",
-        },
+        headers: { "Content-Type": file.mimetype || "application/octet-stream" },
       });
 
       if (!response.ok) {
@@ -203,51 +230,31 @@ export async function registerRoutes(
         return res.status(500).json({ error: "Failed to upload to storage" });
       }
 
-      res.json({ 
-        objectPath,
-        metadata: {
-          name: file.originalname,
-          size: file.size,
-          contentType: file.mimetype,
-        }
-      });
+      res.json({ objectPath, metadata: { name: file.originalname, size: file.size, contentType: file.mimetype } });
     } catch (error) {
       console.error("Upload error:", error);
       res.status(500).json({ error: "Failed to upload file" });
     }
   });
 
-  // Admin Authentication
+  // ─── Admin Authentication ───────────────────────────────────────────────────
   app.post("/api/admin/login", async (req, res) => {
     try {
       const { email, password } = req.body;
-      
-      if (!email || !password) {
-        return res.status(400).json({ error: "Email and password required" });
-      }
-      
+      if (!email || !password) return res.status(400).json({ error: "Email and password required" });
+
       const admin = await storage.getAdminByEmail(email);
-      if (!admin || admin.passwordHash !== password) {
-        return res.status(401).json({ error: "Invalid credentials" });
-      }
-      
+      if (!admin || admin.passwordHash !== password) return res.status(401).json({ error: "Invalid credentials" });
+
       req.session.adminId = admin.id;
       req.session.tenantId = admin.tenantId || undefined;
-      
+
       req.session.save((err) => {
         if (err) {
           console.error("Session save error:", err);
           return res.status(500).json({ error: "Session save failed" });
         }
-        res.json({ 
-          success: true, 
-          admin: { 
-            id: admin.id, 
-            email: admin.email, 
-            name: admin.name,
-            role: admin.role
-          } 
-        });
+        res.json({ success: true, admin: { id: admin.id, email: admin.email, name: admin.name, role: admin.role } });
       });
     } catch (error) {
       console.error("Login error:", error);
@@ -257,9 +264,7 @@ export async function registerRoutes(
 
   app.post("/api/admin/logout", (req, res) => {
     req.session.destroy((err) => {
-      if (err) {
-        return res.status(500).json({ error: "Logout failed" });
-      }
+      if (err) return res.status(500).json({ error: "Logout failed" });
       res.json({ success: true });
     });
   });
@@ -267,38 +272,29 @@ export async function registerRoutes(
   app.get("/api/admin/me", requireAdmin, async (req, res) => {
     try {
       const admin = await storage.getAdminById(req.session.adminId || '');
-      if (!admin) {
-        return res.status(404).json({ error: "Admin not found" });
-      }
-      res.json({ 
-        id: admin.id, 
-        email: admin.email, 
-        name: admin.name,
-        role: admin.role,
-        tenantId: admin.tenantId
-      });
-    } catch (error) {
+      if (!admin) return res.status(404).json({ error: "Admin not found" });
+      res.json({ id: admin.id, email: admin.email, name: admin.name, role: admin.role, tenantId: admin.tenantId });
+    } catch {
       res.status(500).json({ error: "Failed to get admin info" });
     }
   });
 
-  // Dashboard Stats API (landing page focused)
-  app.get("/api/admin/stats", requireAdmin, async (req, res) => {
+  // ─── Admin Stats ────────────────────────────────────────────────────────────
+  app.get("/api/admin/stats", requireAdmin, resolveTenant, async (req, res) => {
     try {
-      const tenantId = getTenantId(req);
-      const [sections, testimonials, faqItems, mediaAssets] = await Promise.all([
+      const tenantId = req.tenantId;
+      const [sectionsList, testimonialsList, faqList, media] = await Promise.all([
         storage.getSections(tenantId),
         storage.getTestimonials(tenantId),
         storage.getFaqItems(tenantId),
         storage.getMediaAssets(tenantId),
       ]);
-      
       res.json({
-        sections: sections.length,
-        enabledSections: sections.filter(s => s.isEnabled).length,
-        testimonials: testimonials.length,
-        faqItems: faqItems.length,
-        mediaAssets: mediaAssets.length,
+        sections: sectionsList.length,
+        enabledSections: sectionsList.filter(s => s.isEnabled).length,
+        testimonials: testimonialsList.length,
+        faqItems: faqList.length,
+        mediaAssets: media.length,
       });
     } catch (error) {
       console.error("Error fetching stats:", error);
@@ -306,27 +302,16 @@ export async function registerRoutes(
     }
   });
 
-  // Tenants API
-  app.get("/api/tenant", async (req, res) => {
-    try {
-      const tenant = await storage.getTenantByDomain("okanuniversity.app");
-      if (!tenant) {
-        return res.status(404).json({ error: "Tenant not found" });
-      }
-      res.json(tenant);
-    } catch (error) {
-      console.error("Error fetching tenant:", error);
-      res.status(500).json({ error: "Failed to fetch tenant" });
-    }
+  // ─── Tenant API ─────────────────────────────────────────────────────────────
+  app.get("/api/tenant", resolveTenant, async (req, res) => {
+    res.json(req.tenant);
   });
 
-  app.patch("/api/tenant", requireAdmin, async (req, res) => {
+  app.patch("/api/tenant", requireAdmin, resolveTenant, async (req, res) => {
     try {
-      const tenant = await storage.getTenantByDomain("okanuniversity.app");
-      if (!tenant) {
-        return res.status(404).json({ error: "Tenant not found" });
-      }
-      const updated = await storage.updateTenant(tenant.id, req.body);
+      const updated = await storage.updateTenant(req.tenantId, req.body);
+      // Invalidate bootstrap cache for this tenant
+      bootstrapCache.delete(req.tenantId);
       res.json(updated);
     } catch (error) {
       console.error("Error updating tenant:", error);
@@ -334,17 +319,43 @@ export async function registerRoutes(
     }
   });
 
-  // Theme API
-  app.get("/api/theme", async (req, res) => {
+  // ─── Tenant Domains API ─────────────────────────────────────────────────────
+  app.get("/api/admin/tenant-domains", requireAdmin, resolveTenant, async (req, res) => {
     try {
-      const tenant = await storage.getTenantByDomain("okanuniversity.app");
-      if (!tenant) {
-        return res.status(404).json({ error: "Tenant not found" });
-      }
-      let theme = await storage.getTheme(tenant.id);
-      if (!theme) {
-        theme = await storage.createTheme({ tenantId: tenant.id });
-      }
+      const domains = await storage.getTenantDomains(req.tenantId);
+      res.json(domains);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch domains" });
+    }
+  });
+
+  app.post("/api/admin/tenant-domains", requireAdmin, resolveTenant, async (req, res) => {
+    try {
+      const { domain, isPrimary } = req.body;
+      if (!domain) return res.status(400).json({ error: "domain is required" });
+      const created = await storage.createTenantDomain({ tenantId: req.tenantId, domain, isPrimary: isPrimary ?? false });
+      res.status(201).json(created);
+    } catch (error) {
+      console.error("Error creating domain:", error);
+      res.status(500).json({ error: "Failed to create domain" });
+    }
+  });
+
+  app.delete("/api/admin/tenant-domains/:id", requireAdmin, async (req, res) => {
+    try {
+      const success = await storage.deleteTenantDomain(req.params.id as string);
+      if (!success) return res.status(404).json({ error: "Domain not found" });
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete domain" });
+    }
+  });
+
+  // ─── Theme API ──────────────────────────────────────────────────────────────
+  app.get("/api/theme", resolveTenant, async (req, res) => {
+    try {
+      let theme = await storage.getTheme(req.tenantId);
+      if (!theme) theme = await storage.createTheme({ tenantId: req.tenantId });
       res.json(theme);
     } catch (error) {
       console.error("Error fetching theme:", error);
@@ -352,18 +363,15 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/theme", requireAdmin, async (req, res) => {
+  app.patch("/api/theme", requireAdmin, resolveTenant, async (req, res) => {
     try {
-      const tenant = await storage.getTenantByDomain("okanuniversity.app");
-      if (!tenant) {
-        return res.status(404).json({ error: "Tenant not found" });
-      }
-      let theme = await storage.getTheme(tenant.id);
+      let theme = await storage.getTheme(req.tenantId);
       if (!theme) {
-        theme = await storage.createTheme({ tenantId: tenant.id, ...req.body });
+        theme = await storage.createTheme({ tenantId: req.tenantId, ...req.body });
       } else {
-        theme = await storage.updateTheme(tenant.id, req.body);
+        theme = await storage.updateTheme(req.tenantId, req.body);
       }
+      bootstrapCache.delete(req.tenantId);
       res.json(theme);
     } catch (error) {
       console.error("Error updating theme:", error);
@@ -371,251 +379,188 @@ export async function registerRoutes(
     }
   });
 
-  // Sections API
-  app.get("/api/sections", async (req, res) => {
+  // ─── Sections API ───────────────────────────────────────────────────────────
+  app.get("/api/sections", resolveTenant, async (req, res) => {
     try {
-      const tenantId = getTenantId(req);
-      const sectionsList = await storage.getSections(tenantId);
-      res.json(sectionsList);
+      const list = await storage.getSections(req.tenantId);
+      res.json(list);
     } catch (error) {
-      console.error("Error fetching sections:", error);
       res.status(500).json({ error: "Failed to fetch sections" });
     }
   });
 
-  app.post("/api/sections", requireAdmin, async (req, res) => {
+  app.post("/api/sections", requireAdmin, resolveTenant, async (req, res) => {
     try {
-      const tenantId = getTenantId(req);
       const { sectionKey, displayOrder, isEnabled, contentByLang, settings } = req.body;
-      
-      if (!sectionKey) {
-        return res.status(400).json({ error: "sectionKey is required" });
-      }
-      
+      if (!sectionKey) return res.status(400).json({ error: "sectionKey is required" });
       const section = await storage.createSection({
-        tenantId,
+        tenantId: req.tenantId,
         sectionKey,
         displayOrder: displayOrder ?? 0,
         isEnabled: isEnabled ?? true,
         contentByLang: contentByLang ?? null,
         settings: settings ?? null,
       });
-      
+      bootstrapCache.delete(req.tenantId);
       res.status(201).json(section);
     } catch (error) {
-      console.error("Error creating section:", error);
       res.status(500).json({ error: "Failed to create section" });
     }
   });
 
-  app.delete("/api/sections/:id", requireAdmin, async (req, res) => {
+  app.delete("/api/sections/:id", requireAdmin, resolveTenant, async (req, res) => {
     try {
-      const tenantId = getTenantId(req);
-      const deleted = await storage.deleteSection(req.params.id as string, tenantId);
-      if (!deleted) {
-        return res.status(404).json({ error: "Section not found" });
-      }
+      const deleted = await storage.deleteSection(req.params.id as string, req.tenantId);
+      if (!deleted) return res.status(404).json({ error: "Section not found" });
+      bootstrapCache.delete(req.tenantId);
       res.json({ success: true });
     } catch (error) {
-      console.error("Error deleting section:", error);
       res.status(500).json({ error: "Failed to delete section" });
     }
   });
 
-  app.patch("/api/sections/:id", requireAdmin, async (req, res) => {
+  app.patch("/api/sections/:id", requireAdmin, resolveTenant, async (req, res) => {
     try {
       const section = await storage.updateSection(req.params.id as string, req.body);
-      if (!section) {
-        return res.status(404).json({ error: "Section not found" });
-      }
+      if (!section) return res.status(404).json({ error: "Section not found" });
+      bootstrapCache.delete(req.tenantId);
       res.json(section);
     } catch (error) {
-      console.error("Error updating section:", error);
       res.status(500).json({ error: "Failed to update section" });
     }
   });
 
-  app.patch("/api/sections", requireAdmin, async (req, res) => {
+  app.patch("/api/sections", requireAdmin, resolveTenant, async (req, res) => {
     try {
       const updates = req.body.sections as Array<{ id: string; isEnabled: boolean }>;
-      const sections = await storage.updateSections(updates);
-      res.json(sections);
+      const result = await storage.updateSections(updates);
+      bootstrapCache.delete(req.tenantId);
+      res.json(result);
     } catch (error) {
-      console.error("Error updating sections:", error);
       res.status(500).json({ error: "Failed to update sections" });
     }
   });
 
-  // SEO routes
-  app.get("/sitemap.xml", (req, res) => {
-    const baseUrl = "https://okanuniversity.app";
+  // ─── SEO routes (sitemap + robots) ─────────────────────────────────────────
+  app.get("/sitemap.xml", resolveTenant, (req, res) => {
+    const baseUrl = `https://${req.tenant.domain}`;
     const languages = ["en", "ar", "tr", "fr", "ru", "fa"];
-    
+
     let sitemap = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
         xmlns:xhtml="http://www.w3.org/1999/xhtml">`;
-    
+
     languages.forEach((lang) => {
       sitemap += `
   <url>
     <loc>${baseUrl}/${lang}</loc>
-    <xhtml:link rel="alternate" hreflang="en" href="${baseUrl}/en" />
-    <xhtml:link rel="alternate" hreflang="ar" href="${baseUrl}/ar" />
-    <xhtml:link rel="alternate" hreflang="tr" href="${baseUrl}/tr" />
-    <xhtml:link rel="alternate" hreflang="fr" href="${baseUrl}/fr" />
-    <xhtml:link rel="alternate" hreflang="ru" href="${baseUrl}/ru" />
-    <xhtml:link rel="alternate" hreflang="fa" href="${baseUrl}/fa" />
+    ${languages.map(l => `<xhtml:link rel="alternate" hreflang="${l}" href="${baseUrl}/${l}" />`).join('\n    ')}
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>`;
     });
-    
+
     sitemap += "\n</urlset>";
-    
     res.header("Content-Type", "application/xml");
     res.send(sitemap);
   });
 
-  app.get("/robots.txt", (req, res) => {
-    const robotsTxt = `User-agent: *
-Allow: /
-
-Sitemap: https://okanuniversity.app/sitemap.xml`;
-    
+  app.get("/robots.txt", resolveTenant, (req, res) => {
+    const baseUrl = `https://${req.tenant.domain}`;
     res.header("Content-Type", "text/plain");
-    res.send(robotsTxt);
+    res.send(`User-agent: *\nAllow: /\n\nSitemap: ${baseUrl}/sitemap.xml`);
   });
 
-  // Media Assets API
-  app.get("/api/media", async (req, res) => {
+  // ─── Media Assets API ───────────────────────────────────────────────────────
+  app.get("/api/media", resolveTenant, async (req, res) => {
     try {
-      const tenantId = getTenantId(req);
-      const media = await storage.getMediaAssets(tenantId);
+      const media = await storage.getMediaAssets(req.tenantId);
       res.json(media);
     } catch (error) {
-      console.error("Error fetching media:", error);
       res.status(500).json({ error: "Failed to fetch media" });
     }
   });
 
-  app.post("/api/media", requireAdmin, async (req, res) => {
+  app.post("/api/media", requireAdmin, resolveTenant, async (req, res) => {
     try {
-      const tenantId = getTenantId(req);
-      const parsed = insertMediaAssetSchema.safeParse({ ...req.body, tenantId });
-      
-      if (!parsed.success) {
-        return res.status(400).json({ error: "Invalid media data", details: parsed.error });
-      }
-      
+      const parsed = insertMediaAssetSchema.safeParse({ ...req.body, tenantId: req.tenantId });
+      if (!parsed.success) return res.status(400).json({ error: "Invalid media data", details: parsed.error });
       const media = await storage.createMediaAsset(parsed.data);
       res.json(media);
     } catch (error) {
-      console.error("Error creating media:", error);
       res.status(500).json({ error: "Failed to create media" });
     }
   });
 
   app.delete("/api/media/:id", requireAdmin, async (req, res) => {
     try {
-      const id = req.params.id as string;
-      const success = await storage.deleteMediaAsset(id);
-      if (!success) {
-        return res.status(404).json({ error: "Media not found" });
-      }
+      const success = await storage.deleteMediaAsset(req.params.id as string);
+      if (!success) return res.status(404).json({ error: "Media not found" });
       res.json({ success: true });
     } catch (error) {
-      console.error("Error deleting media:", error);
       res.status(500).json({ error: "Failed to delete media" });
     }
   });
 
-  // Testimonials API
-  app.get("/api/testimonials", async (req, res) => {
+  // ─── Testimonials API ───────────────────────────────────────────────────────
+  app.get("/api/testimonials", resolveTenant, requirePublished, async (req, res) => {
     try {
-      const tenantId = getTenantId(req);
-      const testimonialsList = await storage.getTestimonials(tenantId);
-      res.json(testimonialsList);
+      res.json(await storage.getTestimonials(req.tenantId));
     } catch (error) {
-      console.error("Error fetching testimonials:", error);
       res.status(500).json({ error: "Failed to fetch testimonials" });
     }
   });
 
   app.get("/api/testimonials/:id", async (req, res) => {
     try {
-      const testimonial = await storage.getTestimonial(req.params.id as string);
-      if (!testimonial) {
-        return res.status(404).json({ error: "Testimonial not found" });
-      }
-      res.json(testimonial);
+      const t = await storage.getTestimonial(req.params.id as string);
+      if (!t) return res.status(404).json({ error: "Testimonial not found" });
+      res.json(t);
     } catch (error) {
-      console.error("Error fetching testimonial:", error);
       res.status(500).json({ error: "Failed to fetch testimonial" });
     }
   });
 
-  app.post("/api/testimonials", requireAdmin, async (req, res) => {
+  app.post("/api/testimonials", requireAdmin, resolveTenant, async (req, res) => {
     try {
-      const tenantId = getTenantId(req);
-      const parsed = insertTestimonialSchema.safeParse({ ...req.body, tenantId });
-      
-      if (!parsed.success) {
-        return res.status(400).json({ error: "Invalid testimonial data", details: parsed.error });
-      }
-      
-      const testimonial = await storage.createTestimonial(parsed.data);
-      res.json(testimonial);
+      const parsed = insertTestimonialSchema.safeParse({ ...req.body, tenantId: req.tenantId });
+      if (!parsed.success) return res.status(400).json({ error: "Invalid testimonial data", details: parsed.error });
+      bootstrapCache.delete(req.tenantId);
+      res.json(await storage.createTestimonial(parsed.data));
     } catch (error) {
-      console.error("Error creating testimonial:", error);
       res.status(500).json({ error: "Failed to create testimonial" });
     }
   });
 
-  app.patch("/api/testimonials/:id", requireAdmin, async (req, res) => {
+  app.patch("/api/testimonials/:id", requireAdmin, resolveTenant, async (req, res) => {
     try {
-      const id = req.params.id as string;
-      const tenantId = getTenantId(req);
-      
-      const existing = await storage.getTestimonial(id);
-      if (!existing || existing.tenantId !== tenantId) {
-        return res.status(404).json({ error: "Testimonial not found" });
-      }
-      
+      const existing = await storage.getTestimonial(req.params.id as string);
+      if (!existing || existing.tenantId !== req.tenantId) return res.status(404).json({ error: "Testimonial not found" });
       const { tenantId: _, id: __, ...updateData } = req.body;
-      const testimonial = await storage.updateTestimonial(id, updateData);
-      res.json(testimonial);
+      bootstrapCache.delete(req.tenantId);
+      res.json(await storage.updateTestimonial(req.params.id as string, updateData));
     } catch (error) {
-      console.error("Error updating testimonial:", error);
       res.status(500).json({ error: "Failed to update testimonial" });
     }
   });
 
-  app.delete("/api/testimonials/:id", requireAdmin, async (req, res) => {
+  app.delete("/api/testimonials/:id", requireAdmin, resolveTenant, async (req, res) => {
     try {
-      const id = req.params.id as string;
-      const tenantId = getTenantId(req);
-      
-      const existing = await storage.getTestimonial(id);
-      if (!existing || existing.tenantId !== tenantId) {
-        return res.status(404).json({ error: "Testimonial not found" });
-      }
-      
-      await storage.deleteTestimonial(id);
+      const existing = await storage.getTestimonial(req.params.id as string);
+      if (!existing || existing.tenantId !== req.tenantId) return res.status(404).json({ error: "Testimonial not found" });
+      await storage.deleteTestimonial(req.params.id as string);
+      bootstrapCache.delete(req.tenantId);
       res.json({ success: true });
     } catch (error) {
-      console.error("Error deleting testimonial:", error);
       res.status(500).json({ error: "Failed to delete testimonial" });
     }
   });
 
-  // FAQ Items API
-  app.get("/api/faq", async (req, res) => {
+  // ─── FAQ Items API ──────────────────────────────────────────────────────────
+  app.get("/api/faq", resolveTenant, requirePublished, async (req, res) => {
     try {
-      const tenantId = getTenantId(req);
-      const faqList = await storage.getFaqItems(tenantId);
-      res.json(faqList);
+      res.json(await storage.getFaqItems(req.tenantId));
     } catch (error) {
-      console.error("Error fetching FAQ items:", error);
       res.status(500).json({ error: "Failed to fetch FAQ items" });
     }
   });
@@ -623,115 +568,78 @@ Sitemap: https://okanuniversity.app/sitemap.xml`;
   app.get("/api/faq/:id", async (req, res) => {
     try {
       const faq = await storage.getFaqItem(req.params.id as string);
-      if (!faq) {
-        return res.status(404).json({ error: "FAQ item not found" });
-      }
+      if (!faq) return res.status(404).json({ error: "FAQ item not found" });
       res.json(faq);
     } catch (error) {
-      console.error("Error fetching FAQ item:", error);
       res.status(500).json({ error: "Failed to fetch FAQ item" });
     }
   });
 
-  app.post("/api/faq", requireAdmin, async (req, res) => {
+  app.post("/api/faq", requireAdmin, resolveTenant, async (req, res) => {
     try {
-      const tenantId = getTenantId(req);
-      const parsed = insertFaqItemSchema.safeParse({ ...req.body, tenantId });
-      
-      if (!parsed.success) {
-        return res.status(400).json({ error: "Invalid FAQ data", details: parsed.error });
-      }
-      
-      const faq = await storage.createFaqItem(parsed.data);
-      res.json(faq);
+      const parsed = insertFaqItemSchema.safeParse({ ...req.body, tenantId: req.tenantId });
+      if (!parsed.success) return res.status(400).json({ error: "Invalid FAQ data", details: parsed.error });
+      bootstrapCache.delete(req.tenantId);
+      res.json(await storage.createFaqItem(parsed.data));
     } catch (error) {
-      console.error("Error creating FAQ item:", error);
       res.status(500).json({ error: "Failed to create FAQ item" });
     }
   });
 
-  app.patch("/api/faq/:id", requireAdmin, async (req, res) => {
+  app.patch("/api/faq/:id", requireAdmin, resolveTenant, async (req, res) => {
     try {
-      const id = req.params.id as string;
-      const tenantId = getTenantId(req);
-      
-      const existing = await storage.getFaqItem(id);
-      if (!existing || existing.tenantId !== tenantId) {
-        return res.status(404).json({ error: "FAQ item not found" });
-      }
-      
+      const existing = await storage.getFaqItem(req.params.id as string);
+      if (!existing || existing.tenantId !== req.tenantId) return res.status(404).json({ error: "FAQ item not found" });
       const { tenantId: _, id: __, ...updateData } = req.body;
-      const faq = await storage.updateFaqItem(id, updateData);
-      res.json(faq);
+      bootstrapCache.delete(req.tenantId);
+      res.json(await storage.updateFaqItem(req.params.id as string, updateData));
     } catch (error) {
-      console.error("Error updating FAQ item:", error);
       res.status(500).json({ error: "Failed to update FAQ item" });
     }
   });
 
-  app.delete("/api/faq/:id", requireAdmin, async (req, res) => {
+  app.delete("/api/faq/:id", requireAdmin, resolveTenant, async (req, res) => {
     try {
-      const id = req.params.id as string;
-      const tenantId = getTenantId(req);
-      
-      const existing = await storage.getFaqItem(id);
-      if (!existing || existing.tenantId !== tenantId) {
-        return res.status(404).json({ error: "FAQ item not found" });
-      }
-      
-      await storage.deleteFaqItem(id);
+      const existing = await storage.getFaqItem(req.params.id as string);
+      if (!existing || existing.tenantId !== req.tenantId) return res.status(404).json({ error: "FAQ item not found" });
+      await storage.deleteFaqItem(req.params.id as string);
+      bootstrapCache.delete(req.tenantId);
       res.json({ success: true });
     } catch (error) {
-      console.error("Error deleting FAQ item:", error);
       res.status(500).json({ error: "Failed to delete FAQ item" });
     }
   });
 
-  // SEO Settings API (public)
-  app.get("/api/seo-settings", async (req, res) => {
+  // ─── SEO Settings API ───────────────────────────────────────────────────────
+  app.get("/api/seo-settings", resolveTenant, async (req, res) => {
     try {
-      const tenantId = getTenantId(req);
-      const seo = await storage.getSeoSettings(tenantId);
-      res.json(seo || {});
+      res.json(await storage.getSeoSettings(req.tenantId) || {});
     } catch (error) {
-      console.error("Error fetching SEO settings:", error);
       res.status(500).json({ error: "Failed to fetch SEO settings" });
     }
   });
 
-  // SEO Settings API (admin)
-  app.get("/api/admin/seo-settings", requireAdmin, async (req, res) => {
+  app.get("/api/admin/seo-settings", requireAdmin, resolveTenant, async (req, res) => {
     try {
-      const tenantId = getTenantId(req);
-      const seo = await storage.getSeoSettings(tenantId);
-      res.json(seo || {});
+      res.json(await storage.getSeoSettings(req.tenantId) || {});
     } catch (error) {
-      console.error("Error fetching SEO settings:", error);
       res.status(500).json({ error: "Failed to fetch SEO settings" });
     }
   });
 
-  app.post("/api/admin/seo-settings", requireAdmin, async (req, res) => {
+  app.post("/api/admin/seo-settings", requireAdmin, resolveTenant, async (req, res) => {
     try {
-      const tenantId = getTenantId(req);
       const { tenantId: _, id: __, ...data } = req.body;
-      
       const parsed = insertSeoSettingsSchema.omit({ tenantId: true }).safeParse(data);
-      if (!parsed.success) {
-        return res.status(400).json({ error: "Invalid SEO settings data", details: parsed.error });
-      }
-      
-      const existing = await storage.getSeoSettings(tenantId);
-      
-      if (existing) {
-        const seo = await storage.updateSeoSettings(tenantId, parsed.data);
-        res.json(seo);
-      } else {
-        const seo = await storage.createSeoSettings({ ...parsed.data, tenantId });
-        res.json(seo);
-      }
+      if (!parsed.success) return res.status(400).json({ error: "Invalid SEO settings data", details: parsed.error });
+
+      const existing = await storage.getSeoSettings(req.tenantId);
+      const seo = existing
+        ? await storage.updateSeoSettings(req.tenantId, parsed.data)
+        : await storage.createSeoSettings({ ...parsed.data, tenantId: req.tenantId });
+      bootstrapCache.delete(req.tenantId);
+      res.json(seo);
     } catch (error) {
-      console.error("Error saving SEO settings:", error);
       res.status(500).json({ error: "Failed to save SEO settings" });
     }
   });

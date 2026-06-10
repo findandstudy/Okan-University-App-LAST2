@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, boolean, timestamp, jsonb, decimal } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, boolean, timestamp, jsonb, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -8,11 +8,16 @@ export const SUPPORTED_LANGUAGES = ['en', 'ar', 'tr', 'fr', 'ru', 'fa'] as const
 export type SupportedLanguage = typeof SUPPORTED_LANGUAGES[number];
 export const RTL_LANGUAGES: SupportedLanguage[] = ['ar', 'fa'];
 
+// Tenant publication statuses
+export const TENANT_STATUSES = ['taslak', 'yayinda', 'durduruldu'] as const;
+export type TenantStatus = typeof TENANT_STATUSES[number];
+
 // Tenants (Universities)
 export const tenants = pgTable("tenants", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   domain: text("domain").notNull().unique(),
   universityName: text("university_name").notNull(),
+  status: text("status").default("taslak").notNull(),
   logoUrl: text("logo_url"),
   faviconUrl: text("favicon_url"),
   googleAnalyticsId: text("google_analytics_id"),
@@ -24,6 +29,15 @@ export const tenants = pgTable("tenants", {
   contactFormEmbed: text("contact_form_embed"),
   heroVideoUrl: text("hero_video_url"),
   isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Tenant Domains — one tenant can have multiple domains (aliases)
+export const tenantDomains = pgTable("tenant_domains", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  domain: text("domain").notNull().unique(),
+  isPrimary: boolean("is_primary").default(false),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -158,6 +172,7 @@ export const seoSettings = pgTable("seo_settings", {
 
 // Insert schemas
 export const insertTenantSchema = createInsertSchema(tenants).omit({ id: true, createdAt: true });
+export const insertTenantDomainSchema = createInsertSchema(tenantDomains).omit({ id: true, createdAt: true });
 export const insertTenantThemeSchema = createInsertSchema(tenantThemes).omit({ id: true });
 export const insertSectionSchema = createInsertSchema(sections).omit({ id: true });
 export const insertMenuItemSchema = createInsertSchema(menuItems).omit({ id: true });
@@ -172,6 +187,8 @@ export const insertSeoSettingsSchema = createInsertSchema(seoSettings).omit({ id
 // Types
 export type Tenant = typeof tenants.$inferSelect;
 export type InsertTenant = z.infer<typeof insertTenantSchema>;
+export type TenantDomain = typeof tenantDomains.$inferSelect;
+export type InsertTenantDomain = z.infer<typeof insertTenantDomainSchema>;
 export type TenantTheme = typeof tenantThemes.$inferSelect;
 export type InsertTenantTheme = z.infer<typeof insertTenantThemeSchema>;
 export type Section = typeof sections.$inferSelect;

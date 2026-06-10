@@ -1,10 +1,11 @@
 import { db } from './db';
 import { eq, desc, and } from 'drizzle-orm';
 import {
-  tenants, tenantThemes, sections, menuItems,
+  tenants, tenantDomains, tenantThemes, sections, menuItems,
   adminUsers, integrationSettings, mediaAssets, faqItems,
   testimonials, trustBadges, seoSettings,
   type Tenant, type InsertTenant,
+  type TenantDomain, type InsertTenantDomain,
   type TenantTheme, type InsertTenantTheme,
   type Section, type InsertSection,
   type AdminUser, type InsertAdminUser,
@@ -19,8 +20,14 @@ export interface IStorage {
   // Tenants
   getTenant(id: string): Promise<Tenant | undefined>;
   getTenantByDomain(domain: string): Promise<Tenant | undefined>;
+  getTenantByHostDomain(host: string): Promise<Tenant | undefined>;
   createTenant(tenant: InsertTenant): Promise<Tenant>;
   updateTenant(id: string, data: Partial<InsertTenant>): Promise<Tenant | undefined>;
+
+  // Tenant Domains
+  getTenantDomains(tenantId: string): Promise<TenantDomain[]>;
+  createTenantDomain(domain: InsertTenantDomain): Promise<TenantDomain>;
+  deleteTenantDomain(id: string): Promise<boolean>;
 
   // Admin Users
   getAdminById(id: string): Promise<AdminUser | undefined>;
@@ -76,6 +83,28 @@ export class DatabaseStorage implements IStorage {
     return tenant;
   }
 
+  /**
+   * Resolve tenant from a Host header value.
+   * Strips www. and port, then looks up tenant_domains first,
+   * falling back to the legacy tenants.domain column.
+   */
+  async getTenantByHostDomain(host: string): Promise<Tenant | undefined> {
+    const cleanHost = host.replace(/^www\./, '').replace(/:\d+$/, '').toLowerCase();
+
+    // Check tenant_domains table first
+    const [domainRow] = await db
+      .select({ tenantId: tenantDomains.tenantId })
+      .from(tenantDomains)
+      .where(eq(tenantDomains.domain, cleanHost));
+
+    if (domainRow) {
+      return this.getTenant(domainRow.tenantId);
+    }
+
+    // Fallback: legacy tenants.domain column
+    return this.getTenantByDomain(cleanHost);
+  }
+
   async createTenant(tenant: InsertTenant): Promise<Tenant> {
     const [created] = await db.insert(tenants).values(tenant).returning();
     return created;
@@ -84,6 +113,21 @@ export class DatabaseStorage implements IStorage {
   async updateTenant(id: string, data: Partial<InsertTenant>): Promise<Tenant | undefined> {
     const [updated] = await db.update(tenants).set(data).where(eq(tenants.id, id)).returning();
     return updated;
+  }
+
+  // Tenant Domains
+  async getTenantDomains(tenantId: string): Promise<TenantDomain[]> {
+    return db.select().from(tenantDomains).where(eq(tenantDomains.tenantId, tenantId));
+  }
+
+  async createTenantDomain(domain: InsertTenantDomain): Promise<TenantDomain> {
+    const [created] = await db.insert(tenantDomains).values(domain).returning();
+    return created;
+  }
+
+  async deleteTenantDomain(id: string): Promise<boolean> {
+    const result = await db.delete(tenantDomains).where(eq(tenantDomains.id, id)).returning();
+    return result.length > 0;
   }
 
   // Admin Users
