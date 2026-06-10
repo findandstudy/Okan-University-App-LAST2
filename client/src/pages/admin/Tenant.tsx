@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useLocation } from 'wouter';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -135,6 +136,8 @@ function DropZone({ label, value, onUpload, onClear, accept, testId }: DropZoneP
 }
 
 export default function TenantPage() {
+  const [, navigate] = useLocation();
+  useEffect(() => { navigate('/admin/sites'); }, []);
   const { toast } = useToast();
   const [settings, setSettings] = useState({
     universityName: '',

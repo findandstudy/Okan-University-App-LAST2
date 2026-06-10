@@ -39,9 +39,19 @@ const STATUS_VARIANTS: Record<string, 'default' | 'secondary' | 'destructive'> =
   askiya_alindi: 'destructive',
 };
 
+const ALL_LANGUAGES = [
+  { code: 'en', label: 'English' },
+  { code: 'ar', label: 'Arabic' },
+  { code: 'tr', label: 'Turkish' },
+  { code: 'fr', label: 'French' },
+  { code: 'ru', label: 'Russian' },
+  { code: 'fa', label: 'Farsi' },
+];
+
 interface NewSiteForm {
   universityName: string;
   domain: string;
+  languages: string[];
 }
 
 interface CloneForm {
@@ -53,7 +63,7 @@ export default function Sites() {
   const { toast } = useToast();
   const [newDialogOpen, setNewDialogOpen] = useState(false);
   const [cloneDialogOpen, setCloneDialogOpen] = useState<string | null>(null);
-  const [newForm, setNewForm] = useState<NewSiteForm>({ universityName: '', domain: '' });
+  const [newForm, setNewForm] = useState<NewSiteForm>({ universityName: '', domain: '', languages: ['en'] });
   const [cloneForm, setCloneForm] = useState<CloneForm>({ universityName: '', domain: '' });
 
   const { data: tenants = [], isLoading } = useQuery<Tenant[]>({
@@ -67,14 +77,15 @@ export default function Sites() {
 
   const createMutation = useMutation({
     mutationFn: async (data: NewSiteForm) => {
-      const res = await apiRequest('POST', '/api/admin/tenants', data);
+      const { languages, ...rest } = data;
+      const res = await apiRequest('POST', '/api/admin/tenants', { ...rest, settings: { languages } });
       return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/tenants'] });
       toast({ title: 'Site created successfully' });
       setNewDialogOpen(false);
-      setNewForm({ universityName: '', domain: '' });
+      setNewForm({ universityName: '', domain: '', languages: ['en'] });
     },
     onError: () => toast({ title: 'Failed to create site', variant: 'destructive' }),
   });
@@ -152,12 +163,33 @@ export default function Sites() {
                     onChange={e => setNewForm(p => ({ ...p, domain: e.target.value }))}
                   />
                 </div>
+                <div className="space-y-2">
+                  <Label>Languages</Label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {ALL_LANGUAGES.map(lang => (
+                      <label key={lang.code} className="flex items-center gap-2 text-sm cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={newForm.languages.includes(lang.code)}
+                          onChange={e => setNewForm(p => ({
+                            ...p,
+                            languages: e.target.checked
+                              ? [...p.languages, lang.code]
+                              : p.languages.filter(l => l !== lang.code),
+                          }))}
+                          data-testid={`checkbox-lang-${lang.code}`}
+                        />
+                        {lang.label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
                 <div className="flex justify-end gap-2">
                   <Button variant="outline" onClick={() => setNewDialogOpen(false)}>Cancel</Button>
                   <Button
                     data-testid="button-create-site"
                     onClick={() => createMutation.mutate(newForm)}
-                    disabled={createMutation.isPending || !newForm.universityName || !newForm.domain}
+                    disabled={createMutation.isPending || !newForm.universityName || !newForm.domain || newForm.languages.length === 0}
                   >
                     {createMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                     Create
@@ -185,6 +217,8 @@ export default function Sites() {
                     <TableHead>University</TableHead>
                     <TableHead>Domain</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead className="text-center">Languages</TableHead>
+                    <TableHead>Created</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -233,6 +267,12 @@ export default function Sites() {
                           >
                             {STATUS_LABELS[tenant.status as string] ?? tenant.status}
                           </Badge>
+                        </TableCell>
+                        <TableCell className="text-center text-sm text-muted-foreground" data-testid={`cell-lang-count-${tenant.id}`}>
+                          {(((tenant as any).settings as any)?.languages?.length) ?? 1}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground" data-testid={`cell-created-${tenant.id}`}>
+                          {tenant.createdAt ? new Date(tenant.createdAt).toLocaleDateString() : '—'}
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-1">

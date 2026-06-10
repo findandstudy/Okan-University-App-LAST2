@@ -151,8 +151,16 @@ function TenantMediaTab({ tenantId }: { tenantId: string }) {
     try {
       const formData = new FormData();
       formData.append('file', file);
-      const res = await fetch(`/api/upload?_tid=${tenantId}`, { method: 'POST', body: formData, credentials: 'include' });
-      if (!res.ok) throw new Error('Upload failed');
+      const uploadRes = await fetch(`/api/upload?_tid=${tenantId}`, { method: 'POST', body: formData, credentials: 'include' });
+      if (!uploadRes.ok) throw new Error('Upload failed');
+      const { objectPath } = await uploadRes.json();
+      await apiRequest('POST', `/api/media?_tid=${tenantId}`, {
+        fileName: file.name,
+        fileUrl: objectPath,
+        fileType: file.type.startsWith('image/') ? 'image' : 'video',
+        fileSize: file.size,
+        altText: file.name,
+      });
       refetch();
       toast({ title: 'File uploaded' });
     } catch {

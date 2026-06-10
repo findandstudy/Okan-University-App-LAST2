@@ -76,17 +76,8 @@ const menuGroups: NavGroup[] = [
     title: 'Settings',
     icon: Settings,
     items: [
-      { title: 'Tenant', url: '/admin/tenant', icon: Building },
       { title: 'Theme', url: '/admin/theme', icon: Palette },
-      { title: 'SEO Settings', url: '/admin/seo', icon: Search },
       { title: 'Contact Form', url: '/admin/contact-form', icon: FormInput },
-    ],
-  },
-  {
-    title: 'System',
-    icon: Wrench,
-    items: [
-      { title: 'Media', url: '/admin/media', icon: Image },
     ],
   },
 ];

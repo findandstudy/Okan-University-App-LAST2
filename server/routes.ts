@@ -937,7 +937,7 @@ export async function registerRoutes(
   });
 
   // ─── Widget route (public) ────────────────────────────────────────────────────
-  app.get("/api/widgets", resolveTenant, async (req, res) => {
+  app.get("/api/widgets", resolveTenant, requirePublished, async (req, res) => {
     try {
       const widgets = await storage.getWidgets(req.tenantId);
       res.json(widgets.filter(w => w.isEnabled));

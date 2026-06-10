@@ -36,7 +36,7 @@ function Router() {
         const params = new URLSearchParams(window.location.search);
         return <ChangePassword forced={params.has('forced')} />;
       }} />
-      <Route path="/admin" component={Dashboard} />
+      <Route path="/admin" component={() => { window.location.replace('/admin/sites'); return null; }} />
       <Route path="/admin/tenant" component={Tenant} />
       <Route path="/admin/theme" component={() => <Theme />} />
       <Route path="/admin/sections" component={() => <Sections />} />
