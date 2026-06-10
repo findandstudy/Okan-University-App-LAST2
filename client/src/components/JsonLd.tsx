@@ -100,7 +100,24 @@ export default function JsonLd({ primaryDomain }: JsonLdProps) {
     ],
   };
 
-  const schemas = [organizationSchema, websiteSchema, breadcrumbSchema];
+  // ── Course / EducationalOccupationalProgram schema ──────────────────────────
+  // Static representation of the university's general program offering
+  const courseSchema = {
+    '@context': 'https://schema.org',
+    '@type': 'EducationalOccupationalProgram',
+    name: `Programs at ${universityName}`,
+    provider: { '@id': `${base}/#organization` },
+    url: base,
+    programType: 'https://schema.org/FullTimeEnrollment',
+    educationalCredentialAwarded: 'Bachelor, Master, PhD',
+    offers: {
+      '@type': 'Offer',
+      category: 'University Degree Programs',
+      url: `${base}/programs`,
+    },
+  };
+
+  const schemas = [organizationSchema, websiteSchema, courseSchema, breadcrumbSchema];
   if (faqSchema && faqSchema.mainEntity.length > 0) schemas.push(faqSchema as any);
 
   return (

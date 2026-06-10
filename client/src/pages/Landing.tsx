@@ -42,10 +42,19 @@ function hexToHSL(hex: string): string {
   return `${Math.round(h * 360)} ${Math.round(s * 100)}% ${Math.round(l * 100)}%`;
 }
 
+interface BootstrapData {
+  primaryDomain?: string;
+  allDomains?: string[];
+}
+
 export default function Landing() {
   const { language } = useI18n();
   const { data: tenant, isLoading: isTenantLoading } = useQuery<Tenant>({
     queryKey: ['/api/tenant'],
+  });
+
+  const { data: bootstrap } = useQuery<BootstrapData>({
+    queryKey: ['/api/bootstrap'],
   });
 
   const { data: sections = [], isLoading: isSectionsLoading } = useQuery<Section[]>({
@@ -109,8 +118,8 @@ export default function Landing() {
   return (
     <div className="min-h-screen flex flex-col">
       <TrackingScripts />
-      <SEOMetaTags lang={language as SupportedLanguage} primaryDomain={tenant?.domain} />
-      <JsonLd primaryDomain={tenant?.domain} />
+      <SEOMetaTags lang={language as SupportedLanguage} primaryDomain={bootstrap?.primaryDomain || tenant?.domain} />
+      <JsonLd primaryDomain={bootstrap?.primaryDomain || tenant?.domain} />
       <Header universityName={universityName} logoUrl={logoUrl} />
       <main className="flex-1">
         <Hero />

@@ -600,6 +600,34 @@ export async function registerRoutes(
   </url>`;
       });
 
+      // ── Blog placeholder (Faz 7) ────────────────────────────────────────────
+      const blogAlternates = [
+        `<xhtml:link rel="alternate" hreflang="x-default" href="${baseUrl}/blog" />`,
+        ...SUPPORTED_LANGUAGES.map(l =>
+          `<xhtml:link rel="alternate" hreflang="${l}" href="${baseUrl}/${l === 'en' ? 'blog' : `${l}/blog`}" />`
+        ),
+      ].join('\n    ');
+
+      sitemap += `
+  <url>
+    <loc>${baseUrl}/blog</loc>
+    ${blogAlternates}
+    <lastmod>${today}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>`;
+
+      SUPPORTED_LANGUAGES.filter(l => l !== 'en').forEach((lang) => {
+        sitemap += `
+  <url>
+    <loc>${baseUrl}/${lang}/blog</loc>
+    ${blogAlternates}
+    <lastmod>${today}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>`;
+      });
+
       sitemap += '\n</urlset>';
       res.header('Content-Type', 'application/xml');
       res.header('Cache-Control', 'public, max-age=3600');
