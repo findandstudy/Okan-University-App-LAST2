@@ -29,9 +29,6 @@ import {
   FormInput,
   MessageSquareQuote,
   HelpCircle,
-  Sparkles,
-  BadgeCheck,
-  PanelBottom,
   Search,
   ChevronDown,
   Globe,
@@ -60,15 +57,19 @@ interface NavGroup {
 
 const menuGroups: NavGroup[] = [
   {
-    title: 'Website Content',
+    title: 'Sites',
+    icon: LayoutGrid,
+    items: [
+      { title: 'Sites Hub', url: '/admin/sites', icon: LayoutGrid },
+    ],
+  },
+  {
+    title: 'Default Site Content',
     icon: Globe,
     items: [
-      { title: 'Hero Content', url: '/admin/hero', icon: Sparkles },
-      { title: 'Why Choose Us', url: '/admin/why-choose-us', icon: BadgeCheck },
       { title: 'Testimonials', url: '/admin/testimonials', icon: MessageSquareQuote },
       { title: 'FAQ', url: '/admin/faq', icon: HelpCircle },
       { title: 'Page Sections', url: '/admin/sections', icon: LayoutList },
-      { title: 'Footer', url: '/admin/footer', icon: PanelBottom },
     ],
   },
   {
@@ -85,7 +86,6 @@ const menuGroups: NavGroup[] = [
     title: 'System',
     icon: Wrench,
     items: [
-      { title: 'Sites Hub', url: '/admin/sites', icon: LayoutGrid },
       { title: 'Media', url: '/admin/media', icon: Image },
     ],
   },

@@ -769,6 +769,8 @@ export async function registerRoutes(
   app.get("/api/admin/tenants/:id", requireAdmin, async (req, res) => {
     const id = req.params.id as string;
     try {
+      const admin = await storage.getAdminById(req.session.adminId!);
+      if (!admin || admin.role !== 'super_admin') return res.status(403).json({ error: "Forbidden" });
       const tenant = await storage.getTenant(id);
       if (!tenant) return res.status(404).json({ error: "Tenant not found" });
       res.json(tenant);
@@ -784,6 +786,21 @@ export async function registerRoutes(
       const { universityName, domain } = req.body;
       if (!universityName || !domain) return res.status(400).json({ error: "universityName and domain are required" });
       const tenant = await storage.createTenant({ universityName, domain, status: 'taslak' });
+      // Create primary domain record
+      await storage.createTenantDomain({ tenantId: tenant.id, domain, isPrimary: true });
+      // Seed baseline sections for the new tenant
+      const defaultSections = [
+        { tenantId: tenant.id, sectionKey: 'hero', title: 'Hero', enabled: true, order: 10, settings: {} },
+        { tenantId: tenant.id, sectionKey: 'trust_badges', title: 'Why Choose Us', enabled: true, order: 20, settings: {} },
+        { tenantId: tenant.id, sectionKey: 'steps', title: 'Steps', enabled: true, order: 30, settings: {} },
+        { tenantId: tenant.id, sectionKey: 'testimonials', title: 'Testimonials', enabled: true, order: 40, settings: {} },
+        { tenantId: tenant.id, sectionKey: 'faq', title: 'FAQ', enabled: true, order: 50, settings: {} },
+        { tenantId: tenant.id, sectionKey: 'contact', title: 'Contact', enabled: true, order: 60, settings: {} },
+        { tenantId: tenant.id, sectionKey: 'footer', title: 'Footer', enabled: true, order: 70, settings: {} },
+      ];
+      for (const section of defaultSections) {
+        await storage.createSection(section);
+      }
       res.json(tenant);
     } catch {
       res.status(500).json({ error: "Failed to create tenant" });
@@ -793,8 +810,18 @@ export async function registerRoutes(
   app.patch("/api/admin/tenants/:id", requireAdmin, async (req, res) => {
     const id = req.params.id as string;
     try {
-      const tenant = await storage.updateTenant(id, req.body);
+      const admin = await storage.getAdminById(req.session.adminId!);
+      if (!admin || admin.role !== 'super_admin') return res.status(403).json({ error: "Forbidden" });
+      const body = req.body;
+      const tenant = await storage.updateTenant(id, body);
       if (!tenant) return res.status(404).json({ error: "Tenant not found" });
+      // On publish: ensure at least one domain record exists for the tenant
+      if (body.status === 'yayinda' && tenant.domain) {
+        const domains = await storage.getTenantDomains(id);
+        if (domains.length === 0) {
+          await storage.createTenantDomain({ tenantId: id, domain: tenant.domain, isPrimary: true });
+        }
+      }
       res.json(tenant);
     } catch {
       res.status(500).json({ error: "Failed to update tenant" });

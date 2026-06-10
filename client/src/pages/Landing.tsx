@@ -115,8 +115,8 @@ export default function Landing() {
         <Steps />
         <Testimonials />
         <FAQ />
-        <Contact />
         <WidgetEmbed />
+        <Contact />
       </main>
       <Disclaimer />
       <Footer 
