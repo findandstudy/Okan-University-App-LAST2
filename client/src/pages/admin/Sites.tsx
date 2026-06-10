@@ -77,8 +77,7 @@ export default function Sites() {
 
   const createMutation = useMutation({
     mutationFn: async (data: NewSiteForm) => {
-      const { languages, ...rest } = data;
-      const res = await apiRequest('POST', '/api/admin/tenants', { ...rest, settings: { languages } });
+      const res = await apiRequest('POST', '/api/admin/tenants', data);
       return res.json();
     },
     onSuccess: () => {
