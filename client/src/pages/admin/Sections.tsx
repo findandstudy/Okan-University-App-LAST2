@@ -140,7 +140,10 @@ export default function Sections({ embedded }: { embedded?: boolean } = {}) {
   const { data: tenantData } = useQuery<{ supportedLanguages?: string[] }>({
     queryKey: ['/api/tenant' + apiSuffix],
   });
-  const tenantLangs = (tenantData?.supportedLanguages || ['en', 'ar', 'tr', 'fr', 'ru', 'fa']) as SupportedLanguage[];
+  const ALL_LANGS: SupportedLanguage[] = ['en', 'ar', 'tr', 'fr', 'ru', 'fa'];
+  const rawLangs = tenantData?.supportedLanguages as SupportedLanguage[] | undefined;
+  // If tenant has only 'en' (or nothing), target all other languages
+  const tenantLangs = rawLangs && rawLangs.length > 1 ? rawLangs : ALL_LANGS;
   const targetLangs = tenantLangs.filter(l => l !== 'en');
 
   const [translateAllProgress, setTranslateAllProgress] = useState<string | null>(null);
