@@ -691,13 +691,21 @@ const I18nContext = createContext<I18nContextType | null>(null);
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [language, setLanguageState] = useState<SupportedLanguage>(() => {
     if (typeof window !== 'undefined') {
+      // URL path has highest priority — always wins over stored preference
+      const pathLang = window.location.pathname.split('/')[1] as SupportedLanguage;
+      if (SUPPORTED_LANGUAGES.includes(pathLang)) {
+        localStorage.setItem('language', pathLang);
+        return pathLang;
+      }
+      // Then localStorage
       const stored = localStorage.getItem('language') as SupportedLanguage;
       if (stored && SUPPORTED_LANGUAGES.includes(stored)) {
         return stored;
       }
-      const pathLang = window.location.pathname.split('/')[1] as SupportedLanguage;
-      if (SUPPORTED_LANGUAGES.includes(pathLang)) {
-        return pathLang;
+      // Then browser language
+      const browserLang = navigator.language.split('-')[0] as SupportedLanguage;
+      if (SUPPORTED_LANGUAGES.includes(browserLang)) {
+        return browserLang;
       }
     }
     return 'en';

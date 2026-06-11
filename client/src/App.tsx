@@ -1,5 +1,6 @@
 import { Switch, Route, useLocation } from "wouter";
 import { useEffect } from "react";
+import { useI18n, SUPPORTED_LANGUAGES, type SupportedLanguage } from "@/lib/i18n";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -57,9 +58,25 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function LanguageSync() {
+  const [location] = useLocation();
+  const { setLanguage } = useI18n();
+
+  useEffect(() => {
+    const seg = location.split('/')[1] as SupportedLanguage;
+    if (SUPPORTED_LANGUAGES.includes(seg)) {
+      setLanguage(seg);
+    }
+  }, [location, setLanguage]);
+
+  return null;
+}
+
 function Router() {
   return (
-    <Switch>
+    <>
+      <LanguageSync />
+      <Switch>
       <Route path="/" component={Landing} />
 
       <Route path="/admin/login" component={AdminLogin} />
@@ -96,6 +113,7 @@ function Router() {
 
       <Route component={NotFound} />
     </Switch>
+    </>
   );
 }
 
