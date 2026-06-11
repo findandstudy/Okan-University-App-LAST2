@@ -140,7 +140,7 @@ export default function Sections({ embedded }: { embedded?: boolean } = {}) {
   const { data: tenantData } = useQuery<{ supportedLanguages?: string[] }>({
     queryKey: ['/api/tenant' + apiSuffix],
   });
-  const ALL_LANGS: SupportedLanguage[] = ['en', 'ar', 'tr', 'fr', 'ru', 'fa'];
+  const ALL_LANGS: SupportedLanguage[] = ['en', 'ar', 'tr', 'fr', 'ru', 'fa', 'zh', 'hi', 'es', 'id'];
   const rawLangs = tenantData?.supportedLanguages as SupportedLanguage[] | undefined;
   // If tenant has only 'en' (or nothing), target all other languages
   const tenantLangs = rawLangs && rawLangs.length > 1 ? rawLangs : ALL_LANGS;
