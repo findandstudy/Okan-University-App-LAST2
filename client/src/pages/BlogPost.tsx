@@ -11,6 +11,8 @@ interface BlogPostDetail {
     publishAt: string | null;
     createdAt: string;
     keyword: string | null;
+    featuredImageUrl: string | null;
+    featuredImageAltByLang: Record<string, string> | null;
   };
   translation: {
     title: string;
@@ -90,15 +92,52 @@ export default function BlogPost() {
 
   const langPrefix = lang === 'en' ? '' : `/${lang}`;
 
-  // Inject meta tags for blog post
+  // Inject meta tags for blog post (title, description, OG image)
   useEffect(() => {
-    if (data?.translation) {
-      const t = data.translation;
-      if (t.metaTitle) document.title = t.metaTitle;
-      const desc = document.getElementById('seo-description') as HTMLMetaElement | null;
-      if (desc && t.metaDesc) desc.content = t.metaDesc;
+    if (!data?.translation) return;
+    const t = data.translation;
+    const p = data.post;
+
+    if (t.metaTitle) document.title = t.metaTitle;
+
+    const desc = document.getElementById('seo-description') as HTMLMetaElement | null;
+    if (desc && t.metaDesc) desc.content = t.metaDesc;
+
+    // OG image — inject or update dynamically
+    if (p.featuredImageUrl) {
+      const absoluteImg = p.featuredImageUrl.startsWith('http')
+        ? p.featuredImageUrl
+        : `${window.location.origin}${p.featuredImageUrl}`;
+
+      const setMeta = (property: string, content: string) => {
+        let el = document.querySelector<HTMLMetaElement>(`meta[property="${property}"]`);
+        if (!el) {
+          el = document.createElement('meta');
+          el.setAttribute('property', property);
+          document.head.appendChild(el);
+        }
+        el.content = content;
+      };
+
+      setMeta('og:image', absoluteImg);
+      setMeta('og:image:width', '1200');
+      setMeta('og:image:height', '630');
+
+      const altText = p.featuredImageAltByLang?.[lang]
+        || p.featuredImageAltByLang?.['en']
+        || t.title;
+      setMeta('og:image:alt', altText);
+
+      // Twitter card image
+      let twImg = document.querySelector<HTMLMetaElement>('meta[name="twitter:image"]');
+      if (!twImg) {
+        twImg = document.createElement('meta');
+        twImg.setAttribute('name', 'twitter:image');
+        document.head.appendChild(twImg);
+      }
+      twImg.content = absoluteImg;
     }
-  }, [data]);
+  }, [data, lang]);
 
   if (isLoading) {
     return (
@@ -118,8 +157,17 @@ export default function BlogPost() {
   }
 
   const { post, translation, alternates } = data;
-
   const safeHtml = safeMarkdownToHtml(translation.content);
+
+  const featuredAlt = post.featuredImageAltByLang?.[lang]
+    || post.featuredImageAltByLang?.['en']
+    || translation.title;
+
+  const absoluteFeaturedImg = post.featuredImageUrl
+    ? (post.featuredImageUrl.startsWith('http')
+      ? post.featuredImageUrl
+      : `${window.location.origin}${post.featuredImageUrl}`)
+    : undefined;
 
   return (
     <div className="min-h-screen bg-background">
@@ -155,6 +203,18 @@ export default function BlogPost() {
                 </span>
               )}
             </p>
+
+            {/* Featured image */}
+            {post.featuredImageUrl && (
+              <div className="mt-6 rounded-xl overflow-hidden shadow-md" data-testid="blog-featured-image">
+                <img
+                  src={post.featuredImageUrl}
+                  alt={featuredAlt}
+                  className="w-full aspect-video object-cover"
+                  loading="eager"
+                />
+              </div>
+            )}
           </header>
 
           <div
@@ -173,6 +233,15 @@ export default function BlogPost() {
               '@type': 'BlogPosting',
               headline: translation.title,
               description: translation.metaDesc || undefined,
+              ...(absoluteFeaturedImg ? {
+                image: {
+                  '@type': 'ImageObject',
+                  url: absoluteFeaturedImg,
+                  width: 1200,
+                  height: 630,
+                  description: featuredAlt,
+                },
+              } : {}),
               datePublished: post.publishAt || post.createdAt,
               dateModified: post.publishAt || post.createdAt,
               author: {
@@ -182,6 +251,12 @@ export default function BlogPost() {
               publisher: {
                 '@type': 'Organization',
                 name: tenant?.universityName || 'University',
+                ...(tenant?.logoUrl ? {
+                  logo: {
+                    '@type': 'ImageObject',
+                    url: `${window.location.origin}${tenant.logoUrl}`,
+                  },
+                } : {}),
               },
               inLanguage: lang,
               keywords: post.keyword || undefined,

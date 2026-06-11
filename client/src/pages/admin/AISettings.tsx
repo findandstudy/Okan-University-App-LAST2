@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Zap, CheckCircle2, XCircle, Eye, EyeOff } from 'lucide-react';
+import { Loader2, Zap, CheckCircle2, XCircle, Eye, EyeOff, Image } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import AdminLayout from './AdminLayout';
@@ -29,9 +29,20 @@ const OPENAI_MODELS = [
   { value: 'gpt-4-turbo', label: 'GPT-4 Turbo (most capable)' },
 ];
 
+const DALLE_MODELS = [
+  { value: 'dall-e-3', label: 'DALL-E 3 (best quality)' },
+  { value: 'dall-e-2', label: 'DALL-E 2 (faster)' },
+];
+
 interface AISettingsData {
   provider: string;
   model: string;
+  hasApiKey: boolean;
+}
+
+interface ImageSettingsData {
+  source: string;
+  model?: string;
   hasApiKey: boolean;
 }
 
@@ -39,6 +50,7 @@ export default function AISettings({ embedded }: { embedded?: boolean } = {}) {
   const { toast } = useToast();
   const { apiSuffix } = useSiteContext();
 
+  // ── AI Text settings ──────────────────────────────────────────────────────
   const [provider, setProvider] = useState<'anthropic' | 'openai'>('anthropic');
   const [model, setModel] = useState('claude-3-5-haiku-20241022');
   const [apiKey, setApiKey] = useState('');
@@ -46,10 +58,26 @@ export default function AISettings({ embedded }: { embedded?: boolean } = {}) {
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle');
   const [settingsLoaded, setSettingsLoaded] = useState(false);
 
+  // ── Image settings ────────────────────────────────────────────────────────
+  const [imgSource, setImgSource] = useState<'ai_openai' | 'stock_unsplash' | 'stock_pexels' | 'media_library'>('media_library');
+  const [imgModel, setImgModel] = useState('dall-e-3');
+  const [imgApiKey, setImgApiKey] = useState('');
+  const [showImgKey, setShowImgKey] = useState(false);
+  const [imgSettingsLoaded, setImgSettingsLoaded] = useState(false);
+
   const { data: settings, isLoading } = useQuery<AISettingsData>({
     queryKey: ['/api/admin/ai-settings' + apiSuffix],
     queryFn: async () => {
       const res = await fetch(`/api/admin/ai-settings${apiSuffix}`, { credentials: 'include' });
+      if (!res.ok) return null;
+      return res.json();
+    },
+  });
+
+  const { data: imgSettings, isLoading: imgLoading } = useQuery<ImageSettingsData>({
+    queryKey: ['/api/admin/image-settings' + apiSuffix],
+    queryFn: async () => {
+      const res = await fetch(`/api/admin/image-settings${apiSuffix}`, { credentials: 'include' });
       if (!res.ok) return null;
       return res.json();
     },
@@ -63,9 +91,16 @@ export default function AISettings({ embedded }: { embedded?: boolean } = {}) {
     }
   }, [settings, settingsLoaded]);
 
+  useEffect(() => {
+    if (imgSettings && !imgSettingsLoaded) {
+      setImgSource((imgSettings.source as any) || 'media_library');
+      setImgModel(imgSettings.model || 'dall-e-3');
+      setImgSettingsLoaded(true);
+    }
+  }, [imgSettings, imgSettingsLoaded]);
+
   const handleProviderChange = (v: 'anthropic' | 'openai') => {
     setProvider(v);
-    // Reset model to provider default when user explicitly changes provider
     if (v === 'anthropic') setModel('claude-3-5-haiku-20241022');
     else setModel('gpt-4o-mini');
   };
@@ -83,6 +118,21 @@ export default function AISettings({ embedded }: { embedded?: boolean } = {}) {
       setApiKey('');
     },
     onError: () => toast({ title: 'Failed to save', variant: 'destructive' }),
+  });
+
+  const saveImgMutation = useMutation({
+    mutationFn: async () => {
+      const body: any = { source: imgSource, model: imgModel };
+      if (imgApiKey) body.apiKey = imgApiKey;
+      const res = await apiRequest('POST', `/api/admin/image-settings${apiSuffix}`, body);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/image-settings' + apiSuffix] });
+      toast({ title: 'Image settings saved' });
+      setImgApiKey('');
+    },
+    onError: () => toast({ title: 'Failed to save image settings', variant: 'destructive' }),
   });
 
   const handleTest = async () => {
@@ -103,14 +153,29 @@ export default function AISettings({ embedded }: { embedded?: boolean } = {}) {
 
   const models = provider === 'anthropic' ? ANTHROPIC_MODELS : OPENAI_MODELS;
 
+  const imgApiKeyLabel = imgSource === 'ai_openai'
+    ? 'OpenAI API Key'
+    : imgSource === 'stock_unsplash'
+      ? 'Unsplash Access Key'
+      : imgSource === 'stock_pexels'
+        ? 'Pexels API Key'
+        : null;
+
+  const imgApiKeyPlaceholder = imgSource === 'ai_openai'
+    ? 'sk-...'
+    : imgSource === 'stock_unsplash'
+      ? 'Your Unsplash Access Key'
+      : 'Your Pexels API Key';
+
   return (
     <EmbeddableLayout embedded={embedded}>
       <div className="p-6 space-y-6" data-testid="page-ai-settings">
         <div>
           <h1 className="text-2xl font-bold">AI Settings</h1>
-          <p className="text-muted-foreground">Configure your AI provider for automatic translation and content generation.</p>
+          <p className="text-muted-foreground">Configure AI provider for content generation and image source for blog posts.</p>
         </div>
 
+        {/* ── AI Text Provider ─────────────────────────────── */}
         <Card>
           <CardHeader>
             <CardTitle>AI Provider Configuration</CardTitle>
@@ -211,6 +276,127 @@ export default function AISettings({ embedded }: { embedded?: boolean } = {}) {
           </CardContent>
         </Card>
 
+        {/* ── Image Source ──────────────────────────────────── */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Image className="h-5 w-5" />
+              Blog Image Source
+            </CardTitle>
+            <CardDescription>
+              Choose where to fetch featured images for auto-generated blog posts.
+              Images are optimised to WebP 1200×630 and stored locally.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            {imgLoading ? (
+              <div className="flex items-center gap-2 text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Loading...</div>
+            ) : (
+              <>
+                {imgSettings?.hasApiKey && imgSettings.source !== 'media_library' && (
+                  <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded-lg">
+                    <CheckCircle2 className="h-4 w-4 text-green-600" />
+                    <span className="text-sm text-green-700 dark:text-green-300">
+                      API key configured for <strong>{imgSettings.source}</strong>
+                      {imgSettings.model && ` (${imgSettings.model})`}
+                    </span>
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <Label>Image Source</Label>
+                  <Select value={imgSource} onValueChange={v => setImgSource(v as any)} >
+                    <SelectTrigger data-testid="select-image-source">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="media_library">Manual / Media Library (no auto-generation)</SelectItem>
+                      <SelectItem value="ai_openai">AI — OpenAI DALL-E (generates unique images)</SelectItem>
+                      <SelectItem value="stock_unsplash">Stock — Unsplash (requires free API key)</SelectItem>
+                      <SelectItem value="stock_pexels">Stock — Pexels (requires free API key)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {imgSource === 'ai_openai' && (
+                  <div className="space-y-2">
+                    <Label>DALL-E Model</Label>
+                    <Select value={imgModel} onValueChange={setImgModel}>
+                      <SelectTrigger data-testid="select-dalle-model">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {DALLE_MODELS.map(m => (
+                          <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">DALL-E 3 produces higher quality educational visuals. Uses your OpenAI API key.</p>
+                  </div>
+                )}
+
+                {imgApiKeyLabel && (
+                  <div className="space-y-2">
+                    <Label>
+                      {imgApiKeyLabel}
+                      {imgSettings?.hasApiKey && imgSettings.source === imgSource && (
+                        <Badge variant="secondary" className="ml-1 text-xs">Already set — leave blank to keep</Badge>
+                      )}
+                    </Label>
+                    <div className="relative">
+                      <Input
+                        type={showImgKey ? 'text' : 'password'}
+                        value={imgApiKey}
+                        onChange={e => setImgApiKey(e.target.value)}
+                        placeholder={
+                          imgSettings?.hasApiKey && imgSettings.source === imgSource
+                            ? '••••••••••••••••••••••• (leave blank to keep)'
+                            : imgApiKeyPlaceholder
+                        }
+                        className="pr-10"
+                        data-testid="input-image-api-key"
+                      />
+                      <button
+                        type="button"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        onClick={() => setShowImgKey(!showImgKey)}
+                      >
+                        {showImgKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                    {imgSource === 'stock_unsplash' && (
+                      <p className="text-xs text-muted-foreground">
+                        Get a free key at <a href="https://unsplash.com/developers" target="_blank" rel="noopener noreferrer" className="underline text-primary">unsplash.com/developers</a>
+                      </p>
+                    )}
+                    {imgSource === 'stock_pexels' && (
+                      <p className="text-xs text-muted-foreground">
+                        Get a free key at <a href="https://www.pexels.com/api" target="_blank" rel="noopener noreferrer" className="underline text-primary">pexels.com/api</a>
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {imgSource === 'media_library' && (
+                  <div className="p-3 bg-muted/50 rounded-lg text-sm text-muted-foreground">
+                    Images must be uploaded manually from the Blog post image panel. No API key needed.
+                  </div>
+                )}
+
+                <Button
+                  onClick={() => saveImgMutation.mutate()}
+                  disabled={saveImgMutation.isPending || (imgSource !== 'media_library' && !imgApiKey && !imgSettings?.hasApiKey)}
+                  data-testid="button-save-image-settings"
+                >
+                  {saveImgMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  Save Image Settings
+                </Button>
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* ── How it works ─────────────────────────────────────── */}
         <Card>
           <CardHeader>
             <CardTitle>How AI Features Work</CardTitle>
@@ -225,8 +411,12 @@ export default function AISettings({ embedded }: { embedded?: boolean } = {}) {
               <div><strong className="text-foreground">Content Generator</strong> — Upload a PDF, Word doc, or URL to auto-generate hero, about, FAQ, and SEO content.</div>
             </div>
             <div className="flex gap-3">
+              <span className="text-lg">🖼️</span>
+              <div><strong className="text-foreground">Blog Images</strong> — When a blog post is AI-generated, a featured image is automatically created from the configured source (DALL-E, Unsplash, or Pexels). Alt text is translated into all 10 languages for SEO.</div>
+            </div>
+            <div className="flex gap-3">
               <span className="text-lg">🔒</span>
-              <div><strong className="text-foreground">Security</strong> — Your API key is encrypted with AES-256 and never returned in API responses.</div>
+              <div><strong className="text-foreground">Security</strong> — API keys are encrypted with AES-256 and never returned in API responses.</div>
             </div>
           </CardContent>
         </Card>

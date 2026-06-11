@@ -4,7 +4,7 @@ import {
   tenants, tenantDomains, tenantThemes, sections, menuItems,
   adminUsers, integrationSettings, mediaAssets, faqItems,
   testimonials, trustBadges, seoSettings, widgets,
-  blogPosts, blogPostTranslations, blogSchedule, siteVersions,
+  blogPosts, blogPostTranslations, blogSchedule, blogPostImages, siteVersions,
   type Tenant, type InsertTenant,
   type TenantDomain, type InsertTenantDomain,
   type TenantTheme, type InsertTenantTheme,
@@ -19,6 +19,7 @@ import {
   type BlogPost, type InsertBlogPost,
   type BlogPostTranslation, type InsertBlogPostTranslation,
   type BlogSchedule, type InsertBlogSchedule,
+  type BlogPostImage, type InsertBlogPostImage,
   type SiteVersion, type InsertSiteVersion,
 } from '@shared/schema';
 
@@ -104,6 +105,12 @@ export interface IStorage {
   getPublishedBlogPosts(tenantId: string, lang: string): Promise<{ post: BlogPost; translation: BlogPostTranslation }[]>;
   upsertBlogPostTranslation(data: InsertBlogPostTranslation): Promise<BlogPostTranslation>;
   deleteBlogPostTranslations(postId: string): Promise<void>;
+
+  // Blog Post Images
+  getBlogPostImages(postId: string): Promise<BlogPostImage[]>;
+  addBlogPostImage(data: InsertBlogPostImage): Promise<BlogPostImage>;
+  deleteBlogPostImage(id: string): Promise<boolean>;
+  updateBlogPostFeaturedImage(postId: string, url: string, altByLang: Record<string, string>): Promise<BlogPost | undefined>;
 
   // Blog Schedule
   getBlogSchedule(tenantId: string): Promise<BlogSchedule | undefined>;
@@ -520,6 +527,31 @@ export class DatabaseStorage implements IStorage {
 
   async deleteBlogPostTranslations(postId: string): Promise<void> {
     await db.delete(blogPostTranslations).where(eq(blogPostTranslations.postId, postId));
+  }
+
+  // Blog Post Images
+  async getBlogPostImages(postId: string): Promise<BlogPostImage[]> {
+    return db.select().from(blogPostImages)
+      .where(eq(blogPostImages.postId, postId))
+      .orderBy(blogPostImages.position, blogPostImages.createdAt);
+  }
+
+  async addBlogPostImage(data: InsertBlogPostImage): Promise<BlogPostImage> {
+    const [created] = await db.insert(blogPostImages).values(data as any).returning();
+    return created;
+  }
+
+  async deleteBlogPostImage(id: string): Promise<boolean> {
+    const result = await db.delete(blogPostImages).where(eq(blogPostImages.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async updateBlogPostFeaturedImage(postId: string, url: string, altByLang: Record<string, string>): Promise<BlogPost | undefined> {
+    const [updated] = await db.update(blogPosts)
+      .set({ featuredImageUrl: url, featuredImageAltByLang: altByLang as any })
+      .where(eq(blogPosts.id, postId))
+      .returning();
+    return updated;
   }
 
   // Blog Schedule

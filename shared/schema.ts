@@ -244,6 +244,8 @@ export const blogPosts = pgTable("blog_posts", {
   keyword: text("keyword"),
   backlinkSites: text("backlink_sites").array().default(sql`ARRAY[]::text[]`),
   isAiGenerated: boolean("is_ai_generated").default(false),
+  featuredImageUrl: text("featured_image_url"),
+  featuredImageAltByLang: jsonb("featured_image_alt_by_lang").$type<Record<SupportedLanguage, string>>(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -276,10 +278,24 @@ export const blogSchedule = pgTable("blog_schedule", {
   isEnabled: boolean("is_enabled").default(false),
 });
 
+// Blog Post Images (multiple images per post)
+export const blogPostImages = pgTable("blog_post_images", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  postId: varchar("post_id").notNull().references(() => blogPosts.id, { onDelete: 'cascade' }),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  url: text("url").notNull(),
+  altByLang: jsonb("alt_by_lang").$type<Record<SupportedLanguage, string>>(),
+  attribution: text("attribution"),
+  source: text("source").default("media_library"),
+  position: integer("position").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Insert schemas
 export const insertBlogPostSchema = createInsertSchema(blogPosts).omit({ id: true, createdAt: true });
 export const insertBlogPostTranslationSchema = createInsertSchema(blogPostTranslations).omit({ id: true });
 export const insertBlogScheduleSchema = createInsertSchema(blogSchedule).omit({ id: true });
+export const insertBlogPostImageSchema = createInsertSchema(blogPostImages).omit({ id: true, createdAt: true });
 
 // Types
 export type BlogPost = typeof blogPosts.$inferSelect;
@@ -288,6 +304,8 @@ export type BlogPostTranslation = typeof blogPostTranslations.$inferSelect;
 export type InsertBlogPostTranslation = z.infer<typeof insertBlogPostTranslationSchema>;
 export type BlogSchedule = typeof blogSchedule.$inferSelect;
 export type InsertBlogSchedule = z.infer<typeof insertBlogScheduleSchema>;
+export type BlogPostImage = typeof blogPostImages.$inferSelect;
+export type InsertBlogPostImage = z.infer<typeof insertBlogPostImageSchema>;
 
 // Site Versions — snapshots of all tenant content (max 10 kept per tenant)
 export const siteVersions = pgTable("site_versions", {

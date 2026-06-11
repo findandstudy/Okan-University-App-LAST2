@@ -1,0 +1,25 @@
+Blog yazılarına otomatik görsel üretimi ekle. Mevcut blog (Faz 7), AI Settings ve VPS yerel disk depolama üzerine kur.
+🎯 Hedef: Her blog yazısına otomatik 1 featured (OG/thumbnail) + 1-2 inline görsel; kaynak panelden seçilebilir (AI üretim / ücretsiz stok / media kütüphanesi); WebP optimize VPS diske kaydedilir; alt metni üretilip 10 dile çevrilir.
+📂 Şema:
+
+blog_posts'a ekle: featuredImageUrl, featuredImageAltByLang (jsonb).
+Yeni tablo blog_post_images (id, postId FK, url, altByLang jsonb, position int, source text).
+db:push.
+
+🖼️ Görsel kaynağı ayarı (esnek): integration_settings'i kullan (integrationType='image'): settings = { source: 'ai_openai'|'stock_unsplash'|'stock_pexels'|'media_library', encryptedApiKey, model }. AI Settings sayfasına "Image Source" bölümü ekle (kaynak seç + anahtar + test).
+⚙️ Servis — server/blogImageService.ts:
+
+Girdi: post başlığı, anahtar kelime, konu, dil.
+ai_openai → başlık/konudan tematik prompt üret (öğrenciler, kitaplar, şehir, soyut eğitim görseli), OpenAI image API ile üret. KRİTİK guardrail: gerçek üniversite binası/kampüsü/logosu çizdirme — sadece konusal/jenerik görsel (yanıltıcı/marka riski).
+stock_unsplash/stock_pexels → anahtar kelimeyle ücretsiz API'den foto çek; fotoğrafçı atfını (attribution) kaydet ve göster (API ToS gereği).
+media_library → üniversitenin yüklü media asset'lerinden uygun olanı seç.
+Her durumda: sharp ile WebP optimize → UPLOADS_DIR'e kaydet → URL döndür.
+Alt metni: AI ile üret (anahtar kelime içeren), aiTranslation.ts ile 10 dile çevir.
+
+🔗 Blog üretimine bağla: Mevcut AI makale üretim akışında (Faz 7), makale üretilince otomatik: 1 featured + içeriğe 1-2 inline görsel yerleştir (markdown/HTML'de konumlandır).
+🖥️ Admin UI (Blog editör): featured + inline görselleri göster; her birini yeniden üret / değiştir / elle yükle ve alt metni düzenle. Görsel yoksa placeholder.
+🔍 SEO: featured image → og:image + Article JSON-LD image + thumbnail; alt metni lokalize.
+✅ Kabul: Yeni blog yazısı üretilince kaynağa göre featured + 1-2 inline görsel otomatik geliyor, WebP optimize diske kaydediliyor, alt metni 10 dilde, OG/Article schema'da görünüyor; admin değiştirebiliyor; AI görselleri gerçek kampüs çizmiyor (tematik). npm run check temiz.
+
+
+Bu promptu yapıştır. Önce mevcut "localStorage dil önceliği" düzeltmesini bitirsin, sonra bunu Faz 10 olarak eklesin. Bittiğinde haber ver — Chrome'dan blog görsel akışını canlı test edip (bir test yazısı üretip görsellerin geldiğini, alt metinlerini, OG image'ı) sana rapor veririm.

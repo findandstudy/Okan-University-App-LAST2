@@ -18,7 +18,7 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
-import { Sparkles, Upload, Trash2, CheckCircle, Calendar, Plus, ChevronLeft, ChevronRight, LayoutList } from 'lucide-react';
+import { Sparkles, Upload, Trash2, CheckCircle, Calendar, Plus, ChevronLeft, ChevronRight, LayoutList, Image, Star } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
 import { useLocation } from 'wouter';
 
@@ -31,6 +31,7 @@ interface BlogPostWithTranslations {
   keyword: string | null;
   backlinkSites: string[];
   isAiGenerated: boolean;
+  featuredImageUrl: string | null;
   translations: Array<{
     id: string;
     lang: string;
@@ -40,6 +41,180 @@ interface BlogPostWithTranslations {
     metaTitle: string | null;
     metaDesc: string | null;
   }>;
+}
+
+interface BlogPostImage {
+  id: string;
+  postId: string;
+  url: string;
+  altByLang: Record<string, string> | null;
+  attribution: string | null;
+  source: string;
+  position: number;
+}
+
+// ── Image Management Dialog ───────────────────────────────────────────────
+function BlogImagesDialog({ post, onClose }: { post: BlogPostWithTranslations; onClose: () => void }) {
+  const { toast } = useToast();
+  const imgFileRef = useRef<HTMLInputElement>(null);
+  const [generatingImage, setGeneratingImage] = useState(false);
+
+  const { data: images = [], isLoading } = useQuery<BlogPostImage[]>({
+    queryKey: ['/api/admin/blog', post.id, 'images'],
+    queryFn: () => fetch(`/api/admin/blog/${post.id}/images`, { credentials: 'include' }).then(r => r.json()),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (imgId: string) => apiRequest('DELETE', `/api/admin/blog/${post.id}/images/${imgId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/blog', post.id, 'images'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/blog'] });
+      toast({ title: 'Image deleted' });
+    },
+    onError: () => toast({ title: 'Failed to delete', variant: 'destructive' }),
+  });
+
+  const setFeaturedMutation = useMutation({
+    mutationFn: (img: BlogPostImage) => apiRequest('PATCH', `/api/admin/blog/${post.id}/featured-image`, {
+      url: img.url,
+      altByLang: img.altByLang || {},
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/blog'] });
+      toast({ title: 'Featured image updated' });
+    },
+    onError: () => toast({ title: 'Failed to set featured image', variant: 'destructive' }),
+  });
+
+  const handleGenerateImage = async () => {
+    setGeneratingImage(true);
+    try {
+      const res = await apiRequest('POST', `/api/admin/blog/${post.id}/generate-images`, {});
+      if (!res.ok) {
+        const d = await res.json();
+        throw new Error(d.error || 'Generation failed');
+      }
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/blog', post.id, 'images'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/blog'] });
+      toast({ title: 'Image generated!' });
+    } catch (e: any) {
+      toast({ title: 'Image generation failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setGeneratingImage(false);
+    }
+  };
+
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+      const res = await fetch(`/api/admin/blog/${post.id}/images/upload`, {
+        method: 'POST',
+        body: formData,
+        credentials: 'include',
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Upload failed');
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/blog', post.id, 'images'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/blog'] });
+      toast({ title: 'Image uploaded' });
+    } catch (e: any) {
+      toast({ title: 'Upload failed', description: e.message, variant: 'destructive' });
+    } finally {
+      if (imgFileRef.current) imgFileRef.current.value = '';
+    }
+  };
+
+  const enTitle = post.translations.find(t => t.lang === 'en')?.title || post.keyword || '—';
+
+  return (
+    <div className="space-y-4">
+      <div className="text-sm text-muted-foreground line-clamp-1">{enTitle}</div>
+
+      <div className="flex gap-2">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={handleGenerateImage}
+          disabled={generatingImage}
+          data-testid="button-generate-image"
+        >
+          {generatingImage
+            ? <><span className="w-3.5 h-3.5 mr-1.5 animate-spin border-2 border-current border-t-transparent rounded-full inline-block" />Generating…</>
+            : <><Sparkles className="w-3.5 h-3.5 mr-1.5" />Generate with AI / Stock</>
+          }
+        </Button>
+        <input ref={imgFileRef} type="file" accept="image/*" className="hidden" onChange={handleUpload} data-testid="input-image-upload" />
+        <Button size="sm" variant="outline" onClick={() => imgFileRef.current?.click()} data-testid="button-upload-image">
+          <Upload className="w-3.5 h-3.5 mr-1.5" />Upload Image
+        </Button>
+      </div>
+
+      {isLoading ? (
+        <div className="text-sm text-muted-foreground">Loading images…</div>
+      ) : images.length === 0 ? (
+        <div className="py-8 text-center text-muted-foreground text-sm border-2 border-dashed rounded-lg">
+          No images yet. Generate one or upload manually.
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-3">
+          {images.map(img => {
+            const isFeatured = post.featuredImageUrl === img.url;
+            return (
+              <div
+                key={img.id}
+                data-testid={`blog-image-${img.id}`}
+                className={`relative group rounded-lg overflow-hidden border-2 ${isFeatured ? 'border-primary' : 'border-border'}`}
+              >
+                <img
+                  src={img.url}
+                  alt={img.altByLang?.en || ''}
+                  className="w-full aspect-video object-cover"
+                />
+                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                  {!isFeatured && (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="h-7 text-xs"
+                      onClick={() => setFeaturedMutation.mutate(img)}
+                      data-testid={`button-set-featured-${img.id}`}
+                    >
+                      <Star className="w-3 h-3 mr-1" />Featured
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    className="h-7 text-xs"
+                    onClick={() => deleteMutation.mutate(img.id)}
+                    data-testid={`button-delete-image-${img.id}`}
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </Button>
+                </div>
+                {isFeatured && (
+                  <div className="absolute top-1 left-1 bg-primary text-primary-foreground text-[10px] font-semibold px-1.5 py-0.5 rounded">
+                    Featured
+                  </div>
+                )}
+                {img.source !== 'media_library' && img.source !== 'ai_openai' && (
+                  <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[9px] px-1.5 py-0.5 truncate">
+                    {img.attribution}
+                  </div>
+                )}
+                <div className="absolute top-1 right-1 bg-black/60 text-white text-[9px] px-1 rounded">
+                  {img.source === 'ai_openai' ? 'AI' : img.source === 'stock_unsplash' ? 'Unsplash' : img.source === 'stock_pexels' ? 'Pexels' : 'Upload'}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 }
 
 interface BlogSchedule {
@@ -170,6 +345,7 @@ export default function Blog() {
   const [, setLocation] = useLocation();
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
+  const [imagesPost, setImagesPost] = useState<BlogPostWithTranslations | null>(null);
   const [generatingId, setGeneratingId] = useState<string | null>(null);
   const [view, setView] = useState<'list' | 'calendar'>('list');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -564,7 +740,7 @@ export default function Blog() {
                           {post.publishAt ? formatDate(post.publishAt) : '—'}
                         </TableCell>
                         <TableCell>
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-1 flex-wrap">
                             <Button
                               size="sm"
                               variant="outline"
@@ -575,6 +751,18 @@ export default function Blog() {
                             >
                               <Sparkles className="w-3.5 h-3.5 mr-1" />
                               {generatingId === post.id ? 'Generating…' : 'AI Generate'}
+                            </Button>
+
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setImagesPost(post)}
+                              data-testid={`button-images-${post.id}`}
+                              title="Manage images"
+                              className={post.featuredImageUrl ? 'text-primary border-primary/40' : ''}
+                            >
+                              <Image className="w-3.5 h-3.5 mr-1" />
+                              Images{post.featuredImageUrl ? ' ✓' : ''}
                             </Button>
 
                             {post.status !== 'yayinda' && (
@@ -645,6 +833,21 @@ export default function Blog() {
           </Card>
         )}
       </div>
+
+      {/* Images management dialog */}
+      <Dialog open={!!imagesPost} onOpenChange={open => { if (!open) setImagesPost(null); }}>
+        <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Image className="w-4 h-4" />
+              Blog Post Images
+            </DialogTitle>
+          </DialogHeader>
+          {imagesPost && (
+            <BlogImagesDialog post={imagesPost} onClose={() => setImagesPost(null)} />
+          )}
+        </DialogContent>
+      </Dialog>
     </AdminLayout>
   );
 }

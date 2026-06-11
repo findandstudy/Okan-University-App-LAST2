@@ -1532,6 +1532,32 @@ Rules:
       await storage.updateBlogPost(id, { isAiGenerated: true });
 
       const allTranslations = await storage.getBlogPostTranslations(id);
+
+      // Non-blocking: auto-generate featured image if image source is configured
+      (async () => {
+        try {
+          const { generateBlogImage } = await import('./blogImageService');
+          const generated = await generateBlogImage(enContent.title, keyword, req.tenantId);
+          if (generated) {
+            const freshPost = await storage.getBlogPost(id);
+            if (freshPost && !freshPost.featuredImageUrl) {
+              await storage.addBlogPostImage({
+                postId: id,
+                tenantId: req.tenantId,
+                url: generated.url,
+                altByLang: generated.altByLang as any,
+                attribution: generated.attribution || null,
+                source: generated.source,
+                position: 0,
+              });
+              await storage.updateBlogPostFeaturedImage(id, generated.url, generated.altByLang as any);
+            }
+          }
+        } catch (imgErr) {
+          console.warn('[BlogGenerate] Image generation skipped:', (imgErr as any)?.message);
+        }
+      })();
+
       res.json({ success: true, translations: allTranslations });
     } catch (err: any) {
       console.error('Blog generate error:', err);
@@ -1761,6 +1787,142 @@ Rules:
     } catch (err) {
       console.error('verify-domain error:', err);
       return res.status(500).send('Internal Server Error');
+    }
+  });
+
+  // ─── Image Settings (source: ai_openai | stock_unsplash | stock_pexels | media_library) ─────
+  app.get("/api/admin/image-settings", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
+    try {
+      const { getImageConfig } = await import('./blogImageService');
+      const config = await getImageConfig(req.tenantId);
+      if (!config) return res.json({ source: 'media_library', hasApiKey: false });
+      res.json({ source: config.source, model: config.model, hasApiKey: !!config.encryptedApiKey });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  app.post("/api/admin/image-settings", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
+    try {
+      const { source, model, apiKey } = req.body;
+      if (!source) return res.status(400).json({ error: 'source is required' });
+      const { getImageConfig, saveImageConfig } = await import('./blogImageService');
+      const { encryptApiKey } = await import('./aiService');
+      const existing = await getImageConfig(req.tenantId);
+      const encryptedApiKey = apiKey
+        ? encryptApiKey(apiKey)
+        : (existing?.encryptedApiKey || undefined);
+      await saveImageConfig(req.tenantId, { source, model: model || 'dall-e-3', encryptedApiKey });
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // ─── Blog Post Images ─────────────────────────────────────────────────────────
+  app.get("/api/admin/blog/:id/images", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
+    try {
+      const post = await storage.getBlogPost(req.params.id as string);
+      if (!post || post.tenantId !== req.tenantId) return res.status(404).json({ error: 'Not found' });
+      const images = await storage.getBlogPostImages(post.id);
+      res.json(images);
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  app.post("/api/admin/blog/:id/generate-images", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
+    try {
+      const post = await storage.getBlogPost(req.params.id as string);
+      if (!post || post.tenantId !== req.tenantId) return res.status(404).json({ error: 'Not found' });
+      const { generateBlogImage } = await import('./blogImageService');
+      const keyword = post.keyword || 'university education';
+      const translations = await storage.getBlogPostTranslations(post.id);
+      const enTitle = translations.find(t => t.lang === 'en')?.title || keyword;
+      const generated = await generateBlogImage(enTitle, keyword, req.tenantId);
+      if (!generated) return res.status(400).json({ error: 'Image generation not configured or failed' });
+      const image = await storage.addBlogPostImage({
+        postId: post.id,
+        tenantId: req.tenantId,
+        url: generated.url,
+        altByLang: generated.altByLang as any,
+        attribution: generated.attribution || null,
+        source: generated.source,
+        position: 0,
+      });
+      // Auto-set as featured if none set
+      if (!post.featuredImageUrl) {
+        await storage.updateBlogPostFeaturedImage(post.id, generated.url, generated.altByLang as any);
+      }
+      res.json(image);
+    } catch (err: any) {
+      console.error('Blog image generation error:', err);
+      res.status(500).json({ error: err?.message || 'Image generation failed' });
+    }
+  });
+
+  app.post("/api/admin/blog/:id/images/upload", requireAdmin, resolveTenant, requireAdminTenantAccess, upload.single('file'), async (req, res) => {
+    try {
+      const post = await storage.getBlogPost(req.params.id as string);
+      if (!post || post.tenantId !== req.tenantId) return res.status(404).json({ error: 'Not found' });
+      if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+      const webpBuffer = await sharp(req.file.buffer)
+        .resize({ width: 1200, height: 630, fit: 'cover', position: 'center' })
+        .webp({ quality: 82 })
+        .toBuffer();
+      const url = saveUpload(webpBuffer, req.file.originalname.replace(/\.[^.]+$/, '') + '.webp');
+      const keyword = post.keyword || 'university education';
+      const altFallback: Record<string, string> = {};
+      SUPPORTED_LANGUAGES.forEach(l => { altFallback[l] = keyword; });
+      const image = await storage.addBlogPostImage({
+        postId: post.id,
+        tenantId: req.tenantId,
+        url,
+        altByLang: altFallback as any,
+        attribution: null,
+        source: 'media_library',
+        position: 0,
+      });
+      if (!post.featuredImageUrl) {
+        await storage.updateBlogPostFeaturedImage(post.id, url, altFallback);
+      }
+      res.json(image);
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  app.patch("/api/admin/blog/:id/featured-image", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
+    try {
+      const post = await storage.getBlogPost(req.params.id as string);
+      if (!post || post.tenantId !== req.tenantId) return res.status(404).json({ error: 'Not found' });
+      const { url, altByLang } = req.body;
+      if (!url) return res.status(400).json({ error: 'url is required' });
+      const updated = await storage.updateBlogPostFeaturedImage(post.id, url, altByLang || {});
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  app.delete("/api/admin/blog/:postId/images/:imgId", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
+    try {
+      const post = await storage.getBlogPost(req.params.postId as string);
+      if (!post || post.tenantId !== req.tenantId) return res.status(404).json({ error: 'Not found' });
+      const ok = await storage.deleteBlogPostImage(req.params.imgId as string);
+      // If deleted image was the featured image, clear it
+      const deletedImages = await storage.getBlogPostImages(post.id);
+      if (post.featuredImageUrl && deletedImages.every(i => i.url !== post.featuredImageUrl)) {
+        const next = deletedImages[0];
+        if (next) {
+          await storage.updateBlogPostFeaturedImage(post.id, next.url, (next.altByLang as any) || {});
+        } else {
+          await storage.updateBlogPostFeaturedImage(post.id, '', {});
+        }
+      }
+      res.json({ success: ok });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
     }
   });
 
