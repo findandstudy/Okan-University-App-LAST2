@@ -285,14 +285,16 @@ export default function Sites() {
                               </Button>
                             </Link>
 
-                            {tenant.domain && (
-                              <a href={`https://${tenant.domain}`} target="_blank" rel="noopener noreferrer">
-                                <Button variant="ghost" size="sm" className="gap-1.5" data-testid={`button-preview-${tenant.id}`}>
-                                  <Eye className="h-3.5 w-3.5" />
-                                  Preview
-                                </Button>
-                              </a>
-                            )}
+                            <a
+                              href={`/en${tenant.id !== 'default' ? `?_tid=${tenant.id}` : ''}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              <Button variant="ghost" size="sm" className="gap-1.5" data-testid={`button-preview-${tenant.id}`}>
+                                <Eye className="h-3.5 w-3.5" />
+                                Preview
+                              </Button>
+                            </a>
 
                             <Button
                               variant="ghost"
