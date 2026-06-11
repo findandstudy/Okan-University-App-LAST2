@@ -1206,6 +1206,118 @@ export async function registerRoutes(
     }
   });
 
+  // ─── Master: Translate Everything ────────────────────────────────────────────
+  app.post("/api/admin/ai/translate-everything", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
+    try {
+      const { enName } = req.body;
+      const tenantId = req.tenantId;
+      const TARGET_LANGS = ['ar','tr','fr','ru','fa','zh','hi','es','id'];
+      const { translateText, translateContentByLang } = await import('./aiTranslation');
+      const { callAI } = await import('./aiService');
+      const steps: string[] = [];
+
+      // 1. University name
+      if (enName) {
+        const nameTranslations = await translateText(enName, 'en', TARGET_LANGS, tenantId);
+        await storage.updateTenant(tenantId, { nameByLang: { en: enName, ...nameTranslations } });
+        steps.push('university_name');
+      }
+
+      // 2. Sections
+      const sections = await storage.getSections(tenantId);
+      let sectionsCount = 0;
+      for (const section of sections) {
+        const enContent = (section.contentByLang as any)?.['en'];
+        if (!enContent) continue;
+        const sourceContent: Record<string, string> = {};
+        for (const [field, val] of Object.entries(enContent)) {
+          if (typeof val === 'string' && val.trim()) sourceContent[field] = val;
+        }
+        if (Object.keys(sourceContent).length === 0) continue;
+        const translated = await translateContentByLang(sourceContent, 'en', TARGET_LANGS, tenantId);
+        const existingCBL = (section.contentByLang as Record<string, Record<string, string>>) || {};
+        const newCBL: Record<string, Record<string, string>> = { ...existingCBL, en: enContent };
+        for (const [lang, content] of Object.entries(translated)) {
+          newCBL[lang] = { ...(existingCBL[lang] || {}), ...content };
+        }
+        await storage.updateSection(section.id, { contentByLang: newCBL });
+        sectionsCount++;
+      }
+      steps.push(`sections:${sectionsCount}`);
+
+      // 3. FAQ
+      const faqItems = await storage.getFaqItems(tenantId);
+      let faqCount = 0;
+      for (const item of faqItems) {
+        const enQ = (item.questionByLang as any)?.en;
+        const enA = (item.answerByLang as any)?.en;
+        const source: Record<string, string> = {};
+        if (enQ?.trim()) source.question = enQ;
+        if (enA?.trim()) source.answer = enA;
+        if (Object.keys(source).length === 0) continue;
+        const result = await translateContentByLang(source, 'en', TARGET_LANGS, tenantId);
+        const newQ: Record<string, string> = { ...((item.questionByLang as any) || {}) };
+        const newA: Record<string, string> = { ...((item.answerByLang as any) || {}) };
+        for (const [lang, content] of Object.entries(result)) {
+          if ((content as any).question) newQ[lang] = (content as any).question;
+          if ((content as any).answer) newA[lang] = (content as any).answer;
+        }
+        await storage.updateFaqItem(item.id, { questionByLang: newQ as any, answerByLang: newA as any });
+        faqCount++;
+      }
+      steps.push(`faq:${faqCount}`);
+
+      // 4. Testimonials
+      const testimonials = await storage.getTestimonials(tenantId);
+      let testimonialCount = 0;
+      for (const t of testimonials) {
+        const enContent = (t.contentByLang as any)?.en;
+        if (!enContent?.trim()) continue;
+        const result = await translateText(enContent, 'en', TARGET_LANGS, tenantId);
+        await storage.updateTestimonial(t.id, { contentByLang: { ...((t.contentByLang as any) || {}), ...result } as any });
+        testimonialCount++;
+      }
+      steps.push(`testimonials:${testimonialCount}`);
+
+      // 5. SEO meta tags (read from DB, localize culturally, save back)
+      const seoSettings = await storage.getSeoSettings(tenantId);
+      if (seoSettings) {
+        const metaTitleByLang = (seoSettings.metaTitleByLang || {}) as Record<string, string>;
+        const metaDescByLang = (seoSettings.metaDescriptionByLang || {}) as Record<string, string>;
+        const metaKwByLang = (seoSettings.metaKeywordsByLang || {}) as Record<string, string>;
+        const enTitle = metaTitleByLang.en || '';
+        const enDesc = metaDescByLang.en || '';
+        const enKw = metaKwByLang.en || '';
+        if (enTitle) {
+          const prompt = `Given this English SEO metadata for a university landing page:\nTitle: ${enTitle}\nDescription: ${enDesc || ''}\nKeywords: ${enKw || ''}\n\nCreate localized (culturally adapted, SEO-effective) versions for: ${TARGET_LANGS.join(', ')}\n\nReturn ONLY valid JSON:\n{"ar":{"metaTitle":"...","metaDescription":"...","keywords":"..."},"tr":{...},"fr":{...},"ru":{...},"fa":{...},"zh":{...},"hi":{...},"es":{...},"id":{...}}\n\nRules: titles <60 chars, descriptions <160 chars, keywords comma-separated in target language`;
+          const raw = await callAI(prompt, tenantId, 'You are an expert SEO consultant and multilingual copywriter. Return only valid JSON.');
+          const match = raw.match(/\{[\s\S]*\}/);
+          if (match) {
+            const localized = JSON.parse(match[0]) as Record<string, { metaTitle: string; metaDescription: string; keywords: string }>;
+            const newTitle = { ...metaTitleByLang };
+            const newDesc = { ...metaDescByLang };
+            const newKw = { ...metaKwByLang };
+            for (const [lang, v] of Object.entries(localized)) {
+              if (v.metaTitle) newTitle[lang] = v.metaTitle;
+              if (v.metaDescription) newDesc[lang] = v.metaDescription;
+              if (v.keywords) newKw[lang] = v.keywords;
+            }
+            await storage.updateSeoSettings(tenantId, {
+              metaTitleByLang: newTitle,
+              metaDescriptionByLang: newDesc,
+              metaKeywordsByLang: newKw,
+            } as any);
+            steps.push('seo');
+          }
+        }
+      }
+
+      res.json({ ok: true, steps });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || "Translation failed" });
+    }
+  });
+
   app.post("/api/admin/ai/translate-all-sections", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
     try {
       const { targetLangs } = req.body;

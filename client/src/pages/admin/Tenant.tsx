@@ -202,23 +202,29 @@ export default function TenantPage({ embedded }: { embedded?: boolean } = {}) {
     },
   });
 
-  const translateNameMutation = useMutation({
+  const [translateProgress, setTranslateProgress] = useState<string | null>(null);
+
+  const translateEverythingMutation = useMutation({
     mutationFn: async () => {
       const enName = nameByLang['en'] || settings.universityName;
       if (!enName) throw new Error('Please enter the English university name first');
-      const res = await apiRequest('POST', `/api/admin/ai/translate-university-name${apiSuffix}`, {
-        enName,
-        targetLangs: ALL_LANGS.filter(l => l.code !== 'en').map(l => l.code),
-      });
+      setTranslateProgress('Translating university name…');
+      const res = await apiRequest('POST', `/api/admin/ai/translate-everything${apiSuffix}`, { enName });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Translation failed');
-      return data as { translations: Record<string, string> };
+      return data as { steps: string[] };
     },
-    onSuccess: (data) => {
-      setNameByLang(prev => ({ ...prev, ...data.translations }));
-      toast({ title: '✅ Name translated', description: 'University name filled for all languages. Save to apply.' });
+    onSuccess: () => {
+      setTranslateProgress(null);
+      queryClient.invalidateQueries({ queryKey: ['/api/tenant' + apiSuffix] });
+      queryClient.invalidateQueries({ queryKey: ['/api/sections' + apiSuffix] });
+      queryClient.invalidateQueries({ queryKey: ['/api/faq' + apiSuffix] });
+      queryClient.invalidateQueries({ queryKey: ['/api/testimonials' + apiSuffix] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/seo-settings' + apiSuffix] });
+      toast({ title: '✅ Everything translated', description: 'University name, sections, FAQ, testimonials and SEO meta tags are now translated into 9 languages.' });
     },
     onError: (err: Error) => {
+      setTranslateProgress(null);
       toast({ title: 'Translation failed', description: err.message, variant: 'destructive' });
     },
   });
@@ -246,6 +252,36 @@ export default function TenantPage({ embedded }: { embedded?: boolean } = {}) {
           <p className="text-muted-foreground">Logo, favicon, social links and site identity</p>
         </div>
 
+        {/* ── Master: Translate Everything ── */}
+        <Card className="border-primary/40 bg-primary/5">
+          <CardContent className="py-4 flex flex-col sm:flex-row items-start sm:items-center gap-4">
+            <div className="flex-1">
+              <p className="font-semibold text-sm">AI — Translate Everything</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Translates <span className="font-medium">university name, all sections, FAQ, testimonials and SEO meta tags</span> into <span className="font-medium">AR, TR, FR, RU, FA, ZH, HI, ES, ID</span> in one click. Existing translations will be overwritten.
+              </p>
+              {translateProgress && (
+                <p className="text-xs text-primary mt-1 flex items-center gap-1">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  {translateProgress}
+                </p>
+              )}
+            </div>
+            <Button
+              type="button"
+              className="gap-2 flex-shrink-0"
+              onClick={() => translateEverythingMutation.mutate()}
+              disabled={translateEverythingMutation.isPending}
+              data-testid="button-translate-everything"
+            >
+              {translateEverythingMutation.isPending
+                ? <Loader2 className="h-4 w-4 animate-spin" />
+                : <Languages className="h-4 w-4" />}
+              {translateEverythingMutation.isPending ? 'Translating…' : 'Translate Everything'}
+            </Button>
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <CardTitle>University Identity</CardTitle>
@@ -253,23 +289,7 @@ export default function TenantPage({ embedded }: { embedded?: boolean } = {}) {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>University Name</Label>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="border-primary text-primary hover:bg-primary hover:text-primary-foreground gap-1.5 text-xs h-7"
-                  onClick={() => translateNameMutation.mutate()}
-                  disabled={translateNameMutation.isPending}
-                  data-testid="button-translate-university-name"
-                >
-                  {translateNameMutation.isPending
-                    ? <Loader2 className="h-3 w-3 animate-spin" />
-                    : <Languages className="h-3 w-3" />}
-                  {translateNameMutation.isPending ? 'Translating…' : 'Translate to All Languages'}
-                </Button>
-              </div>
+              <Label>University Name</Label>
 
               {/* Language tabs */}
               <div className="flex flex-wrap gap-1">

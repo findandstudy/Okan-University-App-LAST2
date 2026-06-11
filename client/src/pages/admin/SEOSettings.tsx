@@ -14,8 +14,7 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
-import { Save, Globe, Share2, Twitter, Search, Sparkles, Loader2 } from 'lucide-react';
-import { useMutation as useGenericMutation } from '@tanstack/react-query';
+import { Save, Globe, Share2, Twitter, Search, Loader2 } from 'lucide-react';
 import type { SeoSettings, SupportedLanguage } from '@shared/schema';
 import { SUPPORTED_LANGUAGES } from '@shared/schema';
 
@@ -108,41 +107,6 @@ export default function SEOSettings({ embedded }: { embedded?: boolean } = {}) {
     saveMutation.mutate(data);
   };
 
-  const aiLocalizeMutation = useGenericMutation({
-    mutationFn: async () => {
-      const enTitle = form.getValues('metaTitleByLang.en');
-      const enDesc = form.getValues('metaDescriptionByLang.en');
-      const enKw = form.getValues('metaKeywordsByLang.en');
-      if (!enTitle) throw new Error('Please fill in the English meta title first');
-      const res = await fetch(`/api/admin/ai/localize-seo${apiSuffix}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ metaTitle: enTitle, metaDescription: enDesc, keywords: enKw }),
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || 'AI localize failed');
-      }
-      return res.json();
-    },
-    onSuccess: (data) => {
-      const localized = data.localized as Record<string, { metaTitle: string; metaDescription: string; keywords: string }>;
-      SUPPORTED_LANGUAGES.forEach((lang) => {
-        if (lang === 'en') return;
-        const v = localized[lang];
-        if (!v) return;
-        if (v.metaTitle) form.setValue(`metaTitleByLang.${lang}`, v.metaTitle, { shouldDirty: true });
-        if (v.metaDescription) form.setValue(`metaDescriptionByLang.${lang}`, v.metaDescription, { shouldDirty: true });
-        if (v.keywords) form.setValue(`metaKeywordsByLang.${lang}`, v.keywords, { shouldDirty: true });
-      });
-      toast({ title: 'AI Localization Complete', description: 'Meta tags filled for all 9 target languages. Review and save.' });
-    },
-    onError: (err: any) => {
-      toast({ title: 'AI Localization Failed', description: err?.message || 'Check AI settings', variant: 'destructive' });
-    },
-  });
-
   useEffect(() => {
     if (seoSettings && !form.formState.isDirty) {
       const newValues: SeoFormData = {
@@ -172,51 +136,16 @@ export default function SEOSettings({ embedded }: { embedded?: boolean } = {}) {
               Configure search engine optimization and social media sharing settings
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => aiLocalizeMutation.mutate()}
-              disabled={aiLocalizeMutation.isPending}
-              data-testid="button-ai-localize-seo"
-            >
-              {aiLocalizeMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
-              {aiLocalizeMutation.isPending ? 'Localizing...' : 'AI Lokalize Öneri'}
-            </Button>
-            <Button
-              type="button"
-              onClick={form.handleSubmit(onSubmit)}
-              disabled={saveMutation.isPending}
-              data-testid="button-save-seo"
-            >
-              <Save className="h-4 w-4 mr-2" />
-              {saveMutation.isPending ? 'Saving...' : 'Save Changes'}
-            </Button>
-          </div>
+          <Button
+            type="button"
+            onClick={form.handleSubmit(onSubmit)}
+            disabled={saveMutation.isPending}
+            data-testid="button-save-seo"
+          >
+            <Save className="h-4 w-4 mr-2" />
+            {saveMutation.isPending ? 'Saving...' : 'Save Changes'}
+          </Button>
         </div>
-
-        {/* ── Translate All banner ── */}
-        <Card className="border-primary/30 bg-primary/5">
-          <CardContent className="py-4 flex flex-col sm:flex-row items-start sm:items-center gap-4">
-            <div className="flex-1">
-              <p className="font-medium text-sm">AI — Translate All Meta Tags</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Reads English meta title, description and keywords and fills <span className="font-medium">AR, TR, FR, RU, FA, ZH, HI, ES, ID</span> automatically. Review &amp; save after.
-              </p>
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              className="border-primary text-primary hover:bg-primary hover:text-primary-foreground gap-2 flex-shrink-0"
-              onClick={() => aiLocalizeMutation.mutate()}
-              disabled={aiLocalizeMutation.isPending}
-              data-testid="button-translate-all-seo"
-            >
-              {aiLocalizeMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Globe className="h-4 w-4" />}
-              {aiLocalizeMutation.isPending ? 'Translating…' : 'Translate All'}
-            </Button>
-          </CardContent>
-        </Card>
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">

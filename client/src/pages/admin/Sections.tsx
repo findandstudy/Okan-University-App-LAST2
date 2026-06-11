@@ -146,37 +146,6 @@ export default function Sections({ embedded }: { embedded?: boolean } = {}) {
   const tenantLangs = rawLangs && rawLangs.length > 1 ? rawLangs : ALL_LANGS;
   const targetLangs = tenantLangs.filter(l => l !== 'en');
 
-  const [translateAllProgress, setTranslateAllProgress] = useState<string | null>(null);
-
-  const translateAllMutation = useMutation({
-    mutationFn: async () => {
-      setTranslateAllProgress('Translating all sections…');
-      const response = await apiRequest('POST', `/api/admin/ai/translate-all-sections${apiSuffix}`, {
-        targetLangs,
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Translation failed');
-      return data as { sectionsTranslated: number };
-    },
-    onSuccess: (data) => {
-      setTranslateAllProgress(null);
-      queryClient.invalidateQueries({ queryKey: ['/api/sections' + apiSuffix] });
-      queryClient.invalidateQueries({ queryKey: ['/api/sections'] });
-      toast({
-        title: '✅ All sections translated',
-        description: `${data.sectionsTranslated} section(s) translated into ${targetLangs.join(', ').toUpperCase()}.`,
-      });
-    },
-    onError: (err: Error) => {
-      setTranslateAllProgress(null);
-      toast({
-        title: 'Translation failed',
-        description: err.message || 'Check AI Settings and try again.',
-        variant: 'destructive',
-      });
-    },
-  });
-
   useEffect(() => {
     if (sections.length > 0) {
       setSectionStates(
@@ -455,39 +424,6 @@ export default function Sections({ embedded }: { embedded?: boolean } = {}) {
           <p className="text-muted-foreground">Drag to reorder, toggle visibility, and edit content</p>
         </div>
 
-        {/* ── Translate All Sections banner ── */}
-        {targetLangs.length > 0 && (
-          <Card className="border-primary/30 bg-primary/5">
-            <CardContent className="py-4 flex flex-col sm:flex-row items-start sm:items-center gap-4">
-              <div className="flex-1">
-                <p className="font-medium text-sm">AI — Translate All Sections</p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Reads English content from every section and fills{' '}
-                  <span className="font-medium">{targetLangs.map(l => l.toUpperCase()).join(', ')}</span>{' '}
-                  automatically. Existing translations will be overwritten.
-                </p>
-                {translateAllProgress && (
-                  <p className="text-xs text-primary mt-1 flex items-center gap-1">
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                    {translateAllProgress}
-                  </p>
-                )}
-              </div>
-              <Button
-                variant="outline"
-                className="border-primary text-primary hover:bg-primary hover:text-primary-foreground gap-2 flex-shrink-0"
-                onClick={() => translateAllMutation.mutate()}
-                disabled={translateAllMutation.isPending}
-                data-testid="button-translate-all-sections"
-              >
-                {translateAllMutation.isPending
-                  ? <Loader2 className="h-4 w-4 animate-spin" />
-                  : <Globe className="h-4 w-4" />}
-                {translateAllMutation.isPending ? 'Translating…' : 'Translate All'}
-              </Button>
-            </CardContent>
-          </Card>
-        )}
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-4">
