@@ -92,6 +92,7 @@ function Router() {
       }} />
       <Route path="/admin" component={() => { window.location.replace('/admin/sites'); return null; }} />
       <Route path="/admin/tenant" component={() => <RequireAuth><WithDefaultSite><Tenant /></WithDefaultSite></RequireAuth>} />
+      <Route path="/admin/branding" component={() => <RequireAuth><WithDefaultSite><Tenant /></WithDefaultSite></RequireAuth>} />
       <Route path="/admin/theme" component={() => <RequireAuth><WithDefaultSite><Theme /></WithDefaultSite></RequireAuth>} />
       <Route path="/admin/sections" component={() => <RequireAuth><WithDefaultSite><Sections /></WithDefaultSite></RequireAuth>} />
       <Route path="/admin/contact-form" component={() => <RequireAuth><WithDefaultSite><ContactForm /></WithDefaultSite></RequireAuth>} />

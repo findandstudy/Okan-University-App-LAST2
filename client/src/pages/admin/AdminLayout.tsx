@@ -38,6 +38,7 @@ import {
   Bot,
   Sparkles,
   BookOpen,
+  ImageIcon,
   type LucideIcon,
 } from 'lucide-react';
 import type { Tenant } from '@shared/schema';
@@ -88,7 +89,9 @@ const menuGroups: NavGroup[] = [
     title: 'Settings',
     icon: Settings,
     items: [
+      { title: 'Branding & Identity', url: '/admin/branding', icon: ImageIcon },
       { title: 'Theme', url: '/admin/theme', icon: Palette },
+      { title: 'SEO Settings', url: '/admin/seo', icon: Search },
       { title: 'Contact Form', url: '/admin/contact-form', icon: FormInput },
     ],
   },

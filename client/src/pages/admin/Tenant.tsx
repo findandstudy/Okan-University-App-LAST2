@@ -11,6 +11,7 @@ import { apiRequest, queryClient } from '@/lib/queryClient';
 import { useUpload } from '@/hooks/use-upload';
 import { Globe, Upload, Loader2, X, Image as ImageIcon, Facebook, Instagram, Linkedin, Youtube, Video } from 'lucide-react';
 import AdminLayout from './AdminLayout';
+import { useSiteContext } from '@/lib/siteContext';
 import type { Tenant } from '@shared/schema';
 
 interface DropZoneProps {
@@ -135,10 +136,16 @@ function DropZone({ label, value, onUpload, onClear, accept, testId }: DropZoneP
   );
 }
 
-export default function TenantPage() {
-  const [, navigate] = useLocation();
-  useEffect(() => { navigate('/admin/sites'); }, []);
+function EmbeddableLayout({ embedded, children }: { embedded?: boolean; children: React.ReactNode }) {
+  if (embedded) return <>{children}</>;
+  return <AdminLayout>{children}</AdminLayout>;
+}
+
+export default function TenantPage({ embedded }: { embedded?: boolean } = {}) {
   const { toast } = useToast();
+  const { apiSuffix, tenantId } = useSiteContext();
+  const [, navigate] = useLocation();
+  useEffect(() => { if (!embedded && !tenantId) navigate('/admin/sites'); }, [embedded, tenantId]);
   const [settings, setSettings] = useState({
     universityName: '',
     domain: '',
@@ -152,7 +159,7 @@ export default function TenantPage() {
   });
 
   const { data: tenant, isLoading } = useQuery<Tenant>({
-    queryKey: ['/api/tenant'],
+    queryKey: ['/api/tenant' + apiSuffix],
   });
 
   useEffect(() => {
@@ -173,11 +180,11 @@ export default function TenantPage() {
 
   const updateMutation = useMutation({
     mutationFn: async (data: typeof settings) => {
-      const response = await apiRequest('PATCH', '/api/tenant', data);
+      const response = await apiRequest('PATCH', '/api/tenant' + apiSuffix, data);
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/tenant'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/tenant' + apiSuffix] });
       toast({
         title: 'Settings saved',
         description: 'Tenant settings have been updated.',
@@ -197,21 +204,21 @@ export default function TenantPage() {
 
   if (isLoading) {
     return (
-      <AdminLayout>
+      <EmbeddableLayout embedded={embedded}>
         <div className="p-6 space-y-6">
           <Skeleton className="h-8 w-48" />
           <Skeleton className="h-64 w-full" />
         </div>
-      </AdminLayout>
+      </EmbeddableLayout>
     );
   }
 
   return (
-    <AdminLayout>
+    <EmbeddableLayout embedded={embedded}>
       <div className="p-6 space-y-6">
         <div>
-          <h1 className="text-2xl font-bold">Tenant Settings</h1>
-          <p className="text-muted-foreground">Configure your university identity</p>
+          <h1 className="text-2xl font-bold">Branding &amp; Identity</h1>
+          <p className="text-muted-foreground">Logo, favicon, social links and site identity</p>
         </div>
 
         <Card>
@@ -401,7 +408,7 @@ export default function TenantPage() {
           </Button>
         </div>
       </div>
-    </AdminLayout>
+    </EmbeddableLayout>
   );
 }
 
