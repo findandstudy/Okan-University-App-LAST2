@@ -68,7 +68,7 @@ const LANGUAGES: { code: SupportedLanguage; label: string }[] = [
   { code: 'id', label: 'Bahasa Indonesia' },
 ];
 
-const WIDGET_SECTION_KEYS = ['embed', 'map', 'html_block', 'stats'];
+const WIDGET_SECTION_KEYS = ['embed', 'map', 'html_block', 'stats', 'contact'];
 
 interface SectionState {
   id: string;
@@ -632,6 +632,49 @@ export default function Sections({ embedded }: { embedded?: boolean } = {}) {
                       </Button>
                     </div>
                   ))}
+                </div>
+              )}
+
+              {editingSection.key === 'contact' && (
+                <div className="space-y-4">
+                  <p className="text-xs text-muted-foreground">
+                    Embed an external form widget on the left column. Leave both empty to use the built-in contact form.
+                  </p>
+                  <div>
+                    <Label>Form Widget — iframe URL</Label>
+                    <Input
+                      value={(settingsForm.formIframeUrl as string) || ''}
+                      onChange={(e) => setSettingsForm(prev => ({ ...prev, formIframeUrl: e.target.value, formEmbedCode: '' }))}
+                      placeholder="https://portal.example.com/embed/form"
+                      className="mt-1.5"
+                      data-testid="input-contact-iframe-url"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">Embeds the URL as an iframe. Leave empty if using embed code below.</p>
+                  </div>
+                  <div>
+                    <Label>Form Widget — HTML Embed Code</Label>
+                    <Textarea
+                      value={(settingsForm.formEmbedCode as string) || ''}
+                      onChange={(e) => setSettingsForm(prev => ({ ...prev, formEmbedCode: e.target.value, formIframeUrl: '' }))}
+                      placeholder={'<div data-widget="..."></div>\n<script src="..."></script>'}
+                      rows={5}
+                      className="mt-1.5 font-mono text-xs"
+                      data-testid="input-contact-embed-code"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">Paste HTML/script from your CRM. Leave empty if using iframe URL above.</p>
+                  </div>
+                  {((settingsForm.formIframeUrl as string) || (settingsForm.formEmbedCode as string)) && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="text-destructive hover:text-destructive"
+                      onClick={() => setSettingsForm(prev => ({ ...prev, formIframeUrl: '', formEmbedCode: '' }))}
+                      data-testid="button-clear-contact-widget"
+                    >
+                      Remove widget — use built-in form
+                    </Button>
+                  )}
                 </div>
               )}
             </div>
