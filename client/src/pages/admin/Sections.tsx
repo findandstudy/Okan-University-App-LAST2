@@ -159,6 +159,7 @@ export default function Sections({ embedded }: { embedded?: boolean } = {}) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/sections' + apiSuffix] });
+      queryClient.invalidateQueries({ queryKey: ['/api/sections'] });
       toast({ title: 'Sections saved', description: 'Order and visibility updated.' });
     },
     onError: () => {
@@ -198,6 +199,7 @@ export default function Sections({ embedded }: { embedded?: boolean } = {}) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/sections' + apiSuffix] });
+      queryClient.invalidateQueries({ queryKey: ['/api/sections'] });
       toast({ title: 'Content saved', description: 'Section content has been updated.' });
       setEditDialogOpen(false);
       setEditingSection(null);
