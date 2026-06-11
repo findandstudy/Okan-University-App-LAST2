@@ -41,10 +41,13 @@ Only include the requested target languages.`;
   try {
     const raw = await callAI(prompt, tenantId, systemPrompt);
     const match = raw.match(/\{[\s\S]*\}/);
-    if (!match) throw new Error('No JSON object in translation response');
+    if (!match) {
+      console.error('[translateText] No JSON in response (finish_reason may be "length"). First 300 chars:', raw.substring(0, 300));
+      throw new Error('No JSON object in translation response');
+    }
     return JSON.parse(match[0]) as Record<string, string>;
-  } catch (err) {
-    console.warn('[translateText] Translation failed, returning empty result:', (err as any)?.message);
+  } catch (err: any) {
+    console.error('[translateText] FAILED:', err?.message);
     return {};
   }
 }

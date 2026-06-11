@@ -1530,8 +1530,11 @@ Rules:
                 if (!src) { translated[field] = ''; continue; }
                 const result = await translateText(src, 'en', [lang], req.tenantId);
                 translated[field] = result[lang] || src; // fallback to EN on empty
-              } catch (fieldErr) {
-                console.warn(`[BlogGenerate] Field "${field}" → "${lang}" failed:`, (fieldErr as any)?.message);
+                if (!result[lang]) {
+                  console.warn(`[BlogGenerate] translateText returned no "${lang}" key for field="${field}", using EN fallback`);
+                }
+              } catch (fieldErr: any) {
+                console.error(`[BlogGenerate] Field "${field}" → "${lang}" THREW: ${fieldErr?.message}`);
                 translated[field] = enContent[field]; // fallback to EN text
               }
             }
