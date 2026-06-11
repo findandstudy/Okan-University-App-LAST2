@@ -31,6 +31,7 @@ import ContactInfo from './ContactInfo';
 import FooterContent from './FooterContent';
 import AISettings from './AISettings';
 import ContentGenerator from './ContentGenerator';
+import Blog from './Blog';
 import { Construction, Upload } from 'lucide-react';
 import type { Tenant, Widget } from '@shared/schema';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -1040,7 +1041,7 @@ export default function SiteEditor() {
             </TabsContent>
 
             <TabsContent value="blog" className="mt-4">
-              <PlaceholderTab title="Blog" description="Create and publish blog posts and articles for this site." />
+              <Blog embedded />
             </TabsContent>
 
             <TabsContent value="versions" className="mt-4">

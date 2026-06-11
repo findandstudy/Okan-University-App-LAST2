@@ -4,6 +4,7 @@ import DOMPurify from 'dompurify';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { queryClient, apiRequest } from '@/lib/queryClient';
 import AdminLayout from './AdminLayout';
+import { useSiteContext } from '@/lib/siteContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -68,34 +69,39 @@ interface BlogPostImage {
   position: number;
 }
 
+function EmbeddableLayout({ embedded, children }: { embedded?: boolean; children: React.ReactNode }) {
+  if (embedded) return <>{children}</>;
+  return <AdminLayout>{children}</AdminLayout>;
+}
+
 // ── Image Management Dialog ───────────────────────────────────────────────
-function BlogImagesDialog({ post, onClose }: { post: BlogPostWithTranslations; onClose: () => void }) {
+function BlogImagesDialog({ post, onClose, apiSuffix }: { post: BlogPostWithTranslations; onClose: () => void; apiSuffix: string }) {
   const { toast } = useToast();
   const imgFileRef = useRef<HTMLInputElement>(null);
   const [generatingImage, setGeneratingImage] = useState(false);
 
   const { data: images = [], isLoading } = useQuery<BlogPostImage[]>({
-    queryKey: ['/api/admin/blog', post.id, 'images'],
-    queryFn: () => fetch(`/api/admin/blog/${post.id}/images`, { credentials: 'include' }).then(r => r.json()),
+    queryKey: ['/api/admin/blog', post.id, 'images', apiSuffix],
+    queryFn: () => fetch(`/api/admin/blog/${post.id}/images${apiSuffix}`, { credentials: 'include' }).then(r => r.json()),
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (imgId: string) => apiRequest('DELETE', `/api/admin/blog/${post.id}/images/${imgId}`),
+    mutationFn: (imgId: string) => apiRequest('DELETE', `/api/admin/blog/${post.id}/images/${imgId}${apiSuffix}`),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/blog', post.id, 'images'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/blog'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/blog', post.id, 'images', apiSuffix] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/blog' + apiSuffix] });
       toast({ title: 'Image deleted' });
     },
     onError: () => toast({ title: 'Failed to delete', variant: 'destructive' }),
   });
 
   const setFeaturedMutation = useMutation({
-    mutationFn: (img: BlogPostImage) => apiRequest('PATCH', `/api/admin/blog/${post.id}/featured-image`, {
+    mutationFn: (img: BlogPostImage) => apiRequest('PATCH', `/api/admin/blog/${post.id}/featured-image${apiSuffix}`, {
       url: img.url,
       altByLang: img.altByLang || {},
     }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/blog'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/blog' + apiSuffix] });
       toast({ title: 'Featured image updated' });
     },
     onError: () => toast({ title: 'Failed to set featured image', variant: 'destructive' }),
@@ -104,13 +110,13 @@ function BlogImagesDialog({ post, onClose }: { post: BlogPostWithTranslations; o
   const handleGenerateImage = async () => {
     setGeneratingImage(true);
     try {
-      const res = await apiRequest('POST', `/api/admin/blog/${post.id}/generate-images`, {});
+      const res = await apiRequest('POST', `/api/admin/blog/${post.id}/generate-images${apiSuffix}`, {});
       if (!res.ok) {
         const d = await res.json();
         throw new Error(d.error || 'Generation failed');
       }
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/blog', post.id, 'images'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/blog'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/blog', post.id, 'images', apiSuffix] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/blog' + apiSuffix] });
       toast({ title: 'Image generated!' });
     } catch (e: any) {
       toast({ title: 'Image generation failed', description: e.message, variant: 'destructive' });
@@ -125,15 +131,15 @@ function BlogImagesDialog({ post, onClose }: { post: BlogPostWithTranslations; o
     const formData = new FormData();
     formData.append('file', file);
     try {
-      const res = await fetch(`/api/admin/blog/${post.id}/images/upload`, {
+      const res = await fetch(`/api/admin/blog/${post.id}/images/upload${apiSuffix}`, {
         method: 'POST',
         body: formData,
         credentials: 'include',
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Upload failed');
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/blog', post.id, 'images'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/blog'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/blog', post.id, 'images', apiSuffix] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/blog' + apiSuffix] });
       toast({ title: 'Image uploaded' });
     } catch (e: any) {
       toast({ title: 'Upload failed', description: e.message, variant: 'destructive' });
@@ -211,6 +217,7 @@ interface TopicSuggestion {
 
 function SuggestTopicsDialog({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const { toast } = useToast();
+  const { apiSuffix } = useSiteContext();
   const [sourceTab, setSourceTab] = useState<'url' | 'text' | 'file'>('url');
   const [url, setUrl] = useState('');
   const [text, setText] = useState('');
@@ -243,7 +250,7 @@ function SuggestTopicsDialog({ onClose, onCreated }: { onClose: () => void; onCr
         formData.append('sourceType', 'file');
         formData.append('file', file);
       }
-      const res = await fetch('/api/admin/blog/suggest-topics', { method: 'POST', body: formData, credentials: 'include' });
+      const res = await fetch('/api/admin/blog/suggest-topics' + apiSuffix, { method: 'POST', body: formData, credentials: 'include' });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed');
       setSuggestions(data.suggestions || []);
@@ -268,7 +275,7 @@ function SuggestTopicsDialog({ onClose, onCreated }: { onClose: () => void; onCr
     setGenerating(true);
     try {
       const chosen = Array.from(selected).map(i => suggestions[i]);
-      const res = await apiRequest('POST', '/api/admin/blog/generate-from-suggestions', { suggestions: chosen });
+      const res = await apiRequest('POST', '/api/admin/blog/generate-from-suggestions' + apiSuffix, { suggestions: chosen });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed');
       toast({ title: `${data.created?.length ?? 0} articles queued!`, description: 'English content is being generated. Check the list in a moment.' });
@@ -434,6 +441,7 @@ function EditPostDialog({ post, domain, onClose }: {
   onClose: () => void;
 }) {
   const { toast } = useToast();
+  const { apiSuffix } = useSiteContext();
 
   const initDrafts = (): Record<string, TranslationDraft> => {
     const drafts: Record<string, TranslationDraft> = {};
@@ -477,7 +485,7 @@ function EditPostDialog({ post, domain, onClose }: {
     }
     setSaving(true);
     try {
-      const res = await apiRequest('PATCH', `/api/admin/blog/${post.id}/translation`, {
+      const res = await apiRequest('PATCH', `/api/admin/blog/${post.id}/translation${apiSuffix}`, {
         lang,
         title: d.title,
         slug: d.slug,
@@ -643,7 +651,7 @@ function EditPostDialog({ post, domain, onClose }: {
                       }
                       setSaving(true);
                       try {
-                        const res = await fetch(`/api/admin/blog/${post.id}/fill-seo`, { method: 'POST', credentials: 'include' });
+                        const res = await fetch(`/api/admin/blog/${post.id}/fill-seo${apiSuffix}`, { method: 'POST', credentials: 'include' });
                         const data = await res.json();
                         if (!res.ok) throw new Error(data.error || 'Failed');
                         setField('en', 'metaTitle', data.metaTitle || '');
@@ -914,7 +922,8 @@ function BlogCalendar({ posts }: { posts: BlogPostWithTranslations[] }) {
   );
 }
 
-export default function Blog() {
+export default function Blog({ embedded }: { embedded?: boolean } = {}) {
+  const { apiSuffix } = useSiteContext();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [addDialogOpen, setAddDialogOpen] = useState(false);
@@ -948,7 +957,7 @@ export default function Blog() {
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
 
   const { data: posts = [], isLoading } = useQuery<BlogPostWithTranslations[]>({
-    queryKey: ['/api/admin/blog'],
+    queryKey: ['/api/admin/blog' + apiSuffix],
     refetchInterval: (query) => {
       const data = query.state.data as BlogPostWithTranslations[] | undefined;
       return data?.some(p => p.status === 'generating') ? 3000 : false;
@@ -956,7 +965,7 @@ export default function Blog() {
   });
 
   const { data: schedule } = useQuery<BlogSchedule | null>({
-    queryKey: ['/api/admin/blog/schedule'],
+    queryKey: ['/api/admin/blog/schedule' + apiSuffix],
   });
 
   // Sync schedule data into form state whenever it loads
@@ -976,9 +985,9 @@ export default function Blog() {
   const tenantDomain = tenantData?.domain || window.location.hostname;
 
   const createMutation = useMutation({
-    mutationFn: (data: any) => apiRequest('POST', '/api/admin/blog', data),
+    mutationFn: (data: any) => apiRequest('POST', '/api/admin/blog' + apiSuffix, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/blog'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/blog' + apiSuffix] });
       setAddDialogOpen(false);
       setNewKeyword(''); setNewBacklinks(''); setNewPublishAt(''); setNewStatus('taslak');
       toast({ title: 'Post created' });
@@ -987,28 +996,28 @@ export default function Blog() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => apiRequest('DELETE', `/api/admin/blog/${id}`),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['/api/admin/blog'] }); toast({ title: 'Post deleted' }); },
+    mutationFn: (id: string) => apiRequest('DELETE', `/api/admin/blog/${id}${apiSuffix}`),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['/api/admin/blog' + apiSuffix] }); toast({ title: 'Post deleted' }); },
     onError: (e: any) => toast({ title: 'Error', description: e.message, variant: 'destructive' }),
   });
 
   const approveMutation = useMutation({
-    mutationFn: (id: string) => apiRequest('POST', `/api/admin/blog/${id}/approve`),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['/api/admin/blog'] }); toast({ title: 'Post published!' }); },
+    mutationFn: (id: string) => apiRequest('POST', `/api/admin/blog/${id}/approve${apiSuffix}`),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['/api/admin/blog' + apiSuffix] }); toast({ title: 'Post published!' }); },
     onError: (e: any) => toast({ title: 'Error', description: e.message, variant: 'destructive' }),
   });
 
   const scheduleMutation = useMutation({
-    mutationFn: (data: any) => apiRequest('POST', '/api/admin/blog/schedule', data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['/api/admin/blog/schedule'] }); setScheduleDialogOpen(false); toast({ title: 'Schedule saved' }); },
+    mutationFn: (data: any) => apiRequest('POST', '/api/admin/blog/schedule' + apiSuffix, data),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['/api/admin/blog/schedule' + apiSuffix] }); setScheduleDialogOpen(false); toast({ title: 'Schedule saved' }); },
     onError: (e: any) => toast({ title: 'Error', description: e.message, variant: 'destructive' }),
   });
 
   // ── Bulk mutations ────────────────────────────────────────────────────────
   const bulkDeleteMutation = useMutation({
-    mutationFn: (ids: string[]) => apiRequest('POST', '/api/admin/blog/bulk-delete', { ids }).then(r => r.json()),
+    mutationFn: (ids: string[]) => apiRequest('POST', '/api/admin/blog/bulk-delete' + apiSuffix, { ids }).then(r => r.json()),
     onSuccess: (data: any) => {
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/blog'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/blog' + apiSuffix] });
       setSelectedIds(new Set());
       toast({ title: `${data.deleted ?? 0} posts deleted` });
     },
@@ -1017,9 +1026,9 @@ export default function Blog() {
 
   const bulkStatusMutation = useMutation({
     mutationFn: ({ ids, status }: { ids: string[]; status: string }) =>
-      apiRequest('POST', '/api/admin/blog/bulk-status', { ids, status }).then(r => r.json()),
+      apiRequest('POST', '/api/admin/blog/bulk-status' + apiSuffix, { ids, status }).then(r => r.json()),
     onSuccess: (data: any, { status }) => {
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/blog'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/blog' + apiSuffix] });
       setSelectedIds(new Set());
       toast({ title: `${data.updated ?? 0} posts set to ${status === 'yayinda' ? 'Published' : 'Draft'}` });
     },
@@ -1071,9 +1080,9 @@ export default function Blog() {
   const handleTranslateAll = async (post: BlogPostWithTranslations) => {
     setTranslatingId(post.id);
     try {
-      const res = await apiRequest('POST', `/api/admin/blog/${post.id}/translate-all`, {});
+      const res = await apiRequest('POST', `/api/admin/blog/${post.id}/translate-all${apiSuffix}`, {});
       if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error || `HTTP ${res.status}`); }
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/blog'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/blog' + apiSuffix] });
       toast({ title: 'Translation started!', description: 'Translating to 9 languages in the background — the language badges will update automatically.' });
     } catch (e: any) {
       toast({ title: 'Translation failed', description: e.message, variant: 'destructive' });
@@ -1085,10 +1094,10 @@ export default function Blog() {
   const handleGenerateAI = async (post: BlogPostWithTranslations) => {
     setGeneratingId(post.id);
     try {
-      const res = await apiRequest('POST', `/api/admin/blog/${post.id}/generate`, {});
+      const res = await apiRequest('POST', `/api/admin/blog/${post.id}/generate${apiSuffix}`, {});
       if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error || `HTTP ${res.status}`); }
       const data = await res.json();
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/blog'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/blog' + apiSuffix] });
       if (data.backgroundTranslating) {
         toast({ title: 'English article ready!', description: 'Translating to 9 languages in the background — the status badge will update automatically.' });
       } else {
@@ -1107,10 +1116,10 @@ export default function Blog() {
     const formData = new FormData();
     formData.append('file', file);
     try {
-      const res = await fetch('/api/admin/blog/import', { method: 'POST', body: formData, credentials: 'include' });
+      const res = await fetch('/api/admin/blog/import' + apiSuffix, { method: 'POST', body: formData, credentials: 'include' });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Import failed');
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/blog'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/blog' + apiSuffix] });
       toast({ title: `Imported ${data.imported} posts from Excel` });
     } catch (e: any) {
       toast({ title: 'Import failed', description: e.message, variant: 'destructive' });
@@ -1123,7 +1132,7 @@ export default function Blog() {
     setSchedWeekdays(prev => prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]);
 
   return (
-    <AdminLayout>
+    <EmbeddableLayout embedded={embedded}>
       <div className="space-y-6 p-6">
         {/* ── Page header ───────────────────────────────────────────────── */}
         <div className="flex items-center justify-between">
@@ -1215,7 +1224,7 @@ export default function Blog() {
                 </DialogHeader>
                 <SuggestTopicsDialog
                   onClose={() => setSuggestDialogOpen(false)}
-                  onCreated={() => { queryClient.invalidateQueries({ queryKey: ['/api/admin/blog'] }); }}
+                  onCreated={() => { queryClient.invalidateQueries({ queryKey: ['/api/admin/blog' + apiSuffix] }); }}
                 />
               </DialogContent>
             </Dialog>
@@ -1586,7 +1595,7 @@ export default function Blog() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><Image className="w-4 h-4" />Blog Post Images</DialogTitle>
           </DialogHeader>
-          {imagesPost && <BlogImagesDialog post={imagesPost} onClose={() => setImagesPost(null)} />}
+          {imagesPost && <BlogImagesDialog post={imagesPost} onClose={() => setImagesPost(null)} apiSuffix={apiSuffix} />}
         </DialogContent>
       </Dialog>
 
@@ -1611,6 +1620,6 @@ export default function Blog() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </AdminLayout>
+    </EmbeddableLayout>
   );
 }
