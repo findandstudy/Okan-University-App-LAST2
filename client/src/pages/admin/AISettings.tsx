@@ -30,8 +30,8 @@ const OPENAI_MODELS = [
 ];
 
 const DALLE_MODELS = [
-  { value: 'dall-e-3', label: 'DALL-E 3 (best quality)' },
-  { value: 'dall-e-2', label: 'DALL-E 2 (faster)' },
+  { value: 'dall-e-2', label: 'DALL-E 2 (recommended — widely accessible)' },
+  { value: 'dall-e-3', label: 'DALL-E 3 (best quality — requires OpenAI account access)' },
 ];
 
 interface AISettingsData {
@@ -60,7 +60,7 @@ export default function AISettings({ embedded }: { embedded?: boolean } = {}) {
 
   // ── Image settings ────────────────────────────────────────────────────────
   const [imgSource, setImgSource] = useState<'ai_openai' | 'stock_unsplash' | 'stock_pexels' | 'media_library'>('media_library');
-  const [imgModel, setImgModel] = useState('dall-e-3');
+  const [imgModel, setImgModel] = useState('dall-e-2');
   const [imgApiKey, setImgApiKey] = useState('');
   const [showImgKey, setShowImgKey] = useState(false);
   const [imgSettingsLoaded, setImgSettingsLoaded] = useState(false);
@@ -94,7 +94,7 @@ export default function AISettings({ embedded }: { embedded?: boolean } = {}) {
   useEffect(() => {
     if (imgSettings && !imgSettingsLoaded) {
       setImgSource((imgSettings.source as any) || 'media_library');
-      setImgModel(imgSettings.model || 'dall-e-3');
+      setImgModel(imgSettings.model || 'dall-e-2');
       setImgSettingsLoaded(true);
     }
   }, [imgSettings, imgSettingsLoaded]);

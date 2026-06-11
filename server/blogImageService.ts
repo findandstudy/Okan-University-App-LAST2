@@ -166,28 +166,16 @@ export async function generateBlogImage(
         ...(model === 'dall-e-3' ? { quality: 'standard' } : {}),
       });
 
-      // Try configured model; auto-fall-back to dall-e-3 if model is unavailable
-      let dalleModel = config.model || 'dall-e-3';
+      // Use the model saved in AI Settings (defaults to dall-e-2 — most widely accessible)
+      const dalleModel = config.model || 'dall-e-2';
       let resp;
       try {
         resp = await client.images.generate(buildParams(dalleModel) as any);
       } catch (modelErr: any) {
-        const combinedMsg = ((modelErr?.message || '') + ' ' + (modelErr?.error?.message || '')).toLowerCase();
-        const isModelGone = modelErr?.status === 404 ||
-          combinedMsg.includes('does not exist') ||
-          combinedMsg.includes('model_not_found') ||
-          combinedMsg.includes('no such model');
-        if (isModelGone && dalleModel !== 'dall-e-3') {
-          console.warn(`[BlogImageService] Model "${dalleModel}" unavailable, retrying with dall-e-3`);
-          dalleModel = 'dall-e-3';
-          resp = await client.images.generate(buildParams('dall-e-3') as any);
-        } else if (isModelGone) {
-          // Both models unavailable → key has no DALL-E permission, skip silently
-          console.warn('[BlogImageService] DALL-E unavailable for this API key — no image generated. Enable image generation in the OpenAI dashboard or switch to Unsplash/Pexels in AI Settings.');
-          return null;
-        } else {
-          throw modelErr;
-        }
+        // Surface the real OpenAI error message to the caller — never silently swallow it
+        const msg = modelErr?.error?.message || modelErr?.message || String(modelErr);
+        console.error(`[BlogImageService] DALL-E error (model: ${dalleModel}):`, msg);
+        throw new Error(msg);
       }
 
       const imageUrl = resp.data?.[0]?.url;
