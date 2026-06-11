@@ -569,7 +569,7 @@ export async function registerRoutes(
 
   app.patch("/api/sections", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
     try {
-      const updates = req.body.sections as Array<{ id: string; isEnabled: boolean }>;
+      const updates = req.body.sections as Array<{ id: string; isEnabled?: boolean; displayOrder?: number }>;
       const result = await storage.updateSections(updates);
       bootstrapCache.delete(req.tenantId);
       res.json(result);

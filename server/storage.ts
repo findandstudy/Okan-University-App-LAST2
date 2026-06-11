@@ -48,7 +48,7 @@ export interface IStorage {
   getSections(tenantId: string): Promise<Section[]>;
   createSection(section: InsertSection): Promise<Section>;
   updateSection(id: string, data: Partial<InsertSection>): Promise<Section | undefined>;
-  updateSections(updates: Array<{ id: string; isEnabled: boolean }>): Promise<Section[]>;
+  updateSections(updates: Array<{ id: string; isEnabled?: boolean; displayOrder?: number }>): Promise<Section[]>;
   deleteSection(id: string, tenantId: string): Promise<boolean>;
 
   // Themes
@@ -238,11 +238,15 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  async updateSections(updates: Array<{ id: string; isEnabled: boolean }>): Promise<Section[]> {
+  async updateSections(updates: Array<{ id: string; isEnabled?: boolean; displayOrder?: number }>): Promise<Section[]> {
     const results: Section[] = [];
     for (const update of updates) {
+      const setData: Record<string, unknown> = {};
+      if (update.isEnabled !== undefined) setData.isEnabled = update.isEnabled;
+      if (update.displayOrder !== undefined) setData.displayOrder = update.displayOrder;
+      if (Object.keys(setData).length === 0) continue;
       const [updated] = await db.update(sections)
-        .set({ isEnabled: update.isEnabled })
+        .set(setData)
         .where(eq(sections.id, update.id))
         .returning();
       if (updated) results.push(updated);
