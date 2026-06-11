@@ -292,9 +292,22 @@ export default function Sites() {
                             >
                               <Button variant="ghost" size="sm" className="gap-1.5" data-testid={`button-preview-${tenant.id}`}>
                                 <Eye className="h-3.5 w-3.5" />
-                                Preview
+                                Dev
                               </Button>
                             </a>
+
+                            {tenant.domain && (
+                              <a
+                                href={`https://${tenant.domain}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                <Button variant="ghost" size="sm" className="gap-1.5" data-testid={`button-live-${tenant.id}`}>
+                                  <Globe className="h-3.5 w-3.5" />
+                                  Live
+                                </Button>
+                              </a>
+                            )}
 
                             <Button
                               variant="ghost"
