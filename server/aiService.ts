@@ -9,7 +9,8 @@ const IV_LENGTH = 16;
 function getEncryptionKey(): Buffer {
   const key = process.env.ENCRYPTION_KEY;
   if (!key) throw new Error('ENCRYPTION_KEY environment variable is not set');
-  return Buffer.from(key.substring(0, 64), 'hex');
+  // SHA-256 always produces exactly 32 bytes regardless of key length/format
+  return crypto.createHash('sha256').update(key).digest();
 }
 
 export function encryptApiKey(plaintext: string): string {
