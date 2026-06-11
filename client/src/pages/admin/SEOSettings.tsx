@@ -14,7 +14,7 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
-import { Save, Globe, Share2, Twitter, Search, Loader2 } from 'lucide-react';
+import { Save, Globe, Share2, Twitter, Search, Loader2, Sparkles } from 'lucide-react';
 import type { SeoSettings, SupportedLanguage } from '@shared/schema';
 import { SUPPORTED_LANGUAGES } from '@shared/schema';
 
@@ -107,6 +107,26 @@ export default function SEOSettings({ embedded }: { embedded?: boolean } = {}) {
     saveMutation.mutate(data);
   };
 
+  const generateSeoMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest('POST', '/api/admin/ai/generate-seo' + apiSuffix, {});
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to generate SEO');
+      return data as { metaTitle: string; metaDescription: string; keywords: string };
+    },
+    onSuccess: (data) => {
+      if (data.metaTitle) form.setValue('metaTitleByLang.en', data.metaTitle, { shouldDirty: true });
+      if (data.metaDescription) form.setValue('metaDescriptionByLang.en', data.metaDescription, { shouldDirty: true });
+      if (data.keywords) form.setValue('metaKeywordsByLang.en', data.keywords, { shouldDirty: true });
+      setActiveTab('meta');
+      setActiveLang('en');
+      toast({ title: '✅ SEO generated', description: 'English meta tags filled from your site content. Review and save.' });
+    },
+    onError: (err: Error) => {
+      toast({ title: 'Generation failed', description: err.message, variant: 'destructive' });
+    },
+  });
+
   useEffect(() => {
     if (seoSettings && !form.formState.isDirty) {
       const newValues: SeoFormData = {
@@ -136,15 +156,30 @@ export default function SEOSettings({ embedded }: { embedded?: boolean } = {}) {
               Configure search engine optimization and social media sharing settings
             </p>
           </div>
-          <Button
-            type="button"
-            onClick={form.handleSubmit(onSubmit)}
-            disabled={saveMutation.isPending}
-            data-testid="button-save-seo"
-          >
-            <Save className="h-4 w-4 mr-2" />
-            {saveMutation.isPending ? 'Saving...' : 'Save Changes'}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="border-primary text-primary hover:bg-primary hover:text-primary-foreground gap-2"
+              onClick={() => generateSeoMutation.mutate()}
+              disabled={generateSeoMutation.isPending}
+              data-testid="button-generate-seo"
+            >
+              {generateSeoMutation.isPending
+                ? <Loader2 className="h-4 w-4 animate-spin" />
+                : <Sparkles className="h-4 w-4" />}
+              {generateSeoMutation.isPending ? 'Generating…' : 'Generate with AI'}
+            </Button>
+            <Button
+              type="button"
+              onClick={form.handleSubmit(onSubmit)}
+              disabled={saveMutation.isPending}
+              data-testid="button-save-seo"
+            >
+              <Save className="h-4 w-4 mr-2" />
+              {saveMutation.isPending ? 'Saving...' : 'Save Changes'}
+            </Button>
+          </div>
         </div>
 
         <Form {...form}>

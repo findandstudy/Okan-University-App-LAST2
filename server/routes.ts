@@ -1570,6 +1570,76 @@ export async function registerRoutes(
   });
 
   // ─── AI Localize SEO ──────────────────────────────────────────────────────
+  // ─── AI: Generate English SEO from existing site content ─────────────────────
+  app.post("/api/admin/ai/generate-seo", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
+    try {
+      const { callAI } = await import('./aiService');
+      const tenantId = req.tenantId;
+
+      // Gather existing site content
+      const tenant = await storage.getTenant(tenantId);
+      const sections = await storage.getSections(tenantId);
+      const faqItems = await storage.getFaqItems(tenantId);
+
+      const uniName = tenant?.universityName || '';
+
+      // Pull EN content from sections
+      const sectionSummaries: string[] = [];
+      for (const s of sections) {
+        const en = (s.contentByLang as any)?.en;
+        if (!en) continue;
+        const parts: string[] = [];
+        if (en.title) parts.push(`Title: ${en.title}`);
+        if (en.subtitle) parts.push(`Subtitle: ${en.subtitle}`);
+        if (en.body) parts.push(`Body: ${String(en.body).slice(0, 300)}`);
+        if (parts.length > 0) sectionSummaries.push(`[${s.sectionKey}] ${parts.join(' | ')}`);
+      }
+
+      // Pull sample FAQ questions
+      const faqSample = faqItems
+        .slice(0, 6)
+        .map(f => (f.questionByLang as any)?.en)
+        .filter(Boolean)
+        .join('; ');
+
+      const context = [
+        `University: ${uniName}`,
+        sectionSummaries.length > 0 ? `Site content:\n${sectionSummaries.join('\n')}` : '',
+        faqSample ? `FAQ topics: ${faqSample}` : '',
+      ].filter(Boolean).join('\n\n');
+
+      if (!uniName && sectionSummaries.length === 0) {
+        return res.status(400).json({ error: 'No site content found. Please add content to sections first.' });
+      }
+
+      const prompt = `You are an SEO expert. Based on the following university landing page content, generate optimized English SEO meta tags.
+
+${context}
+
+Return ONLY valid JSON with exactly this structure:
+{
+  "metaTitle": "...",
+  "metaDescription": "...",
+  "keywords": "..."
+}
+
+Rules:
+- metaTitle: max 60 characters, include university name, compelling
+- metaDescription: max 160 characters, clear value proposition, include a call to action
+- keywords: 8-12 comma-separated keywords relevant to the university and its programs
+- Write only in English
+- Do not include explanations, only the JSON`;
+
+      const raw = await callAI(prompt, tenantId, 'You are an SEO expert. Return only valid JSON.');
+      const match = raw.match(/\{[\s\S]*?\}/);
+      if (!match) throw new Error('Invalid AI response');
+      const result = JSON.parse(match[0]) as { metaTitle: string; metaDescription: string; keywords: string };
+      res.json({ ok: true, ...result });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || 'Failed to generate SEO' });
+    }
+  });
+
   app.post("/api/admin/ai/localize-seo", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
     try {
       const { metaTitle, metaDescription, keywords } = req.body;
