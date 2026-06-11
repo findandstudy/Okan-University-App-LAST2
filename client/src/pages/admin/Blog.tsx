@@ -1,4 +1,6 @@
 import { useState, useRef, useMemo } from 'react';
+import { marked } from 'marked';
+import DOMPurify from 'dompurify';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { queryClient, apiRequest } from '@/lib/queryClient';
 import AdminLayout from './AdminLayout';
@@ -243,6 +245,7 @@ function EditPostDialog({ post, domain, onClose }: {
   const [activeLang, setActiveLang] = useState('en');
   const [drafts, setDrafts] = useState<Record<string, TranslationDraft>>(initDrafts);
   const [saving, setSaving] = useState(false);
+  const [contentView, setContentView] = useState<Record<string, 'edit' | 'preview'>>({});
 
   const toSlug = (text: string) =>
     text.toLowerCase().replace(/[^\w\s-]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-').trim().substring(0, 80);
@@ -372,14 +375,49 @@ function EditPostDialog({ post, domain, onClose }: {
             )}
 
             <div>
-              <Label>Content * (Markdown)</Label>
-              <Textarea
-                value={drafts[code].content}
-                onChange={e => setField(code, 'content', e.target.value)}
-                placeholder="Write content in Markdown…"
-                className="font-mono text-sm min-h-[200px]"
-                data-testid={`textarea-content-${code}`}
-              />
+              <div className="flex items-center justify-between mb-1.5">
+                <Label>Content * (Markdown)</Label>
+                <div className="flex items-center gap-1 rounded-md border bg-muted p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setContentView(v => ({ ...v, [code]: 'edit' }))}
+                    data-testid={`button-content-edit-${code}`}
+                    className={`px-2.5 py-1 text-xs rounded font-medium transition-colors ${(contentView[code] ?? 'edit') === 'edit' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setContentView(v => ({ ...v, [code]: 'preview' }))}
+                    data-testid={`button-content-preview-${code}`}
+                    className={`px-2.5 py-1 text-xs rounded font-medium transition-colors ${contentView[code] === 'preview' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                  >
+                    Preview
+                  </button>
+                </div>
+              </div>
+              {(contentView[code] ?? 'edit') === 'edit' ? (
+                <Textarea
+                  value={drafts[code].content}
+                  onChange={e => setField(code, 'content', e.target.value)}
+                  placeholder="Write content in Markdown…"
+                  className="font-mono text-sm min-h-[300px]"
+                  data-testid={`textarea-content-${code}`}
+                />
+              ) : (
+                <div
+                  data-testid={`div-content-preview-${code}`}
+                  className="min-h-[300px] rounded-md border bg-background px-3 py-2 text-sm prose prose-sm dark:prose-invert max-w-none overflow-auto"
+                  dangerouslySetInnerHTML={{
+                    __html: drafts[code].content
+                      ? (() => {
+                          const raw = marked.parse(drafts[code].content);
+                          return DOMPurify.sanitize(typeof raw === 'string' ? raw : '');
+                        })()
+                      : '<p class="text-muted-foreground italic">Nothing to preview yet.</p>',
+                  }}
+                />
+              )}
             </div>
 
             <div>
