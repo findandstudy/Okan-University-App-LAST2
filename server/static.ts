@@ -1,7 +1,7 @@
 import express, { type Express } from "express";
 import fs from "fs";
 import path from "path";
-import { storage } from "./storage";
+import { injectSeoMeta } from "./seoRenderer";
 
 export function serveStatic(app: Express) {
   const distPath = path.resolve(__dirname, "public");
@@ -26,33 +26,13 @@ export function serveStatic(app: Express) {
     },
   }));
 
-  // Fallthrough to index.html — resolve tenant from Host header dynamically
+  // Fallthrough to index.html — inject SSR meta tags for bots before sending
   app.use("/{*path}", async (req, res) => {
     try {
-      const rawHost = req.headers.host || '';
-      const host = rawHost.replace(/^www\./, '').replace(/:\d+$/, '').toLowerCase();
-
-      const tenant = await storage.getTenantByHostDomain(host);
       let html = fs.readFileSync(path.resolve(distPath, "index.html"), "utf-8");
 
-      if (tenant) {
-        if (tenant.universityName) {
-          html = html.replace(
-            /<title>.*?<\/title>/,
-            `<title>${tenant.universityName}</title>`
-          );
-          html = html.replace(
-            /<meta property="og:title" content=".*?">/,
-            `<meta property="og:title" content="${tenant.universityName}">`
-          );
-        }
-        if (tenant.faviconUrl) {
-          html = html.replace(
-            /<link rel="icon" type="image\/png" href=".*?">/,
-            `<link rel="icon" type="image/png" href="${tenant.faviconUrl}">`
-          );
-        }
-      }
+      // SSR meta injection (OG tags, Twitter card, JSON-LD, canonical, hreflang)
+      html = await injectSeoMeta(html, req);
 
       res.set("Content-Type", "text/html");
       res.set("Cache-Control", "no-cache");
