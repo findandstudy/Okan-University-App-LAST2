@@ -1462,6 +1462,35 @@ Rules:
     }
   });
 
+  // ─── Bulk operations ─────────────────────────────────────────────────────────
+  app.post("/api/admin/blog/bulk-delete", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
+    try {
+      const { ids } = req.body as { ids: string[] };
+      if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'ids array required' });
+      // Verify all posts belong to this tenant
+      const posts = await Promise.all(ids.map(id => storage.getBlogPost(id)));
+      const owned = posts.filter(p => p && p.tenantId === req.tenantId);
+      await Promise.all(owned.map(p => storage.deleteBlogPost(p!.id)));
+      res.json({ deleted: owned.length });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || 'Bulk delete failed' });
+    }
+  });
+
+  app.post("/api/admin/blog/bulk-status", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
+    try {
+      const { ids, status } = req.body as { ids: string[]; status: string };
+      if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'ids array required' });
+      if (!status) return res.status(400).json({ error: 'status required' });
+      const posts = await Promise.all(ids.map(id => storage.getBlogPost(id)));
+      const owned = posts.filter(p => p && p.tenantId === req.tenantId);
+      await Promise.all(owned.map(p => storage.updateBlogPost(p!.id, { status })));
+      res.json({ updated: owned.length });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || 'Bulk status update failed' });
+    }
+  });
+
   app.patch("/api/admin/blog/:id", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
     try {
       const id = req.params.id as string;
