@@ -6,6 +6,7 @@ import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { I18nProvider } from "@/lib/i18n";
+import { SiteProvider } from "@/lib/siteContext";
 import { Loader2 } from "lucide-react";
 import type { Tenant as TenantType } from "@shared/schema";
 import Landing from "@/pages/Landing";
@@ -33,6 +34,10 @@ import BlogIndex from "@/pages/Blog";
 import BlogPost from "@/pages/BlogPost";
 import PreviewPage from "@/pages/admin/PreviewPage";
 import NotFound from "@/pages/not-found";
+
+function WithDefaultSite({ children }: { children: React.ReactNode }) {
+  return <SiteProvider tenantId="default">{children}</SiteProvider>;
+}
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { data: admin, isLoading, isError } = useQuery({
@@ -86,21 +91,21 @@ function Router() {
         return <ChangePassword forced={params.has('forced')} />;
       }} />
       <Route path="/admin" component={() => { window.location.replace('/admin/sites'); return null; }} />
-      <Route path="/admin/tenant" component={() => <RequireAuth><Tenant /></RequireAuth>} />
-      <Route path="/admin/theme" component={() => <RequireAuth><Theme /></RequireAuth>} />
-      <Route path="/admin/sections" component={() => <RequireAuth><Sections /></RequireAuth>} />
-      <Route path="/admin/contact-form" component={() => <RequireAuth><ContactForm /></RequireAuth>} />
-      <Route path="/admin/media" component={() => <RequireAuth><Media /></RequireAuth>} />
-      <Route path="/admin/testimonials" component={() => <RequireAuth><Testimonials /></RequireAuth>} />
-      <Route path="/admin/faq" component={() => <RequireAuth><FAQ /></RequireAuth>} />
-      <Route path="/admin/hero" component={() => <RequireAuth><HeroContent /></RequireAuth>} />
-      <Route path="/admin/why-choose-us" component={() => <RequireAuth><WhyChooseUs /></RequireAuth>} />
-      <Route path="/admin/contact-info" component={() => <RequireAuth><ContactInfo /></RequireAuth>} />
-      <Route path="/admin/footer" component={() => <RequireAuth><FooterContent /></RequireAuth>} />
-      <Route path="/admin/seo" component={() => <RequireAuth><SEOSettings /></RequireAuth>} />
-      <Route path="/admin/ai-settings" component={() => <RequireAuth><AISettings /></RequireAuth>} />
-      <Route path="/admin/content-generator" component={() => <RequireAuth><ContentGenerator /></RequireAuth>} />
-      <Route path="/admin/blog" component={() => <RequireAuth><BlogAdmin /></RequireAuth>} />
+      <Route path="/admin/tenant" component={() => <RequireAuth><WithDefaultSite><Tenant /></WithDefaultSite></RequireAuth>} />
+      <Route path="/admin/theme" component={() => <RequireAuth><WithDefaultSite><Theme /></WithDefaultSite></RequireAuth>} />
+      <Route path="/admin/sections" component={() => <RequireAuth><WithDefaultSite><Sections /></WithDefaultSite></RequireAuth>} />
+      <Route path="/admin/contact-form" component={() => <RequireAuth><WithDefaultSite><ContactForm /></WithDefaultSite></RequireAuth>} />
+      <Route path="/admin/media" component={() => <RequireAuth><WithDefaultSite><Media /></WithDefaultSite></RequireAuth>} />
+      <Route path="/admin/testimonials" component={() => <RequireAuth><WithDefaultSite><Testimonials /></WithDefaultSite></RequireAuth>} />
+      <Route path="/admin/faq" component={() => <RequireAuth><WithDefaultSite><FAQ /></WithDefaultSite></RequireAuth>} />
+      <Route path="/admin/hero" component={() => <RequireAuth><WithDefaultSite><HeroContent /></WithDefaultSite></RequireAuth>} />
+      <Route path="/admin/why-choose-us" component={() => <RequireAuth><WithDefaultSite><WhyChooseUs /></WithDefaultSite></RequireAuth>} />
+      <Route path="/admin/contact-info" component={() => <RequireAuth><WithDefaultSite><ContactInfo /></WithDefaultSite></RequireAuth>} />
+      <Route path="/admin/footer" component={() => <RequireAuth><WithDefaultSite><FooterContent /></WithDefaultSite></RequireAuth>} />
+      <Route path="/admin/seo" component={() => <RequireAuth><WithDefaultSite><SEOSettings /></WithDefaultSite></RequireAuth>} />
+      <Route path="/admin/ai-settings" component={() => <RequireAuth><WithDefaultSite><AISettings /></WithDefaultSite></RequireAuth>} />
+      <Route path="/admin/content-generator" component={() => <RequireAuth><WithDefaultSite><ContentGenerator /></WithDefaultSite></RequireAuth>} />
+      <Route path="/admin/blog" component={() => <RequireAuth><WithDefaultSite><BlogAdmin /></WithDefaultSite></RequireAuth>} />
       <Route path="/admin/sites" component={() => <RequireAuth><Sites /></RequireAuth>} />
       <Route path="/admin/sites/:tenantId" component={SiteEditor} />
       <Route path="/admin/preview/:tenantId" component={() => <RequireAuth><PreviewPage /></RequireAuth>} />
