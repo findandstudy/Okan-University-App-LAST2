@@ -158,24 +158,12 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
       <div className="flex h-screen w-full">
         <Sidebar>
           <SidebarHeader className="border-b p-4">
-            <div className="flex items-center gap-3">
-              {tenant?.logoUrl ? (
-                <img
-                  src={tenant.logoUrl}
-                  alt={tenant?.universityName || 'Logo'}
-                  className="h-[3.125rem] w-auto max-w-[175px] object-contain"
-                />
-              ) : (
-                <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-                  <GraduationCap className="h-4 w-4 text-primary-foreground" />
-                </div>
-              )}
-              <div className="flex-1 min-w-0">
-                <p className="font-semibold text-sm truncate">Admin Panel</p>
-                <p className="text-xs text-muted-foreground truncate" data-testid="text-sidebar-university-name">
-                  {tenant?.universityName || 'University'}
-                </p>
-              </div>
+            <div className="flex items-center justify-center">
+              <img
+                src="/find-and-study-logo.png"
+                alt="Find & Study"
+                className="h-10 w-auto object-contain"
+              />
             </div>
           </SidebarHeader>
 
