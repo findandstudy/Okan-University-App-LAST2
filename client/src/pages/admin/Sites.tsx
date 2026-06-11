@@ -26,6 +26,7 @@ import {
 } from '@/components/ui/table';
 import { Plus, Settings2, Copy, Trash2, Globe, Loader2, ExternalLink, Eye, Power, PowerOff } from 'lucide-react';
 import type { Tenant } from '@shared/schema';
+import { SUPPORTED_LANGUAGES } from '@shared/schema';
 
 const STATUS_LABELS: Record<string, string> = {
   yayinda: 'Published',
@@ -39,14 +40,16 @@ const STATUS_VARIANTS: Record<string, 'default' | 'secondary' | 'destructive'> =
   askiya_alindi: 'destructive',
 };
 
-const ALL_LANGUAGES = [
-  { code: 'en', label: 'English' },
-  { code: 'ar', label: 'Arabic' },
-  { code: 'tr', label: 'Turkish' },
-  { code: 'fr', label: 'French' },
-  { code: 'ru', label: 'Russian' },
-  { code: 'fa', label: 'Farsi' },
-];
+const LANGUAGE_LABELS: Record<string, string> = {
+  en: 'English', ar: 'Arabic', tr: 'Turkish', fr: 'French',
+  ru: 'Russian', fa: 'Farsi', zh: 'Chinese', hi: 'Hindi',
+  es: 'Spanish', id: 'Indonesian',
+};
+
+const ALL_LANGUAGES = SUPPORTED_LANGUAGES.map(code => ({
+  code,
+  label: LANGUAGE_LABELS[code] || code,
+}));
 
 interface NewSiteForm {
   universityName: string;

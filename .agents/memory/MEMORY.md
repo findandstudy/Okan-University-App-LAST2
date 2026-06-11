@@ -1,2 +1,5 @@
 - [EmbeddableLayout pattern](embeddable-layout.md) — how admin pages support both standalone and embedded-in-SiteEditor modes
 - [AI integration patterns](ai-integration.md) — AES-256-CBC for API key encryption; dynamic imports for SDKs; FAQ schema uses questionByLang/answerByLang
+- [Hero features seed](hero-features-seed.md) — hero section `settings.features` stores per-lang bullet arrays; seed migration upserts all 10 langs if DB has <2 lang entries.
+- [Faz 5-9 implementation status](faz-status.md) — as of 2026-06-11 all phases (5-AI, 6-SEO, 7-Blog, 8-ZIP, 9-VPS) are fully implemented.
+- [AISettings/ContentGenerator standalone](ai-pages-standalone.md) — removed `!tenantId → /admin/sites` redirect; server resolves tenant via host header when standalone.

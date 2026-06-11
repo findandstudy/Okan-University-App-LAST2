@@ -61,7 +61,7 @@ export function Footer({
 
   const quickLinks = [
     { label: 'Programs', href: '#programs' },
-    { label: 'Apply Now', href: '/apply' },
+    { label: 'Apply Now', href: '#contact' },
     { label: 'FAQ', href: '#faq' },
     { label: 'Contact', href: '#contact' },
   ];

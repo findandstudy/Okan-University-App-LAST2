@@ -1,5 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
-import { useLocation } from 'wouter';
+import { useState, useRef } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -29,8 +28,6 @@ interface GeneratedContent {
 export default function ContentGenerator({ embedded }: { embedded?: boolean } = {}) {
   const { toast } = useToast();
   const { apiSuffix, tenantId } = useSiteContext();
-  const [, navigate] = useLocation();
-  useEffect(() => { if (!embedded && !tenantId) navigate('/admin/sites'); }, [embedded, tenantId]);
 
   const [sourceTab, setSourceTab] = useState('url');
   const [url, setUrl] = useState('');

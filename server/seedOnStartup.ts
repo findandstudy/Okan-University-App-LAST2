@@ -19,8 +19,77 @@ const defaultTenantDomain = {
   isPrimary: true,
 };
 
+const DEFAULT_HERO_FEATURES: Record<string, string[]> = {
+  en: [
+    'Scholarship opportunities up to 20%',
+    'No examination certificate is required!',
+    'We need only diploma + transcript + passport',
+    '48-hour application processing',
+  ],
+  ar: [
+    'فرص منح دراسية تصل إلى 20%',
+    'لا يُشترط شهادة امتحان!',
+    'نحتاج فقط إلى الشهادة + كشف الدرجات + جواز السفر',
+    'معالجة الطلب خلال 48 ساعة',
+  ],
+  tr: [
+    '%20\'ye kadar burs imkânları',
+    'Sınav belgesi gerekmemektedir!',
+    'Yalnızca diploma + transkript + pasaport yeterli',
+    '48 saatte başvuru işlemi',
+  ],
+  fr: [
+    'Opportunités de bourses jusqu\'à 20%',
+    'Aucun certificat d\'examen requis !',
+    'Nous avons besoin uniquement du diplôme + relevé de notes + passeport',
+    'Traitement des candidatures en 48 heures',
+  ],
+  ru: [
+    'Возможности стипендии до 20%',
+    'Сертификат о сдаче экзамена не требуется!',
+    'Нам нужны только диплом + транскрипт + паспорт',
+    'Обработка заявки за 48 часов',
+  ],
+  fa: [
+    'فرصت‌های بورسیه تا ۲۰٪',
+    'مدرک آزمون لازم نیست!',
+    'فقط به مدرک + ریزنمرات + گذرنامه نیاز داریم',
+    'پردازش درخواست در ۴۸ ساعت',
+  ],
+  zh: [
+    '高达20%的奖学金机会',
+    '无需考试证书！',
+    '我们只需要学位证 + 成绩单 + 护照',
+    '48小时处理申请',
+  ],
+  hi: [
+    '20% तक छात्रवृत्ति के अवसर',
+    'परीक्षा प्रमाण पत्र की आवश्यकता नहीं!',
+    'हमें केवल डिप्लोमा + ट्रांसक्रिप्ट + पासपोर्ट चाहिए',
+    '48 घंटे में आवेदन प्रसंस्करण',
+  ],
+  es: [
+    'Oportunidades de becas de hasta el 20%',
+    '¡No se requiere certificado de examen!',
+    'Solo necesitamos diploma + expediente + pasaporte',
+    'Procesamiento de solicitudes en 48 horas',
+  ],
+  id: [
+    'Peluang beasiswa hingga 20%',
+    'Tidak diperlukan sertifikat ujian!',
+    'Kami hanya butuh ijazah + transkrip + paspor',
+    'Pemrosesan lamaran dalam 48 jam',
+  ],
+};
+
 const defaultSections = [
-  { tenantId: 'default', sectionKey: 'hero', displayOrder: 1, isEnabled: true },
+  {
+    tenantId: 'default',
+    sectionKey: 'hero',
+    displayOrder: 1,
+    isEnabled: true,
+    settings: { features: DEFAULT_HERO_FEATURES },
+  },
   { tenantId: 'default', sectionKey: 'trust_badges', displayOrder: 2, isEnabled: true },
   { tenantId: 'default', sectionKey: 'steps', displayOrder: 3, isEnabled: true },
   { tenantId: 'default', sectionKey: 'testimonials', displayOrder: 4, isEnabled: true },
@@ -112,6 +181,20 @@ export async function seedDatabase() {
       if (!hasDisclaimer) {
         console.log('Adding disclaimer section...');
         await db.insert(sections).values(defaultSections.find(s => s.sectionKey === 'disclaimer') as any);
+      }
+      // Migrate hero section: add multi-language features if missing or only English
+      const heroSection = existingSections.find(s => s.sectionKey === 'hero');
+      if (heroSection) {
+        const heroSettings = (heroSection.settings as any) || {};
+        const features = heroSettings.features || {};
+        const langCount = Object.keys(features).length;
+        if (langCount < 2) {
+          console.log('Migrating hero section: adding multi-language features...');
+          const mergedFeatures = { ...DEFAULT_HERO_FEATURES, ...features };
+          await db.update(sections)
+            .set({ settings: { ...heroSettings, features: mergedFeatures } as any })
+            .where(eq(sections.id, heroSection.id));
+        }
       }
     }
 

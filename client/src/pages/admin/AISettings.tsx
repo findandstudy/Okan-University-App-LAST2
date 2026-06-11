@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { useLocation } from 'wouter';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -38,9 +37,7 @@ interface AISettingsData {
 
 export default function AISettings({ embedded }: { embedded?: boolean } = {}) {
   const { toast } = useToast();
-  const { apiSuffix, tenantId } = useSiteContext();
-  const [, navigate] = useLocation();
-  useEffect(() => { if (!embedded && !tenantId) navigate('/admin/sites'); }, [embedded, tenantId]);
+  const { apiSuffix } = useSiteContext();
 
   const [provider, setProvider] = useState<'anthropic' | 'openai'>('anthropic');
   const [model, setModel] = useState('claude-3-5-haiku-20241022');
