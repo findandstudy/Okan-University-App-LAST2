@@ -1249,6 +1249,64 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/admin/ai/translate-all-faq", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
+    try {
+      const { targetLangs } = req.body;
+      if (!Array.isArray(targetLangs) || targetLangs.length === 0) {
+        return res.status(400).json({ error: "targetLangs array is required" });
+      }
+      const { translateContentByLang } = await import('./aiTranslation');
+      const faqItems = await storage.getFaqItems(req.tenantId);
+      let translated = 0;
+      for (const item of faqItems) {
+        const enQ = (item.questionByLang as any)?.en;
+        const enA = (item.answerByLang as any)?.en;
+        const source: Record<string, string> = {};
+        if (enQ?.trim()) source.question = enQ;
+        if (enA?.trim()) source.answer = enA;
+        if (Object.keys(source).length === 0) continue;
+        const result = await translateContentByLang(source, 'en', targetLangs, req.tenantId);
+        const existingQ = (item.questionByLang as Record<string, string>) || {};
+        const existingA = (item.answerByLang as Record<string, string>) || {};
+        const newQ: Record<string, string> = { ...existingQ };
+        const newA: Record<string, string> = { ...existingA };
+        for (const [lang, content] of Object.entries(result)) {
+          if ((content as any).question) newQ[lang] = (content as any).question;
+          if ((content as any).answer) newA[lang] = (content as any).answer;
+        }
+        await storage.updateFaqItem(item.id, { questionByLang: newQ as any, answerByLang: newA as any });
+        translated++;
+      }
+      res.json({ ok: true, itemsTranslated: translated });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || "Translation failed" });
+    }
+  });
+
+  app.post("/api/admin/ai/translate-all-testimonials", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
+    try {
+      const { targetLangs } = req.body;
+      if (!Array.isArray(targetLangs) || targetLangs.length === 0) {
+        return res.status(400).json({ error: "targetLangs array is required" });
+      }
+      const { translateText } = await import('./aiTranslation');
+      const testimonials = await storage.getTestimonials(req.tenantId);
+      let translated = 0;
+      for (const t of testimonials) {
+        const enContent = (t.contentByLang as any)?.en;
+        if (!enContent?.trim()) continue;
+        const result = await translateText(enContent, 'en', targetLangs, req.tenantId);
+        const existing = (t.contentByLang as Record<string, string>) || {};
+        const newCBL: Record<string, string> = { ...existing, ...result };
+        await storage.updateTestimonial(t.id, { contentByLang: newCBL as any });
+        translated++;
+      }
+      res.json({ ok: true, itemsTranslated: translated });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || "Translation failed" });
+    }
+  });
+
   app.post("/api/admin/ai/generate-content", requireAdmin, resolveTenant, requireAdminTenantAccess, upload.single('file'), async (req, res) => {
     try {
       const { url, text } = req.body;

@@ -33,7 +33,7 @@ import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
-import { Plus, Pencil, Trash2, Upload, Star, Loader2, ImageIcon } from 'lucide-react';
+import { Plus, Pencil, Trash2, Upload, Star, Loader2, ImageIcon, Globe } from 'lucide-react';
 import type { Testimonial, SupportedLanguage } from '@shared/schema';
 import AdminLayout from './AdminLayout';
 import { useSiteContext } from '@/lib/siteContext';
@@ -143,6 +143,24 @@ export default function Testimonials({ embedded }: { embedded?: boolean } = {}) 
     },
   });
 
+  const ALL_TARGET_LANGS: SupportedLanguage[] = ['ar', 'tr', 'fr', 'ru', 'fa', 'zh', 'hi', 'es', 'id'];
+
+  const translateAllMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest('POST', `/api/admin/ai/translate-all-testimonials${apiSuffix}`, { targetLangs: ALL_TARGET_LANGS });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Translation failed');
+      return data as { itemsTranslated: number };
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/testimonials' + apiSuffix] });
+      toast({ title: '✅ Testimonials translated', description: `${data.itemsTranslated} testimonial(s) translated into AR, TR, FR, RU, FA, ZH, HI, ES, ID.` });
+    },
+    onError: (err: Error) => {
+      toast({ title: 'Translation failed', description: err.message, variant: 'destructive' });
+    },
+  });
+
   const handleCloseDialog = () => {
     setIsDialogOpen(false);
     setEditingTestimonial(null);
@@ -236,6 +254,27 @@ export default function Testimonials({ embedded }: { embedded?: boolean } = {}) 
 
   return (
     <EmbeddableLayout embedded={embedded}>
+      <Card className="border-primary/30 bg-primary/5">
+        <CardContent className="py-4 flex flex-col sm:flex-row items-start sm:items-center gap-4">
+          <div className="flex-1">
+            <p className="font-medium text-sm">AI — Translate All Testimonials</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Reads English content from every testimonial and fills <span className="font-medium">AR, TR, FR, RU, FA, ZH, HI, ES, ID</span> automatically.
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            className="border-primary text-primary hover:bg-primary hover:text-primary-foreground gap-2 flex-shrink-0"
+            onClick={() => translateAllMutation.mutate()}
+            disabled={translateAllMutation.isPending}
+            data-testid="button-translate-all-testimonials"
+          >
+            {translateAllMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Globe className="h-4 w-4" />}
+            {translateAllMutation.isPending ? 'Translating…' : 'Translate All'}
+          </Button>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-2">
           <CardTitle>Testimonials</CardTitle>

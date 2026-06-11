@@ -195,6 +195,29 @@ export default function SEOSettings({ embedded }: { embedded?: boolean } = {}) {
           </div>
         </div>
 
+        {/* ── Translate All banner ── */}
+        <Card className="border-primary/30 bg-primary/5">
+          <CardContent className="py-4 flex flex-col sm:flex-row items-start sm:items-center gap-4">
+            <div className="flex-1">
+              <p className="font-medium text-sm">AI — Translate All Meta Tags</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Reads English meta title, description and keywords and fills <span className="font-medium">AR, TR, FR, RU, FA, ZH, HI, ES, ID</span> automatically. Review &amp; save after.
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              className="border-primary text-primary hover:bg-primary hover:text-primary-foreground gap-2 flex-shrink-0"
+              onClick={() => aiLocalizeMutation.mutate()}
+              disabled={aiLocalizeMutation.isPending}
+              data-testid="button-translate-all-seo"
+            >
+              {aiLocalizeMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Globe className="h-4 w-4" />}
+              {aiLocalizeMutation.isPending ? 'Translating…' : 'Translate All'}
+            </Button>
+          </CardContent>
+        </Card>
+
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
             <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'meta' | 'social')}>
