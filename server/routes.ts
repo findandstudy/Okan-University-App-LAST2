@@ -1863,7 +1863,15 @@ Return ONLY valid JSON, no markdown.`;
 
           (async () => {
             try {
-              const enContent = await generateBlogPost(suggestion.keyword || suggestion.title, [], req.tenantId);
+              // Auto-collect internal links from existing published posts
+              const allP = await storage.getBlogPosts(req.tenantId);
+              const intLinks: { url: string; title: string }[] = [];
+              for (const p of allP.filter(p => p.status === 'yayinda').slice(0, 6)) {
+                const tr = await storage.getBlogPostTranslations(p.id);
+                const en = tr.find(t => t.lang === 'en');
+                if (en?.slug && en?.title) intLinks.push({ url: `/blog/${en.slug}`, title: en.title });
+              }
+              const enContent = await generateBlogPost(suggestion.keyword || suggestion.title, [], intLinks, req.tenantId);
               await storage.upsertBlogPostTranslation({
                 postId: post.id, tenantId: req.tenantId, lang: 'en',
                 title: suggestion.title || enContent.title,
@@ -1953,13 +1961,37 @@ Return ONLY valid JSON, no markdown.`;
       const post = await storage.getBlogPost(id);
       if (!post || post.tenantId !== req.tenantId) return res.status(404).json({ error: 'Not found' });
 
-      const { generateBlogPost, toSlug } = await import('./contentGenerator');
+      const { generateBlogPost, toSlug, fetchLinkTitle } = await import('./contentGenerator');
       const { translateText } = await import('./aiTranslation');
       const keyword = post.keyword || req.body.keyword || 'university education';
-      const backlinkSites = post.backlinkSites || [];
+      const rawLinks: string[] = post.backlinkSites || [];
+
+      // ── Resolve external link titles ─────────────────────────────────────────
+      const externalLinks = await Promise.all(
+        rawLinks
+          .filter(l => l.startsWith('http'))
+          .map(async url => ({ url, title: await fetchLinkTitle(url) }))
+      );
+      // plain domain hints (no http) kept as simple anchor text hints
+      const domainHints = rawLinks.filter(l => !l.startsWith('http'));
+      if (domainHints.length > 0) {
+        externalLinks.push(...domainHints.map(d => ({ url: `https://${d}`, title: d })));
+      }
+
+      // ── Collect internal links: other published posts of this tenant ──────────
+      const allPosts = await storage.getBlogPosts(req.tenantId);
+      const publishedOthers = allPosts.filter(p => p.id !== id && p.status === 'yayinda');
+      const internalLinks: { url: string; title: string }[] = [];
+      for (const p of publishedOthers.slice(0, 6)) {
+        const translations = await storage.getBlogPostTranslations(p.id);
+        const en = translations.find(t => t.lang === 'en');
+        if (en?.slug && en?.title) {
+          internalLinks.push({ url: `/blog/${en.slug}`, title: en.title });
+        }
+      }
 
       // ── Step 1: Generate EN content (synchronous) ────────────────────────────
-      const enContent = await generateBlogPost(keyword, backlinkSites, req.tenantId);
+      const enContent = await generateBlogPost(keyword, externalLinks, internalLinks, req.tenantId);
 
       // ── Step 2: Save EN translation immediately ──────────────────────────────
       await storage.upsertBlogPostTranslation({

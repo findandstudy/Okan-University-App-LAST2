@@ -1242,8 +1242,18 @@ export default function Blog() {
                     <Input placeholder="e.g. study in Turkey 2025" value={newKeyword} onChange={e => setNewKeyword(e.target.value)} data-testid="input-post-keyword" />
                   </div>
                   <div>
-                    <Label>Backlink Sites (comma-separated)</Label>
-                    <Input placeholder="e.g. example.edu, partner.org" value={newBacklinks} onChange={e => setNewBacklinks(e.target.value)} data-testid="input-post-backlinks" />
+                    <Label>External Links <span className="text-muted-foreground font-normal">(one URL per line)</span></Label>
+                    <Textarea
+                      placeholder={"https://partner.edu/blog/article\nhttps://example.org/relevant-page"}
+                      value={newBacklinks}
+                      onChange={e => setNewBacklinks(e.target.value)}
+                      rows={3}
+                      className="text-xs font-mono"
+                      data-testid="input-post-backlinks"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      AI will fetch each page's title and link to it naturally in the article. Internal links between your own blog posts are added automatically.
+                    </p>
                   </div>
                   <div>
                     <Label>Status</Label>
@@ -1261,7 +1271,7 @@ export default function Blog() {
                     <Input type="datetime-local" value={newPublishAt} onChange={e => setNewPublishAt(e.target.value)} data-testid="input-post-publish-at" />
                   </div>
                   <Button className="w-full" disabled={!newKeyword || createMutation.isPending}
-                    onClick={() => createMutation.mutate({ keyword: newKeyword, backlinkSites: newBacklinks.split(',').map(s => s.trim()).filter(Boolean), status: newStatus, publishAt: newPublishAt || null })}
+                    onClick={() => createMutation.mutate({ keyword: newKeyword, backlinkSites: newBacklinks.split(/[\n,]/).map(s => s.trim()).filter(Boolean), status: newStatus, publishAt: newPublishAt || null })}
                     data-testid="button-create-post">
                     Create Post
                   </Button>

@@ -166,24 +166,50 @@ export function toSlug(text: string): string {
     .substring(0, 80);
 }
 
+export interface LinkRef {
+  url: string;
+  title: string;
+}
+
+export async function fetchLinkTitle(url: string): Promise<string> {
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 5000);
+    const resp = await fetch(url, {
+      signal: ctrl.signal,
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; UniBlogBot/1.0)' },
+    });
+    clearTimeout(timer);
+    const html = await resp.text();
+    const match = html.match(/<title[^>]*>([^<]{1,200})<\/title>/i);
+    return match ? match[1].trim().replace(/\s+/g, ' ') : url;
+  } catch {
+    return url;
+  }
+}
+
 export async function generateBlogPost(
   keyword: string,
-  backlinkSites: string[],
+  externalLinks: LinkRef[],
+  internalLinks: LinkRef[],
   tenantId: string,
 ): Promise<BlogContent> {
-  const backlinkInstruction = backlinkSites.length > 0
-    ? `Naturally mention and link to these sites where contextually appropriate (do NOT fabricate facts about them): ${backlinkSites.join(', ')}.`
+  const externalBlock = externalLinks.length > 0
+    ? `\nEXTERNAL LINKS TO INCLUDE (link to these where topically relevant — use the page title as anchor text):\n${externalLinks.map(l => `- [${l.title}](${l.url})`).join('\n')}\n`
+    : '';
+
+  const internalBlock = internalLinks.length > 0
+    ? `\nINTERNAL LINKS (links to other posts on this blog — you MUST naturally include at least ${Math.min(2, internalLinks.length)} of these using the title as anchor text):\n${internalLinks.map(l => `- [${l.title}](${l.url})`).join('\n')}\n`
     : '';
 
   const systemPrompt = `You are an expert SEO content writer for a university recruitment platform. 
 Write factual, well-structured blog articles that help international students.
 Never fabricate statistics, rankings, or specific facts you cannot verify.
+When internal or external links are provided, embed them naturally as Markdown hyperlinks in the body — do NOT list them at the bottom.
 Return ONLY valid JSON, no markdown, no explanation.`;
 
   const prompt = `Write an SEO-optimized blog article targeting the keyword: "${keyword}"
-
-${backlinkInstruction}
-
+${externalBlock}${internalBlock}
 Article requirements:
 - 750-1000 words (excluding the FAQ section)
 - Professional but accessible tone
