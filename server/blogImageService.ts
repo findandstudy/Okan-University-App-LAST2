@@ -157,15 +157,42 @@ export async function generateBlogImage(
       const apiKey = decryptApiKey(config.encryptedApiKey);
       const OpenAI = (await import('openai')).default;
       const client = new OpenAI({ apiKey });
-      const dalleModel = config.model || 'dall-e-3';
-      const resp = await client.images.generate({
-        model: dalleModel,
+
+      const buildParams = (model: string): Record<string, any> => ({
+        model,
         prompt: buildDallePrompt(keyword),
         n: 1,
-        size: dalleModel === 'dall-e-3' ? '1792x1024' : '1024x1024',
-        quality: 'standard',
-        response_format: 'url',
+        size: model === 'dall-e-3' ? '1792x1024' : '1024x1024',
+        ...(model === 'dall-e-3' ? { quality: 'standard' } : {}),
       });
+
+      // Try configured model; auto-fall-back to dall-e-3 if model is unavailable
+      let dalleModel = config.model || 'dall-e-3';
+      let resp;
+      try {
+        resp = await client.images.generate(buildParams(dalleModel) as any);
+      } catch (modelErr: any) {
+        const combinedMsg = ((modelErr?.message || '') + ' ' + (modelErr?.error?.message || '')).toLowerCase();
+        const isModelGone = modelErr?.status === 404 ||
+          combinedMsg.includes('does not exist') ||
+          combinedMsg.includes('model_not_found') ||
+          combinedMsg.includes('no such model');
+        if (isModelGone && dalleModel !== 'dall-e-3') {
+          console.warn(`[BlogImageService] Model "${dalleModel}" unavailable, retrying with dall-e-3`);
+          dalleModel = 'dall-e-3';
+          resp = await client.images.generate(buildParams('dall-e-3') as any);
+        } else if (isModelGone) {
+          // Both models unavailable → likely key has no DALL-E permission
+          throw new Error(
+            `DALL-E models are not available for this API key. ` +
+            `In the OpenAI dashboard, enable image generation for your project ` +
+            `(Platform → Your Project → Settings → Model access), or use an unrestricted API key.`
+          );
+        } else {
+          throw modelErr;
+        }
+      }
+
       const imageUrl = resp.data?.[0]?.url;
       if (!imageUrl) return null;
       const savedUrl = await downloadAndSaveWebP(imageUrl, `blog-ai-${slug}`);
@@ -226,9 +253,10 @@ export async function generateBlogImage(
         : 'Photo from Pexels';
       return { url: savedUrl, altByLang, source: 'stock_pexels', attribution };
     }
-  } catch (err) {
-    console.error('[BlogImageService] Image generation failed:', err);
-    return null;
+  } catch (err: any) {
+    const msg = err?.error?.message || err?.message || String(err);
+    console.error('[BlogImageService] Image generation failed:', msg);
+    throw new Error(`Image generation failed: ${msg}`);
   }
 
   return null;

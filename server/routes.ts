@@ -1870,8 +1870,15 @@ Rules:
       const keyword = post.keyword || 'university education';
       const translations = await storage.getBlogPostTranslations(post.id);
       const enTitle = translations.find(t => t.lang === 'en')?.title || keyword;
+      // Check config first so we can return a helpful "not configured" message
+      const { getImageConfig } = await import('./blogImageService');
+      const imgConfig = await getImageConfig(req.tenantId);
+      if (!imgConfig || imgConfig.source === 'media_library') {
+        return res.status(400).json({ error: 'Image generation not configured. Set a source (DALL-E / Unsplash / Pexels) in AI Settings → Image Source.' });
+      }
+
       const generated = await generateBlogImage(enTitle, keyword, req.tenantId);
-      if (!generated) return res.status(400).json({ error: 'Image generation not configured or failed' });
+      if (!generated) return res.status(400).json({ error: 'Image generation returned no result (check API key and source configuration).' });
       const image = await storage.addBlogPostImage({
         postId: post.id,
         tenantId: req.tenantId,
