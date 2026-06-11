@@ -116,12 +116,19 @@ function SitePreviewFrame({ url, refreshKey }: { url: string; refreshKey: number
 function NewSiteDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
   const { toast } = useToast();
   const [form, setForm] = useState<NewSiteForm>({ universityName: '', domain: '', languages: ['en'] });
+  const [copyFromDefault, setCopyFromDefault] = useState(true);
 
   const createMutation = useMutation({
-    mutationFn: async (data: NewSiteForm) => (await apiRequest('POST', '/api/admin/tenants', data)).json(),
+    mutationFn: async (data: NewSiteForm) => {
+      if (copyFromDefault) {
+        // Clone all content (sections, FAQ, testimonials, theme, SEO, branding) from default site
+        return (await apiRequest('POST', '/api/admin/tenants/default/clone', data)).json();
+      }
+      return (await apiRequest('POST', '/api/admin/tenants', data)).json();
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/tenants'] });
-      toast({ title: 'Site created successfully' });
+      toast({ title: copyFromDefault ? 'Site created from Default template' : 'Site created successfully' });
       onOpenChange(false);
       setForm({ universityName: '', domain: '', languages: ['en'] });
     },
@@ -160,12 +167,36 @@ function NewSiteDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v
               ))}
             </div>
           </div>
+
+          {/* ── Copy from Default toggle ── */}
+          <div
+            className={`rounded-lg border p-3 cursor-pointer transition-colors ${copyFromDefault ? 'border-primary bg-primary/5' : 'border-border'}`}
+            onClick={() => setCopyFromDefault(v => !v)}
+            data-testid="toggle-copy-from-default"
+          >
+            <div className="flex items-center gap-3">
+              <div className={`w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0 ${copyFromDefault ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
+                <Copy className="h-4 w-4" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium">Copy from Default Site</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Copies branding, SEO settings, sections, FAQ and testimonials
+                </p>
+              </div>
+              <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 ${copyFromDefault ? 'border-primary bg-primary' : 'border-muted-foreground'}`}>
+                {copyFromDefault && <div className="w-full h-full rounded-full bg-primary-foreground scale-50" />}
+              </div>
+            </div>
+          </div>
+
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
             <Button data-testid="button-create-site"
               onClick={() => createMutation.mutate(form)}
               disabled={createMutation.isPending || !form.universityName || !form.domain || form.languages.length === 0}>
-              {createMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}Create
+              {createMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {copyFromDefault ? 'Create from Default' : 'Create Blank'}
             </Button>
           </div>
         </div>

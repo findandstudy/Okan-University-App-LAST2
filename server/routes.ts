@@ -1010,41 +1010,75 @@ export async function registerRoutes(
     try {
       const admin = await storage.getAdminById(req.session.adminId!);
       if (!admin || admin.role !== 'super_admin') return res.status(403).json({ error: "Forbidden" });
-      const { universityName, domain } = req.body;
+      const { universityName, domain, languages } = req.body;
       if (!universityName || !domain) return res.status(400).json({ error: "universityName and domain are required" });
-      const newTenant = await storage.createTenant({ universityName, domain, status: 'taslak' });
-      // Create primary domain record for the cloned tenant
+
+      // Resolve source tenant (supports literal 'default' id)
+      const srcTenant = await storage.getTenant(id);
+      if (!srcTenant) return res.status(404).json({ error: "Source tenant not found" });
+
+      const supportedLanguages = Array.isArray(languages) && languages.length > 0
+        ? languages
+        : (srcTenant.supportedLanguages || ['en']);
+
+      const newTenant = await storage.createTenant({ universityName, domain, status: 'taslak', supportedLanguages });
       await storage.createTenantDomain({ tenantId: newTenant.id, domain, isPrimary: true });
-      // Clone sections from source
+
+      // ── Copy branding from source (logo, favicon, social links, video) ──
+      const brandingPatch: Record<string, unknown> = {};
+      if (srcTenant.logoUrl)       brandingPatch.logoUrl = srcTenant.logoUrl;
+      if (srcTenant.faviconUrl)    brandingPatch.faviconUrl = srcTenant.faviconUrl;
+      if (srcTenant.facebookUrl)   brandingPatch.facebookUrl = srcTenant.facebookUrl;
+      if (srcTenant.instagramUrl)  brandingPatch.instagramUrl = srcTenant.instagramUrl;
+      if (srcTenant.linkedinUrl)   brandingPatch.linkedinUrl = srcTenant.linkedinUrl;
+      if (srcTenant.youtubeUrl)    brandingPatch.youtubeUrl = srcTenant.youtubeUrl;
+      if (srcTenant.heroVideoUrl)  brandingPatch.heroVideoUrl = srcTenant.heroVideoUrl;
+      if (Object.keys(brandingPatch).length > 0) {
+        await storage.updateTenant(newTenant.id, brandingPatch);
+      }
+
+      // ── Clone sections ──
       const srcSections = await storage.getSections(id);
       for (const s of srcSections) {
         const { id: _id, tenantId: _tid, ...rest } = s as any;
         await storage.createSection({ ...rest, tenantId: newTenant.id });
       }
-      // Clone FAQ items from source
+
+      // ── Clone FAQ items ──
       const srcFaq = await storage.getFaqItems(id);
       for (const f of srcFaq) {
         const { id: _id, tenantId: _tid, ...rest } = f as any;
         await storage.createFaqItem({ ...rest, tenantId: newTenant.id });
       }
-      // Clone testimonials from source
+
+      // ── Clone testimonials ──
       const srcTestimonials = await storage.getTestimonials(id);
       for (const t of srcTestimonials) {
         const { id: _id, tenantId: _tid, ...rest } = t as any;
         await storage.createTestimonial({ ...rest, tenantId: newTenant.id });
       }
-      // Clone theme from source
+
+      // ── Clone theme ──
       const srcTheme = await storage.getTheme(id);
       if (srcTheme) {
         const { id: _id, tenantId: _tid, ...rest } = srcTheme as any;
         await storage.createTheme({ ...rest, tenantId: newTenant.id });
       }
-      // Clone widgets from source
+
+      // ── Clone SEO settings ──
+      const srcSeo = await storage.getSeoSettings(id);
+      if (srcSeo) {
+        const { id: _id, tenantId: _tid, ...rest } = srcSeo as any;
+        await storage.createSeoSettings({ ...rest, tenantId: newTenant.id });
+      }
+
+      // ── Clone widgets ──
       const srcWidgets = await storage.getWidgets(id);
       for (const w of srcWidgets) {
         const { id: _id, tenantId: _tid, ...rest } = w as any;
         await storage.createWidget({ ...rest, tenantId: newTenant.id });
       }
+
       res.json(newTenant);
     } catch (error) {
       console.error('Clone error:', error);
