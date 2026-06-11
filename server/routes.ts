@@ -937,6 +937,35 @@ export async function registerRoutes(
     }
   });
 
+  // ─── Tenant bulk operations ──────────────────────────────────────────────────
+  app.post("/api/admin/tenants/bulk-delete", requireAdmin, async (req, res) => {
+    try {
+      const admin = await storage.getAdminById(req.session.adminId!);
+      if (!admin || admin.role !== 'super_admin') return res.status(403).json({ error: "Forbidden" });
+      const { ids } = req.body as { ids: string[] };
+      if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'ids array required' });
+      const deletable = ids.filter(id => id !== 'default');
+      await Promise.all(deletable.map(id => storage.deleteTenant(id)));
+      res.json({ deleted: deletable.length });
+    } catch {
+      res.status(500).json({ error: 'Bulk delete failed' });
+    }
+  });
+
+  app.post("/api/admin/tenants/bulk-status", requireAdmin, async (req, res) => {
+    try {
+      const admin = await storage.getAdminById(req.session.adminId!);
+      if (!admin || admin.role !== 'super_admin') return res.status(403).json({ error: "Forbidden" });
+      const { ids, status } = req.body as { ids: string[]; status: string };
+      if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'ids array required' });
+      if (!status) return res.status(400).json({ error: 'status required' });
+      await Promise.all(ids.map(id => storage.updateTenant(id, { status })));
+      res.json({ updated: ids.length });
+    } catch {
+      res.status(500).json({ error: 'Bulk status update failed' });
+    }
+  });
+
   app.patch("/api/admin/tenants/:id", requireAdmin, async (req, res) => {
     const id = req.params.id as string;
     try {
