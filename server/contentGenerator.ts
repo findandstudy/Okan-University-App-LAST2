@@ -185,16 +185,38 @@ Return ONLY valid JSON, no markdown, no explanation.`;
 ${backlinkInstruction}
 
 Article requirements:
-- 600-900 words
+- 750-1000 words (excluding the FAQ section)
 - Professional but accessible tone
 - Structured with clear headings (use ## for H2, ### for H3)
 - Include a compelling introduction and a clear conclusion
 - Target international students considering university enrollment
+- Use the keyword naturally in the first paragraph, at least one H2, and the conclusion
+
+MANDATORY: End the article with a FAQ section using EXACTLY this format (5 questions):
+
+## Frequently Asked Questions
+
+**Q: [question]?**
+A: [answer in 1-3 sentences]
+
+**Q: [question]?**
+A: [answer in 1-3 sentences]
+
+**Q: [question]?**
+A: [answer in 1-3 sentences]
+
+**Q: [question]?**
+A: [answer in 1-3 sentences]
+
+**Q: [question]?**
+A: [answer in 1-3 sentences]
+
+The FAQ questions should address real concerns of international students about this topic.
 
 Return this exact JSON structure:
 {
   "title": "SEO-optimized article title (under 65 chars)",
-  "content": "Full article in Markdown format",
+  "content": "Full article in Markdown format including the FAQ section at the end",
   "metaTitle": "Meta title (under 60 chars, includes keyword)",
   "metaDesc": "Meta description (120-155 chars, compelling, includes keyword)"
 }`;

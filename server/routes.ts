@@ -1779,9 +1779,9 @@ Rules:
   app.post("/api/admin/blog/suggest-topics", requireAdmin, resolveTenant, requireAdminTenantAccess, upload.single('file'), async (req, res) => {
     try {
       const { sourceType, url, text } = req.body as { sourceType?: string; url?: string; text?: string };
-      const { getOpenAIClient } = await import('./aiTranslation');
-      const openai = getOpenAIClient(req.tenantId);
-      if (!openai) return res.status(400).json({ error: 'AI not configured. Add your OpenAI key in AI Settings.' });
+      const { callAI, getAIConfig } = await import('./aiService');
+      const aiConfig = await getAIConfig(req.tenantId);
+      if (!aiConfig) return res.status(400).json({ error: 'AI not configured. Add your OpenAI key in AI Settings.' });
 
       let sourceText = '';
       if (sourceType === 'url' && url) {
@@ -1804,39 +1804,29 @@ Rules:
       }
 
       const truncated = sourceText.substring(0, 8000);
-      const aiResponse = await openai.chat.completions.create({
-        model: 'gpt-4o',
-        messages: [
-          {
-            role: 'system',
-            content: `You are an SEO expert and content strategist for a university recruitment website. 
+      const systemPrompt = `You are an SEO expert and content strategist for a university recruitment website. 
 Analyze the provided source content and suggest 8 high-value blog post topics that would:
 1. Attract prospective international students via organic search
 2. Target specific search intents (informational, navigational, commercial)
 3. Have realistic ranking potential (not overly competitive keywords)
 4. Be directly relevant to the university or education topic in the source
 
-Return a JSON array of 8 objects with these fields:
+Return a JSON object with a "suggestions" array of 8 objects, each with:
 - title: Compelling, SEO-optimized English blog post title (include numbers or power words where natural)
 - keyword: Primary target keyword phrase (2-5 words, the actual search query)
 - searchIntent: one of "informational" | "navigational" | "commercial"
 - description: 1-2 sentence summary of what the article should cover and why it's valuable for SEO
 
-Return ONLY valid JSON array, no markdown.`
-          },
-          {
-            role: 'user',
-            content: `Analyze this content and suggest 8 SEO blog topics:\n\n${truncated}`
-          }
-        ],
-        response_format: { type: 'json_object' },
-        temperature: 0.7,
-      });
+Return ONLY valid JSON, no markdown.`;
 
+      const raw = await callAI(`Analyze this content and suggest 8 SEO blog topics:\n\n${truncated}`, req.tenantId, systemPrompt);
       let suggestions: any[] = [];
       try {
-        const parsed = JSON.parse(aiResponse.choices[0].message.content || '{}');
-        suggestions = Array.isArray(parsed) ? parsed : (parsed.topics || parsed.suggestions || Object.values(parsed)[0] || []);
+        const match = raw.match(/\{[\s\S]*\}/);
+        if (!match) throw new Error('No JSON in response');
+        const parsed = JSON.parse(match[0]);
+        suggestions = Array.isArray(parsed) ? parsed : (parsed.suggestions || parsed.topics || Object.values(parsed)[0] || []);
+        if (!Array.isArray(suggestions)) suggestions = [];
       } catch {
         return res.status(500).json({ error: 'AI returned invalid JSON. Please try again.' });
       }
@@ -2083,9 +2073,9 @@ Return ONLY valid JSON array, no markdown.`
       const en = translations.find(t => t.lang === 'en');
       if (!en || !en.content) return res.status(400).json({ error: 'No English content found. Generate or write English content first.' });
 
-      const { translateText, getOpenAIClient } = await import('./aiTranslation');
-      const openai = getOpenAIClient(req.tenantId);
-      if (!openai) return res.status(400).json({ error: 'AI not configured. Add your OpenAI key in AI Settings.' });
+      const { translateText } = await import('./aiTranslation');
+      const { getAIConfig } = await import('./aiService');
+      if (!await getAIConfig(req.tenantId)) return res.status(400).json({ error: 'AI not configured. Add your OpenAI key in AI Settings.' });
 
       const { toSlug } = await import('./contentGenerator');
 
@@ -2146,38 +2136,31 @@ Return ONLY valid JSON array, no markdown.`
       const en = translations.find(t => t.lang === 'en');
       if (!en || !en.content) return res.status(400).json({ error: 'No English content found. Generate or write English content first.' });
 
-      const { getOpenAIClient } = await import('./aiTranslation');
-      const openai = getOpenAIClient(req.tenantId);
-      if (!openai) return res.status(400).json({ error: 'AI not configured.' });
+      const { callAI, getAIConfig } = await import('./aiService');
+      if (!await getAIConfig(req.tenantId)) return res.status(400).json({ error: 'AI not configured.' });
 
       const keyword = post.keyword || '';
       const titleSnippet = en.title.substring(0, 100);
       const contentSnippet = en.content.substring(0, 2000);
 
-      const aiRes = await openai.chat.completions.create({
-        model: 'gpt-4o',
-        messages: [
-          {
-            role: 'system',
-            content: `You are an SEO specialist. Generate optimized meta tags for a university blog post.
+      const seoSystemPrompt = `You are an SEO specialist. Generate optimized meta tags for a university blog post.
 Return JSON with these fields:
 - metaTitle: SEO title, 50-60 chars, include keyword naturally, compelling
 - metaDesc: Meta description, 140-155 chars, include keyword, has a call-to-action
 - focusKeyword: The best target keyword phrase extracted from the content (2-5 words)
-Return ONLY valid JSON, no markdown.`
-          },
-          {
-            role: 'user',
-            content: `Post title: ${titleSnippet}\nTarget keyword: ${keyword}\n\nContent excerpt:\n${contentSnippet}`
-          }
-        ],
-        response_format: { type: 'json_object' },
-        temperature: 0.4,
-      });
+Return ONLY valid JSON, no markdown.`;
+
+      const rawSeo = await callAI(
+        `Post title: ${titleSnippet}\nTarget keyword: ${keyword}\n\nContent excerpt:\n${contentSnippet}`,
+        req.tenantId,
+        seoSystemPrompt,
+      );
 
       let seoData: any = {};
       try {
-        seoData = JSON.parse(aiRes.choices[0].message.content || '{}');
+        const match = rawSeo.match(/\{[\s\S]*\}/);
+        if (!match) throw new Error('No JSON');
+        seoData = JSON.parse(match[0]);
       } catch {
         return res.status(500).json({ error: 'AI returned invalid JSON' });
       }

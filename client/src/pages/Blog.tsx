@@ -86,6 +86,59 @@ export default function Blog() {
           </div>
         )}
       </main>
+
+      {/* ── JSON-LD: Blog + ItemList ── */}
+      {posts.length > 0 && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              '@context': 'https://schema.org',
+              '@type': 'Blog',
+              name: `${tenant?.universityName || 'University'} Blog`,
+              description: `Articles for international students by ${tenant?.universityName || 'University'}`,
+              url: `${window.location.origin}${langPrefix}/blog`,
+              inLanguage: language,
+              publisher: {
+                '@type': 'Organization',
+                name: tenant?.universityName || 'University',
+              },
+              blogPost: posts.map(({ post, translation }) => ({
+                '@type': 'BlogPosting',
+                headline: translation.title,
+                description: translation.metaDesc || undefined,
+                url: `${window.location.origin}${langPrefix}/blog/${translation.slug}`,
+                datePublished: post.publishAt || post.createdAt,
+              })),
+            }),
+          }}
+        />
+      )}
+
+      {/* ── JSON-LD: BreadcrumbList ── */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            '@context': 'https://schema.org',
+            '@type': 'BreadcrumbList',
+            itemListElement: [
+              {
+                '@type': 'ListItem',
+                position: 1,
+                name: tenant?.universityName || 'Home',
+                item: `${window.location.origin}${langPrefix}/`,
+              },
+              {
+                '@type': 'ListItem',
+                position: 2,
+                name: 'Blog',
+                item: `${window.location.origin}${langPrefix}/blog`,
+              },
+            ],
+          }),
+        }}
+      />
     </div>
   );
 }
