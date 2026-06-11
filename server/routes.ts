@@ -1775,6 +1775,131 @@ Rules:
     }
   });
 
+  // ─── Suggest Blog Topics from source (URL / text / file) ────────────────────
+  app.post("/api/admin/blog/suggest-topics", requireAdmin, resolveTenant, requireAdminTenantAccess, upload.single('file'), async (req, res) => {
+    try {
+      const { sourceType, url, text } = req.body as { sourceType?: string; url?: string; text?: string };
+      const { getOpenAIClient } = await import('./aiTranslation');
+      const openai = getOpenAIClient(req.tenantId);
+      if (!openai) return res.status(400).json({ error: 'AI not configured. Add your OpenAI key in AI Settings.' });
+
+      let sourceText = '';
+      if (sourceType === 'url' && url) {
+        const { extractTextFromUrl } = await import('./contentGenerator');
+        sourceText = await extractTextFromUrl(url);
+      } else if (sourceType === 'text' && text) {
+        sourceText = text.trim();
+      } else if (req.file) {
+        if (req.file.mimetype === 'application/pdf' || req.file.originalname?.endsWith('.pdf')) {
+          const { extractTextFromPdf } = await import('./contentGenerator');
+          sourceText = await extractTextFromPdf(req.file.buffer);
+        } else {
+          const { extractTextFromDocx } = await import('./contentGenerator');
+          sourceText = await extractTextFromDocx(req.file.buffer);
+        }
+      }
+
+      if (!sourceText || sourceText.length < 50) {
+        return res.status(400).json({ error: 'Could not extract enough text from the source. Please try a different source.' });
+      }
+
+      const truncated = sourceText.substring(0, 8000);
+      const aiResponse = await openai.chat.completions.create({
+        model: 'gpt-4o',
+        messages: [
+          {
+            role: 'system',
+            content: `You are an SEO expert and content strategist for a university recruitment website. 
+Analyze the provided source content and suggest 8 high-value blog post topics that would:
+1. Attract prospective international students via organic search
+2. Target specific search intents (informational, navigational, commercial)
+3. Have realistic ranking potential (not overly competitive keywords)
+4. Be directly relevant to the university or education topic in the source
+
+Return a JSON array of 8 objects with these fields:
+- title: Compelling, SEO-optimized English blog post title (include numbers or power words where natural)
+- keyword: Primary target keyword phrase (2-5 words, the actual search query)
+- searchIntent: one of "informational" | "navigational" | "commercial"
+- description: 1-2 sentence summary of what the article should cover and why it's valuable for SEO
+
+Return ONLY valid JSON array, no markdown.`
+          },
+          {
+            role: 'user',
+            content: `Analyze this content and suggest 8 SEO blog topics:\n\n${truncated}`
+          }
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.7,
+      });
+
+      let suggestions: any[] = [];
+      try {
+        const parsed = JSON.parse(aiResponse.choices[0].message.content || '{}');
+        suggestions = Array.isArray(parsed) ? parsed : (parsed.topics || parsed.suggestions || Object.values(parsed)[0] || []);
+      } catch {
+        return res.status(500).json({ error: 'AI returned invalid JSON. Please try again.' });
+      }
+
+      res.json({ suggestions });
+    } catch (err: any) {
+      console.error('[SuggestTopics]', err?.message);
+      res.status(500).json({ error: err?.message || 'Failed to suggest topics' });
+    }
+  });
+
+  // ─── Generate blog posts from selected topic suggestions ─────────────────────
+  app.post("/api/admin/blog/generate-from-suggestions", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
+    try {
+      const { suggestions } = req.body as { suggestions: Array<{ title: string; keyword: string; description?: string }> };
+      if (!Array.isArray(suggestions) || suggestions.length === 0) {
+        return res.status(400).json({ error: 'suggestions array required' });
+      }
+
+      const { generateBlogPost, toSlug } = await import('./contentGenerator');
+      const created: any[] = [];
+
+      for (const suggestion of suggestions) {
+        try {
+          const post = await storage.createBlogPost({
+            tenantId: req.tenantId,
+            keyword: suggestion.keyword || suggestion.title,
+            status: 'generating',
+            isAiGenerated: true,
+            backlinkSites: [],
+          });
+
+          created.push({ id: post.id, keyword: suggestion.keyword, status: 'generating' });
+
+          (async () => {
+            try {
+              const enContent = await generateBlogPost(suggestion.keyword || suggestion.title, [], req.tenantId);
+              await storage.upsertBlogPostTranslation({
+                postId: post.id, tenantId: req.tenantId, lang: 'en',
+                title: suggestion.title || enContent.title,
+                slug: toSlug(suggestion.title || enContent.title),
+                content: enContent.content,
+                metaTitle: enContent.metaTitle,
+                metaDesc: enContent.metaDesc,
+              });
+              await storage.updateBlogPost(post.id, { status: 'taslak' });
+              console.log(`[GenerateFromSuggestion] ✓ post=${post.id} keyword="${suggestion.keyword}"`);
+            } catch (genErr: any) {
+              console.error(`[GenerateFromSuggestion] ✗ post=${post.id}:`, genErr?.message);
+              await storage.updateBlogPost(post.id, { status: 'failed' }).catch(() => {});
+            }
+          })();
+        } catch (itemErr: any) {
+          console.error('[GenerateFromSuggestion] item error:', itemErr?.message);
+        }
+      }
+
+      res.json({ created, message: `${created.length} posts are being generated in English. Check the list in a few moments.` });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || 'Failed to generate from suggestions' });
+    }
+  });
+
   app.patch("/api/admin/blog/:id", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
     try {
       const id = req.params.id as string;
@@ -1944,6 +2069,126 @@ Rules:
       if (!res.headersSent) {
         res.status(500).json({ error: err?.message || 'Failed to generate blog post' });
       }
+    }
+  });
+
+  // ─── Translate-all: take EN translation → translate to 9 other langs ─────────
+  app.post("/api/admin/blog/:id/translate-all", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
+    const id = req.params.id as string;
+    try {
+      const post = await storage.getBlogPost(id);
+      if (!post || post.tenantId !== req.tenantId) return res.status(404).json({ error: 'Not found' });
+
+      const translations = await storage.getBlogPostTranslations(id);
+      const en = translations.find(t => t.lang === 'en');
+      if (!en || !en.content) return res.status(400).json({ error: 'No English content found. Generate or write English content first.' });
+
+      const { translateText, getOpenAIClient } = await import('./aiTranslation');
+      const openai = getOpenAIClient(req.tenantId);
+      if (!openai) return res.status(400).json({ error: 'AI not configured. Add your OpenAI key in AI Settings.' });
+
+      const { toSlug } = await import('./contentGenerator');
+
+      await storage.updateBlogPost(id, { status: 'generating' });
+      res.json({ success: true, message: 'Translation started in background for 9 languages.' });
+
+      (async () => {
+        const SUPPORTED_LANGUAGES = ['en','tr','ar','fr','ru','fa','zh','hi','es','id'];
+        const otherLangs = SUPPORTED_LANGUAGES.filter(l => l !== 'en');
+        let langSuccessCount = 0;
+        for (const lang of otherLangs) {
+          try {
+            const fields = ['title', 'content', 'metaTitle', 'metaDesc'] as const;
+            const translated: Record<string, string> = {};
+            for (const field of fields) {
+              try {
+                const src = (en as any)[field];
+                if (!src) { translated[field] = ''; continue; }
+                const result = await translateText(src, 'en', [lang], req.tenantId);
+                translated[field] = result[lang] || src;
+              } catch {
+                translated[field] = (en as any)[field] || '';
+              }
+            }
+            const langSlug = toSlug(translated['title'] || en.title) + `-${lang}`;
+            await storage.upsertBlogPostTranslation({
+              postId: id, tenantId: req.tenantId, lang,
+              title: translated['title'] || en.title,
+              slug: langSlug,
+              content: translated['content'] || en.content,
+              metaTitle: translated['metaTitle'] || en.metaTitle || null,
+              metaDesc: translated['metaDesc'] || en.metaDesc || null,
+            });
+            langSuccessCount++;
+            console.log(`[TranslateAll] ✓ lang=${lang} (${langSuccessCount}/${otherLangs.length})`);
+          } catch (langErr) {
+            console.warn(`[TranslateAll] ✗ lang=${lang}:`, (langErr as any)?.message);
+          }
+        }
+        const currentPost = await storage.getBlogPost(id);
+        const finalStatus = currentPost?.status === 'generating' ? (langSuccessCount > 0 ? 'taslak' : 'failed') : currentPost?.status || 'taslak';
+        await storage.updateBlogPost(id, { status: finalStatus }).catch(() => {});
+        console.log(`[TranslateAll] Done. langs=${langSuccessCount}/${otherLangs.length}`);
+      })();
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || 'Failed to translate' });
+    }
+  });
+
+  // ─── Fill SEO fields with AI (EN only) ───────────────────────────────────────
+  app.post("/api/admin/blog/:id/fill-seo", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
+    const id = req.params.id as string;
+    try {
+      const post = await storage.getBlogPost(id);
+      if (!post || post.tenantId !== req.tenantId) return res.status(404).json({ error: 'Not found' });
+
+      const translations = await storage.getBlogPostTranslations(id);
+      const en = translations.find(t => t.lang === 'en');
+      if (!en || !en.content) return res.status(400).json({ error: 'No English content found. Generate or write English content first.' });
+
+      const { getOpenAIClient } = await import('./aiTranslation');
+      const openai = getOpenAIClient(req.tenantId);
+      if (!openai) return res.status(400).json({ error: 'AI not configured.' });
+
+      const keyword = post.keyword || '';
+      const titleSnippet = en.title.substring(0, 100);
+      const contentSnippet = en.content.substring(0, 2000);
+
+      const aiRes = await openai.chat.completions.create({
+        model: 'gpt-4o',
+        messages: [
+          {
+            role: 'system',
+            content: `You are an SEO specialist. Generate optimized meta tags for a university blog post.
+Return JSON with these fields:
+- metaTitle: SEO title, 50-60 chars, include keyword naturally, compelling
+- metaDesc: Meta description, 140-155 chars, include keyword, has a call-to-action
+- focusKeyword: The best target keyword phrase extracted from the content (2-5 words)
+Return ONLY valid JSON, no markdown.`
+          },
+          {
+            role: 'user',
+            content: `Post title: ${titleSnippet}\nTarget keyword: ${keyword}\n\nContent excerpt:\n${contentSnippet}`
+          }
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.4,
+      });
+
+      let seoData: any = {};
+      try {
+        seoData = JSON.parse(aiRes.choices[0].message.content || '{}');
+      } catch {
+        return res.status(500).json({ error: 'AI returned invalid JSON' });
+      }
+
+      res.json({
+        metaTitle: seoData.metaTitle || '',
+        metaDesc: seoData.metaDesc || '',
+        focusKeyword: seoData.focusKeyword || keyword,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || 'Failed to generate SEO fields' });
     }
   });
 

@@ -30,6 +30,7 @@ import {
   Sparkles, Upload, Trash2, CheckCircle, Calendar, Plus,
   ChevronLeft, ChevronRight, LayoutList, Image, Star,
   Search, ArrowUpDown, X, Pencil, Copy, ExternalLink, Download,
+  Globe, FileText, Link, Languages, Wand2, BookOpen,
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
@@ -194,6 +195,212 @@ function BlogImagesDialog({ post, onClose }: { post: BlogPostWithTranslations; o
               </div>
             );
           })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Suggest Topics Dialog ─────────────────────────────────────────────────────
+interface TopicSuggestion {
+  title: string;
+  keyword: string;
+  searchIntent: string;
+  description: string;
+}
+
+function SuggestTopicsDialog({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const { toast } = useToast();
+  const [sourceTab, setSourceTab] = useState<'url' | 'text' | 'file'>('url');
+  const [url, setUrl] = useState('');
+  const [text, setText] = useState('');
+  const [file, setFile] = useState<File | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [suggestions, setSuggestions] = useState<TopicSuggestion[]>([]);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [generating, setGenerating] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const intentColor = (intent: string) => {
+    if (intent === 'informational') return 'bg-blue-100 text-blue-700';
+    if (intent === 'commercial') return 'bg-purple-100 text-purple-700';
+    return 'bg-green-100 text-green-700';
+  };
+
+  const handleSuggest = async () => {
+    setLoading(true);
+    setSuggestions([]);
+    setSelected(new Set());
+    try {
+      const formData = new FormData();
+      if (sourceTab === 'url') {
+        formData.append('sourceType', 'url');
+        formData.append('url', url);
+      } else if (sourceTab === 'text') {
+        formData.append('sourceType', 'text');
+        formData.append('text', text);
+      } else if (file) {
+        formData.append('sourceType', 'file');
+        formData.append('file', file);
+      }
+      const res = await fetch('/api/admin/blog/suggest-topics', { method: 'POST', body: formData, credentials: 'include' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed');
+      setSuggestions(data.suggestions || []);
+      if ((data.suggestions || []).length === 0) toast({ title: 'No suggestions returned', description: 'Try a different source', variant: 'destructive' });
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggleSelect = (i: number) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      next.has(i) ? next.delete(i) : next.add(i);
+      return next;
+    });
+  };
+
+  const handleGenerate = async () => {
+    if (selected.size === 0) return;
+    setGenerating(true);
+    try {
+      const chosen = Array.from(selected).map(i => suggestions[i]);
+      const res = await apiRequest('POST', '/api/admin/blog/generate-from-suggestions', { suggestions: chosen });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed');
+      toast({ title: `${data.created?.length ?? 0} articles queued!`, description: 'English content is being generated. Check the list in a moment.' });
+      onCreated();
+      onClose();
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' });
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Source tabs */}
+      <Tabs value={sourceTab} onValueChange={v => setSourceTab(v as any)}>
+        <TabsList className="w-full">
+          <TabsTrigger value="url" className="flex-1 gap-1.5" data-testid="tab-source-url"><Link className="w-3.5 h-3.5" />URL</TabsTrigger>
+          <TabsTrigger value="text" className="flex-1 gap-1.5" data-testid="tab-source-text"><FileText className="w-3.5 h-3.5" />Text</TabsTrigger>
+          <TabsTrigger value="file" className="flex-1 gap-1.5" data-testid="tab-source-file"><Upload className="w-3.5 h-3.5" />PDF / Word</TabsTrigger>
+        </TabsList>
+        <TabsContent value="url" className="mt-3">
+          <Input
+            placeholder="https://example.com/about-us"
+            value={url}
+            onChange={e => setUrl(e.target.value)}
+            data-testid="input-suggest-url"
+          />
+          <p className="text-xs text-muted-foreground mt-1">Enter any web page URL — the AI will read its content and extract SEO blog ideas.</p>
+        </TabsContent>
+        <TabsContent value="text" className="mt-3">
+          <Textarea
+            placeholder="Paste any text, program descriptions, brochure content, or notes here..."
+            value={text}
+            onChange={e => setText(e.target.value)}
+            className="min-h-[120px] text-sm"
+            data-testid="textarea-suggest-text"
+          />
+        </TabsContent>
+        <TabsContent value="file" className="mt-3">
+          <div
+            className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:bg-muted/30 transition-colors"
+            onClick={() => fileRef.current?.click()}
+            data-testid="dropzone-suggest-file"
+          >
+            <Upload className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
+            {file ? (
+              <p className="text-sm font-medium">{file.name}</p>
+            ) : (
+              <>
+                <p className="text-sm text-muted-foreground">Click to upload PDF or Word document</p>
+                <p className="text-xs text-muted-foreground mt-1">Max 10 MB</p>
+              </>
+            )}
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".pdf,.doc,.docx"
+              className="hidden"
+              data-testid="input-suggest-file"
+              onChange={e => setFile(e.target.files?.[0] || null)}
+            />
+          </div>
+        </TabsContent>
+      </Tabs>
+
+      <Button
+        className="w-full"
+        onClick={handleSuggest}
+        disabled={loading || (sourceTab === 'url' && !url) || (sourceTab === 'text' && !text) || (sourceTab === 'file' && !file)}
+        data-testid="button-suggest-topics"
+      >
+        {loading ? (
+          <><Sparkles className="w-4 h-4 mr-2 animate-spin" />Analyzing source…</>
+        ) : (
+          <><Sparkles className="w-4 h-4 mr-2" />Suggest SEO Topics</>
+        )}
+      </Button>
+
+      {/* Suggestions list */}
+      {suggestions.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold">AI Suggestions ({suggestions.length})</p>
+            <div className="flex gap-2">
+              <button
+                className="text-xs text-primary underline"
+                onClick={() => setSelected(new Set(suggestions.map((_, i) => i)))}
+                data-testid="button-select-all-suggestions"
+              >Select all</button>
+              <button
+                className="text-xs text-muted-foreground underline"
+                onClick={() => setSelected(new Set())}
+                data-testid="button-deselect-suggestions"
+              >None</button>
+            </div>
+          </div>
+          <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1">
+            {suggestions.map((s, i) => (
+              <div
+                key={i}
+                className={`rounded-lg border p-3 cursor-pointer transition-colors ${selected.has(i) ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/40 hover:bg-muted/30'}`}
+                onClick={() => toggleSelect(i)}
+                data-testid={`suggestion-item-${i}`}
+              >
+                <div className="flex items-start gap-2.5">
+                  <Checkbox checked={selected.has(i)} onCheckedChange={() => toggleSelect(i)} className="mt-0.5 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm leading-tight">{s.title}</p>
+                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                      <span className="text-xs font-mono bg-muted px-1.5 py-0.5 rounded">🔑 {s.keyword}</span>
+                      <span className={`text-xs px-1.5 py-0.5 rounded capitalize ${intentColor(s.searchIntent)}`}>{s.searchIntent}</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">{s.description}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <Button
+            className="w-full"
+            onClick={handleGenerate}
+            disabled={selected.size === 0 || generating}
+            data-testid="button-generate-selected"
+          >
+            {generating ? (
+              <><Sparkles className="w-4 h-4 mr-2 animate-spin" />Creating articles…</>
+            ) : (
+              <><BookOpen className="w-4 h-4 mr-2" />Create {selected.size} Article{selected.size !== 1 ? 's' : ''} in English</>
+            )}
+          </Button>
         </div>
       )}
     </div>
@@ -421,25 +628,70 @@ function EditPostDialog({ post, domain, onClose }: {
               )}
             </div>
 
-            <div>
-              <Label>Meta Title</Label>
-              <Input
-                value={drafts[code].metaTitle}
-                onChange={e => setField(code, 'metaTitle', e.target.value)}
-                placeholder="SEO title"
-                data-testid={`input-meta-title-${code}`}
-              />
-            </div>
+            {/* SEO Panel */}
+            <div className="rounded-lg border bg-muted/30 p-3 space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">SEO Settings</p>
+                {code === 'en' && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs gap-1"
+                    onClick={async () => {
+                      if (!drafts['en'].content && !drafts['en'].title) {
+                        return;
+                      }
+                      setSaving(true);
+                      try {
+                        const res = await fetch(`/api/admin/blog/${post.id}/fill-seo`, { method: 'POST', credentials: 'include' });
+                        const data = await res.json();
+                        if (!res.ok) throw new Error(data.error || 'Failed');
+                        setField('en', 'metaTitle', data.metaTitle || '');
+                        setField('en', 'metaDesc', data.metaDesc || '');
+                      } catch (e: any) {
+                        console.error(e);
+                      } finally {
+                        setSaving(false);
+                      }
+                    }}
+                    disabled={saving || !drafts['en'].content}
+                    data-testid="button-fill-seo-ai"
+                  >
+                    <Wand2 className="w-3 h-3" />Fill with AI
+                  </Button>
+                )}
+              </div>
 
-            <div>
-              <Label>Meta Description</Label>
-              <Textarea
-                value={drafts[code].metaDesc}
-                onChange={e => setField(code, 'metaDesc', e.target.value)}
-                placeholder="SEO description"
-                className="min-h-[72px] text-sm"
-                data-testid={`textarea-meta-desc-${code}`}
-              />
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <Label className="text-xs">Meta Title</Label>
+                  <span className={`text-xs font-mono ${drafts[code].metaTitle.length > 65 ? 'text-red-500' : drafts[code].metaTitle.length >= 30 ? 'text-green-600' : 'text-muted-foreground'}`}>
+                    {drafts[code].metaTitle.length}/65
+                  </span>
+                </div>
+                <Input
+                  value={drafts[code].metaTitle}
+                  onChange={e => setField(code, 'metaTitle', e.target.value)}
+                  placeholder="SEO title (30–65 chars)"
+                  data-testid={`input-meta-title-${code}`}
+                />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <Label className="text-xs">Meta Description</Label>
+                  <span className={`text-xs font-mono ${drafts[code].metaDesc.length > 165 ? 'text-red-500' : drafts[code].metaDesc.length >= 120 ? 'text-green-600' : 'text-muted-foreground'}`}>
+                    {drafts[code].metaDesc.length}/165
+                  </span>
+                </div>
+                <Textarea
+                  value={drafts[code].metaDesc}
+                  onChange={e => setField(code, 'metaDesc', e.target.value)}
+                  placeholder="SEO description (120–165 chars)"
+                  className="min-h-[72px] text-sm"
+                  data-testid={`textarea-meta-desc-${code}`}
+                />
+              </div>
             </div>
 
             <div className="flex gap-2 pt-1">
@@ -667,9 +919,11 @@ export default function Blog() {
   const [, setLocation] = useLocation();
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
+  const [suggestDialogOpen, setSuggestDialogOpen] = useState(false);
   const [imagesPost, setImagesPost] = useState<BlogPostWithTranslations | null>(null);
   const [editPost, setEditPost] = useState<BlogPostWithTranslations | null>(null);
   const [generatingId, setGeneratingId] = useState<string | null>(null);
+  const [translatingId, setTranslatingId] = useState<string | null>(null);
   const [view, setView] = useState<'list' | 'calendar'>('list');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -814,6 +1068,20 @@ export default function Blog() {
     setSelectedIds(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
   };
 
+  const handleTranslateAll = async (post: BlogPostWithTranslations) => {
+    setTranslatingId(post.id);
+    try {
+      const res = await apiRequest('POST', `/api/admin/blog/${post.id}/translate-all`, {});
+      if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error || `HTTP ${res.status}`); }
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/blog'] });
+      toast({ title: 'Translation started!', description: 'Translating to 9 languages in the background — the language badges will update automatically.' });
+    } catch (e: any) {
+      toast({ title: 'Translation failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setTranslatingId(null);
+    }
+  };
+
   const handleGenerateAI = async (post: BlogPostWithTranslations) => {
     setGeneratingId(post.id);
     try {
@@ -928,6 +1196,27 @@ export default function Blog() {
                     Save Schedule
                   </Button>
                 </div>
+              </DialogContent>
+            </Dialog>
+
+            {/* Suggest Topics dialog */}
+            <Dialog open={suggestDialogOpen} onOpenChange={setSuggestDialogOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" data-testid="button-suggest-topics-open" className="gap-1.5">
+                  <Globe className="w-4 h-4" />Suggest Topics
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <Globe className="w-5 h-5 text-primary" />AI Topic Suggestions
+                  </DialogTitle>
+                  <p className="text-sm text-muted-foreground">Provide a source (URL, text, or document) — AI will suggest 8 SEO-valuable blog topics you can turn into full articles.</p>
+                </DialogHeader>
+                <SuggestTopicsDialog
+                  onClose={() => setSuggestDialogOpen(false)}
+                  onCreated={() => { queryClient.invalidateQueries({ queryKey: ['/api/admin/blog'] }); }}
+                />
               </DialogContent>
             </Dialog>
 
@@ -1167,9 +1456,17 @@ export default function Blog() {
                         <TableCell>
                           <div className="flex items-center gap-1 flex-wrap">
                             <Button size="sm" variant="outline" onClick={() => handleGenerateAI(post)}
-                              disabled={generatingId === post.id} data-testid={`button-generate-${post.id}`} title="Generate with AI">
+                              disabled={generatingId === post.id || post.status === 'generating'} data-testid={`button-generate-${post.id}`} title="Generate with AI (EN + all 9 languages)">
                               <Sparkles className="w-3.5 h-3.5 mr-1" />
                               {generatingId === post.id ? 'Generating…' : 'AI Generate'}
+                            </Button>
+
+                            <Button size="sm" variant="outline" onClick={() => handleTranslateAll(post)}
+                              disabled={translatingId === post.id || post.status === 'generating' || !post.translations.find(t => t.lang === 'en')?.content}
+                              data-testid={`button-translate-${post.id}`} title="Translate English content to all 9 languages"
+                              className="text-indigo-700 border-indigo-200 hover:bg-indigo-50">
+                              <Languages className="w-3.5 h-3.5 mr-1" />
+                              {translatingId === post.id ? 'Translating…' : 'Translate All'}
                             </Button>
 
                             <Button size="sm" variant="outline" onClick={() => setEditPost(post)}
