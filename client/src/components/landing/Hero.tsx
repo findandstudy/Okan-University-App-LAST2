@@ -49,16 +49,11 @@ function getYouTubeEmbedUrl(url: string): string {
   return videoId ? `https://www.youtube.com/embed/${videoId}` : '';
 }
 
-// Default fallback content for instant LCP
+// Default fallback content for instant LCP (non-translated static strings only)
 const FALLBACK_HERO = {
   badge: 'Applications Open for 2026',
   title: 'Start Your Journey to Excellence',
   subtitle: 'Study at top universities with exclusive scholarships and full support',
-  features: [
-    'Scholarship opportunities up to 20%',
-    'No examination certificate is required!',
-    '48-hour application processing'
-  ]
 };
 
 export function Hero({ title, subtitle, ctaLabel, backgroundImage }: HeroProps) {
@@ -85,10 +80,18 @@ export function Hero({ title, subtitle, ctaLabel, backgroundImage }: HeroProps) 
   const badgeText = heroSettings?.badge?.[lang] || heroSettings?.badge?.en || FALLBACK_HERO.badge;
   const heroTitle = title || heroSettings?.title?.[lang] || heroSettings?.title?.en || FALLBACK_HERO.title;
   const heroSubtitle = subtitle || heroSettings?.subtitle?.[lang] || heroSettings?.subtitle?.en || FALLBACK_HERO.subtitle;
-  
+
+  // i18n-translated fallback so feature bullets are never hardcoded English
+  const fallbackFeatures = [
+    t('hero.feature1'),
+    t('hero.feature2'),
+    t('hero.feature3'),
+    t('hero.feature4'),
+  ];
+
   const features = heroSettings?.features?.[lang]?.length 
     ? heroSettings.features[lang] 
-    : (heroSettings?.features?.en?.length ? heroSettings.features.en : FALLBACK_HERO.features);
+    : fallbackFeatures;
 
   const stat1Value = heroSettings?.stats?.stat1Value || '50+';
   const stat1Label = heroSettings?.stats?.stat1Label?.[lang] || heroSettings?.stats?.stat1Label?.en || 'Programs';

@@ -238,7 +238,7 @@ export default function ContactInfo({ embedded }: { embedded?: boolean } = {}) {
                           <div>
                             <Label>Label ({languageLabels[lang]})</Label>
                             <Input
-                              value={item.label[lang] || ''}
+                              value={item.label?.[lang] || ''}
                               onChange={(e) => updateItemLabel(index, lang, e.target.value)}
                               className="mt-1.5"
                               data-testid={`input-item-label-${index}-${lang}`}
