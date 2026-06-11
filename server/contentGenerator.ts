@@ -156,7 +156,7 @@ export interface BlogContent {
   metaDesc: string;
 }
 
-function toSlug(text: string): string {
+export function toSlug(text: string): string {
   return text
     .toLowerCase()
     .replace(/[^\w\s-]/g, '')

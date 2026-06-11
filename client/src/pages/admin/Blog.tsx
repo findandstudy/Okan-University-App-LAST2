@@ -229,6 +229,8 @@ const STATUS_COLORS: Record<string, string> = {
   taslak: 'bg-gray-100 text-gray-700',
   zamanli: 'bg-blue-100 text-blue-700',
   yayinda: 'bg-green-100 text-green-700',
+  generating: 'bg-yellow-100 text-yellow-800 animate-pulse',
+  failed: 'bg-red-100 text-red-700',
 };
 
 const WEEKDAY_LABELS: Record<string, string> = {
@@ -364,6 +366,10 @@ export default function Blog() {
 
   const { data: posts = [], isLoading } = useQuery<BlogPostWithTranslations[]>({
     queryKey: ['/api/admin/blog'],
+    refetchInterval: (query) => {
+      const data = query.state.data as BlogPostWithTranslations[] | undefined;
+      return data?.some(p => p.status === 'generating') ? 3000 : false;
+    },
   });
 
   const { data: schedule } = useQuery<BlogSchedule | null>({
@@ -416,9 +422,20 @@ export default function Blog() {
     setGeneratingId(post.id);
     try {
       const res = await apiRequest('POST', `/api/admin/blog/${post.id}/generate`, {});
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `HTTP ${res.status}`);
+      }
       const data = await res.json();
       queryClient.invalidateQueries({ queryKey: ['/api/admin/blog'] });
-      toast({ title: `AI generated ${data.translations?.length || 0} translations` });
+      if (data.backgroundTranslating) {
+        toast({
+          title: 'English article ready!',
+          description: 'Translating to 9 languages in the background — the status badge will update automatically.',
+        });
+      } else {
+        toast({ title: `AI generated ${data.translations?.length || 0} translations` });
+      }
     } catch (e: any) {
       toast({ title: 'Generation failed', description: e.message, variant: 'destructive' });
     } finally {

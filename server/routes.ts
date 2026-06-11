@@ -1488,53 +1488,81 @@ Rules:
 
   // ─── AI Generate blog post ────────────────────────────────────────────────────
   app.post("/api/admin/blog/:id/generate", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
+    const id = req.params.id as string;
     try {
-      const id = req.params.id as string;
       const post = await storage.getBlogPost(id);
       if (!post || post.tenantId !== req.tenantId) return res.status(404).json({ error: 'Not found' });
 
-      const { generateBlogPost, translateBlogPost } = await import('./contentGenerator');
+      const { generateBlogPost, toSlug } = await import('./contentGenerator');
+      const { translateText } = await import('./aiTranslation');
       const keyword = post.keyword || req.body.keyword || 'university education';
       const backlinkSites = post.backlinkSites || [];
 
-      // Generate EN content
+      // ── Step 1: Generate EN content (synchronous) ────────────────────────────
       const enContent = await generateBlogPost(keyword, backlinkSites, req.tenantId);
 
-      // Save EN translation
+      // ── Step 2: Save EN translation immediately ──────────────────────────────
       await storage.upsertBlogPostTranslation({
-        postId: id,
-        tenantId: req.tenantId,
-        lang: 'en',
-        title: enContent.title,
-        slug: enContent.slug,
+        postId: id, tenantId: req.tenantId, lang: 'en',
+        title: enContent.title, slug: enContent.slug,
         content: enContent.content,
-        metaTitle: enContent.metaTitle,
-        metaDesc: enContent.metaDesc,
+        metaTitle: enContent.metaTitle, metaDesc: enContent.metaDesc,
       });
+      await storage.updateBlogPost(id, { isAiGenerated: true, status: 'generating' });
 
-      // Translate to all other languages
-      const otherLangs = SUPPORTED_LANGUAGES.filter(l => l !== 'en');
-      const translations = await translateBlogPost(enContent, [...otherLangs], req.tenantId);
+      // ── Step 3: Respond immediately — client doesn't block on translations ───
+      const enTranslations = await storage.getBlogPostTranslations(id);
+      res.json({ success: true, translations: enTranslations, backgroundTranslating: true });
 
-      for (const [lang, content] of Object.entries(translations)) {
-        await storage.upsertBlogPostTranslation({
-          postId: id,
-          tenantId: req.tenantId,
-          lang,
-          title: content.title,
-          slug: content.slug,
-          content: content.content,
-          metaTitle: content.metaTitle,
-          metaDesc: content.metaDesc,
-        });
-      }
-
-      await storage.updateBlogPost(id, { isAiGenerated: true });
-
-      const allTranslations = await storage.getBlogPostTranslations(id);
-
-      // Non-blocking: auto-generate featured image if image source is configured
+      // ── Step 4 (background): Translate 9 other langs + generate image ────────
       (async () => {
+        const otherLangs = SUPPORTED_LANGUAGES.filter(l => l !== 'en');
+        let langSuccessCount = 0;
+
+        for (const lang of otherLangs) {
+          try {
+            const fields = ['title', 'content', 'metaTitle', 'metaDesc'] as const;
+            const translated: Record<string, string> = {};
+
+            for (const field of fields) {
+              try {
+                const src = enContent[field];
+                if (!src) { translated[field] = ''; continue; }
+                const result = await translateText(src, 'en', [lang], req.tenantId);
+                translated[field] = result[lang] || src; // fallback to EN on empty
+              } catch (fieldErr) {
+                console.warn(`[BlogGenerate] Field "${field}" → "${lang}" failed:`, (fieldErr as any)?.message);
+                translated[field] = enContent[field]; // fallback to EN text
+              }
+            }
+
+            const langSlug = toSlug(translated['title'] || enContent.title) + `-${lang}`;
+            await storage.upsertBlogPostTranslation({
+              postId: id, tenantId: req.tenantId, lang,
+              title: translated['title'] || enContent.title,
+              slug: langSlug,
+              content: translated['content'] || enContent.content,
+              metaTitle: translated['metaTitle'] || enContent.metaTitle,
+              metaDesc: translated['metaDesc'] || enContent.metaDesc,
+            });
+
+            langSuccessCount++;
+            console.log(`[BlogGenerate] ✓ lang=${lang} (${langSuccessCount}/${otherLangs.length})`);
+          } catch (langErr) {
+            console.warn(`[BlogGenerate] ✗ lang=${lang} skipped:`, (langErr as any)?.message);
+          }
+        }
+
+        // Update final status
+        try {
+          const finalStatus = langSuccessCount > 0 ? 'taslak' : 'failed';
+          await storage.updateBlogPost(id, { status: finalStatus });
+          console.log(`[BlogGenerate] Done. status=${finalStatus} langs=${langSuccessCount}/${otherLangs.length}`);
+        } catch (statusErr) {
+          console.warn('[BlogGenerate] Status update failed:', (statusErr as any)?.message);
+        }
+
+        // Image generation — wrapped so it never affects translation result
         try {
           const { generateBlogImage } = await import('./blogImageService');
           const generated = await generateBlogImage(enContent.title, keyword, req.tenantId);
@@ -1542,26 +1570,26 @@ Rules:
             const freshPost = await storage.getBlogPost(id);
             if (freshPost && !freshPost.featuredImageUrl) {
               await storage.addBlogPostImage({
-                postId: id,
-                tenantId: req.tenantId,
-                url: generated.url,
-                altByLang: generated.altByLang as any,
+                postId: id, tenantId: req.tenantId,
+                url: generated.url, altByLang: generated.altByLang as any,
                 attribution: generated.attribution || null,
-                source: generated.source,
-                position: 0,
+                source: generated.source, position: 0,
               });
               await storage.updateBlogPostFeaturedImage(id, generated.url, generated.altByLang as any);
+              console.log('[BlogGenerate] ✓ featured image saved');
             }
           }
         } catch (imgErr) {
           console.warn('[BlogGenerate] Image generation skipped:', (imgErr as any)?.message);
         }
-      })();
+      })().catch(err => console.error('[BlogGenerate] Background fatal error:', err));
 
-      res.json({ success: true, translations: allTranslations });
     } catch (err: any) {
-      console.error('Blog generate error:', err);
-      res.status(500).json({ error: err?.message || 'Failed to generate blog post' });
+      console.error('[BlogGenerate] Error:', err);
+      try { await storage.updateBlogPost(id, { status: 'failed' }); } catch {}
+      if (!res.headersSent) {
+        res.status(500).json({ error: err?.message || 'Failed to generate blog post' });
+      }
     }
   });
 

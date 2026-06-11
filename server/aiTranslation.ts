@@ -38,10 +38,15 @@ ${text}
 Return a JSON object like: {"en": "...", "ar": "...", "tr": "...", ...}
 Only include the requested target languages.`;
 
-  const raw = await callAI(prompt, tenantId, systemPrompt);
-  const match = raw.match(/\{[\s\S]*\}/);
-  if (!match) throw new Error('Invalid translation response from AI');
-  return JSON.parse(match[0]) as Record<string, string>;
+  try {
+    const raw = await callAI(prompt, tenantId, systemPrompt);
+    const match = raw.match(/\{[\s\S]*\}/);
+    if (!match) throw new Error('No JSON object in translation response');
+    return JSON.parse(match[0]) as Record<string, string>;
+  } catch (err) {
+    console.warn('[translateText] Translation failed, returning empty result:', (err as any)?.message);
+    return {};
+  }
 }
 
 export async function translateContentByLang(

@@ -5,6 +5,14 @@ import { createServer } from "http";
 import { seedDatabase } from "./seedOnStartup";
 import compression from "compression";
 
+// ─── Global error guards — prevent silent process crashes ─────────────────────
+process.on('unhandledRejection', (reason: unknown) => {
+  console.error('[UnhandledRejection] Unhandled promise rejection (process kept alive):', reason);
+});
+process.on('uncaughtException', (err: Error) => {
+  console.error('[UncaughtException] Caught unhandled exception (process kept alive):', err);
+});
+
 // ─── SESSION_SECRET is mandatory — fail fast if missing ───────────────────────
 if (!process.env.SESSION_SECRET) {
   console.error(
