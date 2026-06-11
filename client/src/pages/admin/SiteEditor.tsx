@@ -12,7 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, Globe, Power, PowerOff, Plus, Trash2, Pencil, Loader2, Code, Link as LinkIcon, Download, History, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Globe, Power, PowerOff, Plus, Trash2, Pencil, Loader2, Code, Link as LinkIcon, Download, History, RotateCcw, Monitor, Tablet, Smartphone, RefreshCw, ExternalLink } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -33,6 +33,131 @@ import AISettings from './AISettings';
 import ContentGenerator from './ContentGenerator';
 import { Construction, Upload } from 'lucide-react';
 import type { Tenant, Widget } from '@shared/schema';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+
+// ─── Site Preview Tab ──────────────────────────────────────────────────────────
+const PREVIEW_LANGUAGES = [
+  { code: 'en', label: '🇬🇧 English' },
+  { code: 'ar', label: '🇸🇦 Arabic' },
+  { code: 'tr', label: '🇹🇷 Turkish' },
+  { code: 'fr', label: '🇫🇷 French' },
+  { code: 'ru', label: '🇷🇺 Russian' },
+  { code: 'fa', label: '🇮🇷 Farsi' },
+  { code: 'zh', label: '🇨🇳 Chinese' },
+  { code: 'hi', label: '🇮🇳 Hindi' },
+  { code: 'es', label: '🇪🇸 Spanish' },
+  { code: 'id', label: '🇮🇩 Indonesian' },
+];
+
+const DEVICE_SIZES = [
+  { id: 'desktop', icon: Monitor, label: 'Desktop', width: '100%' },
+  { id: 'tablet',  icon: Tablet,  label: 'Tablet',  width: '768px' },
+  { id: 'mobile',  icon: Smartphone, label: 'Mobile', width: '390px' },
+] as const;
+
+function SitePreviewTab() {
+  const [lang, setLang] = useState('en');
+  const [device, setDevice] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
+  const [refreshKey, setRefreshKey] = useState(0);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  const previewUrl = `/${lang}`;
+  const deviceWidth = DEVICE_SIZES.find(d => d.id === device)?.width ?? '100%';
+
+  const handleRefresh = () => setRefreshKey(k => k + 1);
+
+  return (
+    <div className="flex flex-col gap-3">
+      {/* Toolbar */}
+      <div className="flex items-center gap-2 flex-wrap">
+        {/* Device switcher */}
+        <div className="flex items-center rounded-md border bg-background overflow-hidden">
+          {DEVICE_SIZES.map(d => (
+            <button
+              key={d.id}
+              onClick={() => setDevice(d.id)}
+              title={d.label}
+              data-testid={`button-preview-device-${d.id}`}
+              className={`px-3 py-2 flex items-center gap-1.5 text-xs transition-colors ${
+                device === d.id
+                  ? 'bg-primary text-primary-foreground'
+                  : 'hover:bg-muted text-muted-foreground'
+              }`}
+            >
+              <d.icon className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">{d.label}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Language picker */}
+        <Select value={lang} onValueChange={setLang}>
+          <SelectTrigger className="w-36 h-9" data-testid="select-preview-lang">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {PREVIEW_LANGUAGES.map(l => (
+              <SelectItem key={l.code} value={l.code} data-testid={`option-preview-lang-${l.code}`}>
+                {l.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {/* Refresh */}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleRefresh}
+          className="gap-1.5"
+          data-testid="button-preview-refresh"
+        >
+          <RefreshCw className="h-3.5 w-3.5" />
+          Yenile
+        </Button>
+
+        {/* Open in new tab */}
+        <a href={previewUrl} target="_blank" rel="noopener noreferrer">
+          <Button variant="ghost" size="sm" className="gap-1.5" data-testid="button-preview-newtab">
+            <ExternalLink className="h-3.5 w-3.5" />
+            Yeni Sekme
+          </Button>
+        </a>
+
+        <span className="ml-auto text-xs text-muted-foreground hidden md:block">
+          {deviceWidth === '100%' ? 'Tam genişlik' : deviceWidth}
+        </span>
+      </div>
+
+      {/* iframe container */}
+      <div className="rounded-lg border bg-muted/40 flex justify-center overflow-hidden" style={{ minHeight: '75vh' }}>
+        <div
+          style={{
+            width: deviceWidth,
+            transition: 'width 0.3s ease',
+            position: 'relative',
+            background: 'white',
+            boxShadow: device !== 'desktop' ? '0 0 0 1px hsl(var(--border)), 0 4px 24px rgba(0,0,0,0.12)' : 'none',
+          }}
+        >
+          <iframe
+            key={`${lang}-${refreshKey}`}
+            ref={iframeRef}
+            src={previewUrl}
+            title="Site Preview"
+            data-testid="iframe-site-preview"
+            style={{
+              width: '100%',
+              height: '80vh',
+              border: 'none',
+              display: 'block',
+            }}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ─── Versions Tab ─────────────────────────────────────────────────────────────
 interface VersionEntry {
@@ -807,8 +932,12 @@ export default function SiteEditor() {
             </div>
           </div>
 
-          <Tabs defaultValue="sections">
+          <Tabs defaultValue="preview">
             <TabsList className="flex-wrap h-auto gap-0.5">
+              <TabsTrigger value="preview" data-testid="tab-preview" className="gap-1.5">
+                <Monitor className="h-3.5 w-3.5" />
+                Preview
+              </TabsTrigger>
               <TabsTrigger value="sections" data-testid="tab-sections">Sections</TabsTrigger>
               <TabsTrigger value="content" data-testid="tab-content">Content</TabsTrigger>
               <TabsTrigger value="faq" data-testid="tab-faq">FAQ</TabsTrigger>
@@ -823,6 +952,10 @@ export default function SiteEditor() {
               <TabsTrigger value="blog" data-testid="tab-blog">Blog</TabsTrigger>
               <TabsTrigger value="versions" data-testid="tab-versions">Versions</TabsTrigger>
             </TabsList>
+
+            <TabsContent value="preview" className="mt-4">
+              <SitePreviewTab />
+            </TabsContent>
 
             <TabsContent value="sections" className="mt-4">
               <Sections embedded />
