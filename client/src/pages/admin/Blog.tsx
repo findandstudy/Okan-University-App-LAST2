@@ -26,8 +26,10 @@ import { useToast } from '@/hooks/use-toast';
 import {
   Sparkles, Upload, Trash2, CheckCircle, Calendar, Plus,
   ChevronLeft, ChevronRight, LayoutList, Image, Star,
-  Search, ArrowUpDown, X,
+  Search, ArrowUpDown, X, Pencil, Copy, ExternalLink,
 } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
 import { formatDate } from '@/lib/utils';
 import { useLocation } from 'wouter';
 
@@ -195,6 +197,231 @@ function BlogImagesDialog({ post, onClose }: { post: BlogPostWithTranslations; o
   );
 }
 
+const EDIT_LANGS = [
+  { code: 'en', label: 'EN' },
+  { code: 'tr', label: 'TR' },
+  { code: 'ar', label: 'AR' },
+  { code: 'fr', label: 'FR' },
+  { code: 'ru', label: 'RU' },
+  { code: 'fa', label: 'FA' },
+  { code: 'zh', label: 'ZH' },
+  { code: 'hi', label: 'HI' },
+  { code: 'es', label: 'ES' },
+  { code: 'id', label: 'ID' },
+];
+
+type TranslationDraft = {
+  title: string;
+  slug: string;
+  content: string;
+  metaTitle: string;
+  metaDesc: string;
+};
+
+function EditPostDialog({ post, domain, onClose }: {
+  post: BlogPostWithTranslations;
+  domain: string;
+  onClose: () => void;
+}) {
+  const { toast } = useToast();
+
+  const initDrafts = (): Record<string, TranslationDraft> => {
+    const drafts: Record<string, TranslationDraft> = {};
+    for (const { code } of EDIT_LANGS) {
+      const t = post.translations.find(tr => tr.lang === code);
+      drafts[code] = {
+        title: t?.title || '',
+        slug: t?.slug || '',
+        content: t?.content || '',
+        metaTitle: t?.metaTitle || '',
+        metaDesc: t?.metaDesc || '',
+      };
+    }
+    return drafts;
+  };
+
+  const [activeLang, setActiveLang] = useState('en');
+  const [drafts, setDrafts] = useState<Record<string, TranslationDraft>>(initDrafts);
+  const [saving, setSaving] = useState(false);
+
+  const toSlug = (text: string) =>
+    text.toLowerCase().replace(/[^\w\s-]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-').trim().substring(0, 80);
+
+  const setField = (lang: string, field: keyof TranslationDraft, value: string) => {
+    setDrafts(prev => {
+      const current = prev[lang];
+      const next = { ...current, [field]: value };
+      if (field === 'title' && !current.slug) {
+        next.slug = toSlug(value);
+      }
+      return { ...prev, [lang]: next };
+    });
+  };
+
+  const handleSave = async (lang: string) => {
+    const d = drafts[lang];
+    if (!d.title.trim() || !d.slug.trim() || !d.content.trim()) {
+      toast({ title: 'Title, slug and content are required', variant: 'destructive' });
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await apiRequest('PATCH', `/api/admin/blog/${post.id}/translation`, {
+        lang,
+        title: d.title,
+        slug: d.slug,
+        content: d.content,
+        metaTitle: d.metaTitle || null,
+        metaDesc: d.metaDesc || null,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Save failed');
+      }
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/blog'] });
+      toast({ title: `[${lang.toUpperCase()}] translation saved` });
+    } catch (e: any) {
+      toast({ title: 'Save failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const copySlug = (slug: string) => {
+    navigator.clipboard.writeText(slug).then(() => toast({ title: 'Slug copied' }));
+  };
+
+  const previewUrl = (lang: string) => {
+    const slug = drafts[lang].slug;
+    if (!slug) return null;
+    const base = domain.startsWith('http') ? domain : `https://${domain}`;
+    return `${base}/${lang}/blog/${slug}`;
+  };
+
+  return (
+    <div className="space-y-4">
+      <Tabs value={activeLang} onValueChange={setActiveLang}>
+        <TabsList className="flex flex-wrap h-auto gap-1 bg-muted p-1 rounded-md">
+          {EDIT_LANGS.map(({ code, label }) => {
+            const hasContent = !!drafts[code]?.title;
+            return (
+              <TabsTrigger
+                key={code}
+                value={code}
+                data-testid={`tab-lang-${code}`}
+                className="text-xs px-2 py-1 relative"
+              >
+                {label}
+                {hasContent && (
+                  <span className="ml-1 w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />
+                )}
+              </TabsTrigger>
+            );
+          })}
+        </TabsList>
+
+        {EDIT_LANGS.map(({ code }) => (
+          <TabsContent key={code} value={code} className="space-y-3 mt-4">
+            <div>
+              <Label>Title *</Label>
+              <Input
+                value={drafts[code].title}
+                onChange={e => setField(code, 'title', e.target.value)}
+                placeholder="Post title"
+                data-testid={`input-title-${code}`}
+              />
+            </div>
+
+            <div>
+              <Label>Slug (URL path)</Label>
+              <div className="flex gap-2">
+                <Input
+                  value={drafts[code].slug}
+                  readOnly
+                  className="flex-1 bg-muted font-mono text-sm"
+                  placeholder="auto-generated when you enter a title"
+                  data-testid={`input-slug-${code}`}
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => copySlug(drafts[code].slug)}
+                  disabled={!drafts[code].slug}
+                  data-testid={`button-copy-slug-${code}`}
+                  title="Copy slug"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">Auto-generated from title. Read-only.</p>
+            </div>
+
+            {previewUrl(code) && (
+              <div className="flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-2">
+                <ExternalLink className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                <a
+                  href={previewUrl(code)!}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-primary truncate hover:underline"
+                  data-testid={`link-preview-${code}`}
+                >
+                  {previewUrl(code)}
+                </a>
+              </div>
+            )}
+
+            <div>
+              <Label>Content * (Markdown)</Label>
+              <Textarea
+                value={drafts[code].content}
+                onChange={e => setField(code, 'content', e.target.value)}
+                placeholder="Write content in Markdown…"
+                className="font-mono text-sm min-h-[200px]"
+                data-testid={`textarea-content-${code}`}
+              />
+            </div>
+
+            <div>
+              <Label>Meta Title</Label>
+              <Input
+                value={drafts[code].metaTitle}
+                onChange={e => setField(code, 'metaTitle', e.target.value)}
+                placeholder="SEO title"
+                data-testid={`input-meta-title-${code}`}
+              />
+            </div>
+
+            <div>
+              <Label>Meta Description</Label>
+              <Textarea
+                value={drafts[code].metaDesc}
+                onChange={e => setField(code, 'metaDesc', e.target.value)}
+                placeholder="SEO description"
+                className="min-h-[72px] text-sm"
+                data-testid={`textarea-meta-desc-${code}`}
+              />
+            </div>
+
+            <div className="flex gap-2 pt-1">
+              <Button
+                onClick={() => handleSave(code)}
+                disabled={saving}
+                data-testid={`button-save-translation-${code}`}
+              >
+                {saving ? 'Saving…' : `Save ${code.toUpperCase()}`}
+              </Button>
+              <Button variant="outline" onClick={onClose} data-testid="button-edit-cancel">
+                Close
+              </Button>
+            </div>
+          </TabsContent>
+        ))}
+      </Tabs>
+    </div>
+  );
+}
+
 interface BlogSchedule {
   id: string;
   dailyLimit: number;
@@ -306,6 +533,7 @@ export default function Blog() {
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
   const [imagesPost, setImagesPost] = useState<BlogPostWithTranslations | null>(null);
+  const [editPost, setEditPost] = useState<BlogPostWithTranslations | null>(null);
   const [generatingId, setGeneratingId] = useState<string | null>(null);
   const [view, setView] = useState<'list' | 'calendar'>('list');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -340,6 +568,11 @@ export default function Blog() {
   const { data: schedule } = useQuery<BlogSchedule | null>({
     queryKey: ['/api/admin/blog/schedule'],
   });
+
+  const { data: tenantData } = useQuery<{ domain?: string }>({
+    queryKey: ['/api/tenant'],
+  });
+  const tenantDomain = tenantData?.domain || window.location.hostname;
 
   const createMutation = useMutation({
     mutationFn: (data: any) => apiRequest('POST', '/api/admin/blog', data),
@@ -777,6 +1010,11 @@ export default function Blog() {
                               {generatingId === post.id ? 'Generating…' : 'AI Generate'}
                             </Button>
 
+                            <Button size="sm" variant="outline" onClick={() => setEditPost(post)}
+                              data-testid={`button-edit-${post.id}`} title="Edit translations">
+                              <Pencil className="w-3.5 h-3.5 mr-1" />Edit
+                            </Button>
+
                             <Button size="sm" variant="outline" onClick={() => setImagesPost(post)}
                               data-testid={`button-images-${post.id}`} title="Manage images"
                               className={post.featuredImageUrl ? 'text-primary border-primary/40' : ''}>
@@ -830,6 +1068,29 @@ export default function Blog() {
           </Card>
         )}
       </div>
+
+      {/* Edit post translations dialog */}
+      <Dialog open={!!editPost} onOpenChange={open => { if (!open) setEditPost(null); }}>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="w-4 h-4" />Edit Translations
+              {editPost && (
+                <span className="text-sm font-normal text-muted-foreground truncate max-w-xs">
+                  — {editPost.translations.find(t => t.lang === 'en')?.title || editPost.keyword || ''}
+                </span>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+          {editPost && (
+            <EditPostDialog
+              post={editPost}
+              domain={tenantDomain}
+              onClose={() => setEditPost(null)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Images management dialog */}
       <Dialog open={!!imagesPost} onOpenChange={open => { if (!open) setImagesPost(null); }}>

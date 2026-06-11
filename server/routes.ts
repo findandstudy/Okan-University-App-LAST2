@@ -1532,6 +1532,38 @@ Rules:
     }
   });
 
+  app.patch("/api/admin/blog/:id/translation", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
+    try {
+      const id = req.params.id as string;
+      const post = await storage.getBlogPost(id);
+      if (!post || post.tenantId !== req.tenantId) return res.status(404).json({ error: 'Not found' });
+
+      const { lang, title, content, metaTitle, metaDesc } = req.body;
+      if (!lang || !title || !content) {
+        return res.status(400).json({ error: 'lang, title, and content are required' });
+      }
+
+      // Use provided slug or auto-generate from title
+      const rawSlug = (req.body.slug as string | undefined)?.trim();
+      const { toSlug } = await import('./contentGenerator');
+      const slug = rawSlug || toSlug(title) + (lang !== 'en' ? `-${lang}` : '');
+
+      const translation = await storage.upsertBlogPostTranslation({
+        postId: id,
+        tenantId: req.tenantId,
+        lang,
+        title,
+        slug,
+        content,
+        metaTitle: metaTitle || null,
+        metaDesc: metaDesc || null,
+      });
+      res.json(translation);
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || 'Failed to update translation' });
+    }
+  });
+
   app.delete("/api/admin/blog/:id", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
     try {
       const id = req.params.id as string;
