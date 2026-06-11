@@ -1053,6 +1053,21 @@ export default function Blog() {
                               <Pencil className="w-3.5 h-3.5 mr-1" />Edit
                             </Button>
 
+                            {post.status === 'yayinda' && (() => {
+                              const enSlug = post.translations.find(t => t.lang === 'en')?.slug;
+                              const firstSlug = enSlug || post.translations[0]?.slug;
+                              const firstLang = enSlug ? 'en' : post.translations[0]?.lang;
+                              if (!firstSlug) return null;
+                              return (
+                                <a href={`/${firstLang}/blog/${firstSlug}`} target="_blank" rel="noopener noreferrer"
+                                  data-testid={`button-view-${post.id}`}>
+                                  <Button size="sm" variant="ghost" className="text-blue-600 hover:bg-blue-50 hover:text-blue-700" title="View published post">
+                                    <ExternalLink className="w-3.5 h-3.5 mr-1" />View
+                                  </Button>
+                                </a>
+                              );
+                            })()}
+
                             <Button size="sm" variant="outline" onClick={() => setImagesPost(post)}
                               data-testid={`button-images-${post.id}`} title="Manage images"
                               className={post.featuredImageUrl ? 'text-primary border-primary/40' : ''}>
