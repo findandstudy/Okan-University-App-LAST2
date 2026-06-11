@@ -31,6 +31,7 @@ import ContentGenerator from "@/pages/admin/ContentGenerator";
 import BlogAdmin from "@/pages/admin/Blog";
 import BlogIndex from "@/pages/Blog";
 import BlogPost from "@/pages/BlogPost";
+import PreviewPage from "@/pages/admin/PreviewPage";
 import NotFound from "@/pages/not-found";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -102,6 +103,8 @@ function Router() {
       <Route path="/admin/blog" component={() => <RequireAuth><BlogAdmin /></RequireAuth>} />
       <Route path="/admin/sites" component={() => <RequireAuth><Sites /></RequireAuth>} />
       <Route path="/admin/sites/:tenantId" component={SiteEditor} />
+      <Route path="/admin/preview/:tenantId" component={() => <RequireAuth><PreviewPage /></RequireAuth>} />
+      <Route path="/admin/preview/:tenantId/:lang" component={() => <RequireAuth><PreviewPage /></RequireAuth>} />
 
       {/* Blog public routes — language-prefixed */}
       <Route path="/blog" component={BlogIndex} />

@@ -324,9 +324,9 @@ export default function Sites() {
             : isPublished ? <PowerOff className="h-3.5 w-3.5" /> : <Power className="h-3.5 w-3.5" />}
           {isPublished ? 'Unpublish' : 'Publish'}
         </Button>
-        <a href={devPreviewUrl(tenant)} target="_blank" rel="noopener noreferrer">
+        <a href={`/admin/preview/${tenant.id}`} target="_blank" rel="noopener noreferrer">
           <Button variant="ghost" size="sm" className="gap-1.5 h-8" data-testid={`button-preview-${tenant.id}`}>
-            <Eye className="h-3.5 w-3.5" />Dev
+            <Eye className="h-3.5 w-3.5" />Preview
           </Button>
         </a>
         {tenant.domain && (
@@ -528,9 +528,9 @@ export default function Sites() {
                       title="Refresh preview" data-testid={`button-refresh-preview-${tenant.id}`}>
                       <RefreshCw className="h-3.5 w-3.5" />
                     </button>
-                    <a href={devPreviewUrl(tenant)} target="_blank" rel="noopener noreferrer"
+                    <a href={`/admin/preview/${tenant.id}`} target="_blank" rel="noopener noreferrer"
                       className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-background/80 backdrop-blur-sm rounded-md p-1.5 shadow hover:bg-background"
-                      title="Open dev preview" data-testid={`button-open-dev-${tenant.id}`}>
+                      title="Open full preview" data-testid={`button-open-dev-${tenant.id}`}>
                       <ExternalLink className="h-3.5 w-3.5" />
                     </a>
                   </div>

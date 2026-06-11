@@ -55,13 +55,15 @@ const DEVICE_SIZES = [
   { id: 'mobile',  icon: Smartphone, label: 'Mobile', width: '390px' },
 ] as const;
 
-function SitePreviewTab() {
+function SitePreviewTab({ tenantId }: { tenantId: string }) {
   const [lang, setLang] = useState('en');
   const [device, setDevice] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
   const [refreshKey, setRefreshKey] = useState(0);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
-  const previewUrl = `/${lang}`;
+  const tidParam = tenantId && tenantId !== 'default' ? `?_tid=${tenantId}` : '';
+  const previewUrl = `/${lang}${tidParam}`;
+  const fullPreviewUrl = `/admin/preview/${tenantId}/${lang}`;
   const deviceWidth = DEVICE_SIZES.find(d => d.id === device)?.width ?? '100%';
 
   const handleRefresh = () => setRefreshKey(k => k + 1);
@@ -91,7 +93,7 @@ function SitePreviewTab() {
         </div>
 
         {/* Language picker */}
-        <Select value={lang} onValueChange={setLang}>
+        <Select value={lang} onValueChange={v => { setLang(v); setRefreshKey(k => k + 1); }}>
           <SelectTrigger className="w-36 h-9" data-testid="select-preview-lang">
             <SelectValue />
           </SelectTrigger>
@@ -116,11 +118,11 @@ function SitePreviewTab() {
           Yenile
         </Button>
 
-        {/* Open in new tab */}
-        <a href={previewUrl} target="_blank" rel="noopener noreferrer">
-          <Button variant="ghost" size="sm" className="gap-1.5" data-testid="button-preview-newtab">
+        {/* Full-page preview */}
+        <a href={fullPreviewUrl} target="_blank" rel="noopener noreferrer">
+          <Button variant="default" size="sm" className="gap-1.5" data-testid="button-fullpage-preview">
             <ExternalLink className="h-3.5 w-3.5" />
-            Yeni Sekme
+            Tam Sayfa Önizle
           </Button>
         </a>
 
@@ -921,6 +923,12 @@ export default function SiteEditor() {
                 {exportingZip ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
                 ZIP
               </Button>
+              <a href={`/admin/preview/${tenantId}`} target="_blank" rel="noopener noreferrer">
+                <Button variant="outline" size="sm" className="gap-1" data-testid="button-preview-site">
+                  <Monitor className="h-3 w-3" />
+                  Preview
+                </Button>
+              </a>
               {tenant?.domain && (
                 <a href={`https://${tenant.domain}`} target="_blank" rel="noopener noreferrer">
                   <Button variant="ghost" size="sm" className="gap-1" data-testid="button-visit-site">
@@ -954,7 +962,7 @@ export default function SiteEditor() {
             </TabsList>
 
             <TabsContent value="preview" className="mt-4">
-              <SitePreviewTab />
+              <SitePreviewTab tenantId={tenantId} />
             </TabsContent>
 
             <TabsContent value="sections" className="mt-4">
