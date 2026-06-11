@@ -18,7 +18,7 @@ import {
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
-import { GripVertical, Eye, EyeOff, Loader2, Pencil, Plus, Trash2, Globe } from 'lucide-react';
+import { GripVertical, Eye, EyeOff, Loader2, Pencil, Plus, Trash2, Globe, Phone, MapPin, MessageCircle, Mail } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -375,8 +375,26 @@ export default function Sections({ embedded }: { embedded?: boolean } = {}) {
   };
 
   // ─── Stat items helpers ──────────────────────────────────────────────────────
-  const getStatItems = (): StatItem[] => (settingsForm.items as StatItem[]) || [];
+  const getStatItems = (): StatItem[] =>
+    editingSection?.key === 'stats' ? ((settingsForm.items as StatItem[]) || []) : [];
   const setStatItems = (items: StatItem[]) => setSettingsForm(prev => ({ ...prev, items }));
+
+  // ─── Contact items helpers ────────────────────────────────────────────────────
+  interface ContactItem { icon: string; label: Record<string, string>; value: string; }
+  const CONTACT_ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
+    phone: Phone, address: MapPin, whatsapp: MessageCircle, email: Mail,
+  };
+  const DEFAULT_CONTACT_ITEMS: ContactItem[] = [
+    { icon: 'phone',    label: { en: 'Phone',    tr: 'Telefon', ar: 'الهاتف' },           value: '' },
+    { icon: 'address',  label: { en: 'Address',  tr: 'Adres',   ar: 'العنوان' },          value: '' },
+    { icon: 'whatsapp', label: { en: 'WhatsApp', tr: 'WhatsApp',ar: 'واتساب' },           value: '' },
+    { icon: 'email',    label: { en: 'Email',    tr: 'E-posta', ar: 'البريد الإلكتروني' }, value: '' },
+  ];
+  const getContactItems = (): ContactItem[] => {
+    const raw = settingsForm.items as ContactItem[] | undefined;
+    return (raw && raw.length > 0) ? raw : DEFAULT_CONTACT_ITEMS;
+  };
+  const setContactItems = (items: ContactItem[]) => setSettingsForm(prev => ({ ...prev, items }));
 
   if (isLoading) {
     return (
@@ -636,45 +654,83 @@ export default function Sections({ embedded }: { embedded?: boolean } = {}) {
               )}
 
               {editingSection.key === 'contact' && (
-                <div className="space-y-4">
-                  <p className="text-xs text-muted-foreground">
-                    Embed an external form widget on the left column. Leave both empty to use the built-in contact form.
-                  </p>
+                <div className="space-y-5">
+                  {/* ── Left column: form widget ── */}
                   <div>
-                    <Label>Form Widget — iframe URL</Label>
-                    <Input
-                      value={(settingsForm.formIframeUrl as string) || ''}
-                      onChange={(e) => setSettingsForm(prev => ({ ...prev, formIframeUrl: e.target.value, formEmbedCode: '' }))}
-                      placeholder="https://portal.example.com/embed/form"
-                      className="mt-1.5"
-                      data-testid="input-contact-iframe-url"
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">Embeds the URL as an iframe. Leave empty if using embed code below.</p>
+                    <p className="text-sm font-medium mb-3">Left Column — Form Widget</p>
+                    <div className="space-y-3">
+                      <div>
+                        <Label>iframe URL</Label>
+                        <Input
+                          value={(settingsForm.formIframeUrl as string) || ''}
+                          onChange={(e) => setSettingsForm(prev => ({ ...prev, formIframeUrl: e.target.value, formEmbedCode: '' }))}
+                          placeholder="https://portal.example.com/embed/form"
+                          className="mt-1.5"
+                          data-testid="input-contact-iframe-url"
+                        />
+                        <p className="text-xs text-muted-foreground mt-1">Embed via URL. Clears embed code if filled.</p>
+                      </div>
+                      <div>
+                        <Label>HTML Embed Code</Label>
+                        <Textarea
+                          value={(settingsForm.formEmbedCode as string) || ''}
+                          onChange={(e) => setSettingsForm(prev => ({ ...prev, formEmbedCode: e.target.value, formIframeUrl: '' }))}
+                          placeholder={'<div data-widget="..."></div>\n<script src="..."></script>'}
+                          rows={4}
+                          className="mt-1.5 font-mono text-xs"
+                          data-testid="input-contact-embed-code"
+                        />
+                        <p className="text-xs text-muted-foreground mt-1">Paste HTML/script from your CRM. Clears URL if filled.</p>
+                      </div>
+                      {((settingsForm.formIframeUrl as string) || (settingsForm.formEmbedCode as string)) && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="text-destructive hover:text-destructive px-0"
+                          onClick={() => setSettingsForm(prev => ({ ...prev, formIframeUrl: '', formEmbedCode: '' }))}
+                          data-testid="button-clear-contact-widget"
+                        >
+                          Remove widget — use built-in form
+                        </Button>
+                      )}
+                    </div>
                   </div>
-                  <div>
-                    <Label>Form Widget — HTML Embed Code</Label>
-                    <Textarea
-                      value={(settingsForm.formEmbedCode as string) || ''}
-                      onChange={(e) => setSettingsForm(prev => ({ ...prev, formEmbedCode: e.target.value, formIframeUrl: '' }))}
-                      placeholder={'<div data-widget="..."></div>\n<script src="..."></script>'}
-                      rows={5}
-                      className="mt-1.5 font-mono text-xs"
-                      data-testid="input-contact-embed-code"
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">Paste HTML/script from your CRM. Leave empty if using iframe URL above.</p>
+
+                  <div className="border-t pt-4">
+                    <p className="text-sm font-medium mb-3">Right Column — Contact Channels</p>
+                    <div className="space-y-3">
+                      {getContactItems().map((item, idx) => {
+                        const IconComponent = CONTACT_ICON_MAP[item.icon] || Phone;
+                        return (
+                          <div key={idx} className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                              <IconComponent className="h-4 w-4 text-primary" />
+                            </div>
+                            <div className="flex-1">
+                              <Label className="text-xs text-muted-foreground capitalize">{item.icon}</Label>
+                              <Input
+                                value={item.value}
+                                onChange={(e) => {
+                                  const updated = [...getContactItems()];
+                                  updated[idx] = { ...updated[idx], value: e.target.value };
+                                  setContactItems(updated);
+                                }}
+                                placeholder={
+                                  item.icon === 'phone' ? '+90 212 000 00 00' :
+                                  item.icon === 'address' ? 'University Campus, Istanbul' :
+                                  item.icon === 'whatsapp' ? '+90 552 000 00 00' :
+                                  'contact@university.edu'
+                                }
+                                className="mt-0.5 h-8 text-sm"
+                                data-testid={`input-contact-item-${idx}`}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
-                  {((settingsForm.formIframeUrl as string) || (settingsForm.formEmbedCode as string)) && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="text-destructive hover:text-destructive"
-                      onClick={() => setSettingsForm(prev => ({ ...prev, formIframeUrl: '', formEmbedCode: '' }))}
-                      data-testid="button-clear-contact-widget"
-                    >
-                      Remove widget — use built-in form
-                    </Button>
-                  )}
                 </div>
               )}
             </div>
