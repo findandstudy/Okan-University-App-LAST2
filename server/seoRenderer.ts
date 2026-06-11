@@ -6,6 +6,9 @@
  * without executing any JavaScript.
  */
 import { storage } from './storage';
+import { db } from './db';
+import { blogPostTranslations, blogPosts } from '../shared/schema';
+import { and, eq } from 'drizzle-orm';
 import type { Request } from 'express';
 import type { Tenant } from '../shared/schema';
 
@@ -159,6 +162,14 @@ async function buildTenantMeta(
     },
   ];
 
+  // hreflang: generate for every language the app supports
+  // (tenant.supportedLanguages may only list defaults; the site renders all LANG_CODES)
+  const canonicalBase = seo?.canonicalUrl || baseUrl;
+  const hreflang = LANG_CODES.map(l => ({
+    lang: l,
+    href: `${canonicalBase}/${l}/`,
+  }));
+
   return {
     title,
     description,
@@ -169,8 +180,32 @@ async function buildTenantMeta(
     twitterCard: seo?.twitterCard || 'summary_large_image',
     canonical: seo?.canonicalUrl || baseUrl,
     robots: seo?.robotsDirective || undefined,
+    hreflang,
     jsonLd,
   };
+}
+
+/**
+ * When a blog URL is hit but the slug+lang combo isn't in the DB,
+ * search across ALL languages for this tenant. This handles:
+ * - Language prefix mismatch (e.g., /en/blog/turkish-slug)
+ * - New slugs not yet cached (slug exists in another lang)
+ */
+async function findPostBySlugAnyLang(
+  tenantId: string,
+  slug: string,
+): Promise<{ post: typeof blogPosts.$inferSelect; translation: typeof blogPostTranslations.$inferSelect } | undefined> {
+  const rows = await db
+    .select({ post: blogPosts, translation: blogPostTranslations })
+    .from(blogPostTranslations)
+    .innerJoin(blogPosts, eq(blogPostTranslations.postId, blogPosts.id))
+    .where(and(
+      eq(blogPostTranslations.tenantId, tenantId),
+      eq(blogPostTranslations.slug, slug),
+    ))
+    .limit(1);
+
+  return rows[0];
 }
 
 // ── Main export ────────────────────────────────────────────────────────────────
@@ -229,10 +264,19 @@ export async function injectSeoMeta(html: string, req: Request): Promise<string>
       const slug = decodeURIComponent(blogPostMatch[2]);
       const lang = langParam && LANG_CODES.includes(langParam) ? langParam : 'en';
 
-      const result = await storage.getBlogPostTranslationBySlug(tenant.id, lang, slug);
+      // 1. Try exact lang+slug match
+      let result = await storage.getBlogPostTranslationBySlug(tenant.id, lang, slug);
+
+      // 2. If not found, try any language (handles cross-lang URLs and new slugs)
+      if (!result) {
+        result = await findPostBySlugAnyLang(tenant.id, slug) ?? undefined;
+      }
 
       if (result) {
         const { post, translation } = result;
+        // Use the found translation's actual lang (may differ from URL lang)
+        const actualLang = translation.lang || lang;
+
         const [allTranslations, images] = await Promise.all([
           storage.getBlogPostTranslations(post.id),
           storage.getBlogPostImages(post.id),
@@ -247,11 +291,15 @@ export async function injectSeoMeta(html: string, req: Request): Promise<string>
         const description = trunc(rawDesc, 160);
         const title = translation.metaTitle || translation.title;
 
-        // hreflang for every available language
-        const hreflang = allTranslations.map(t => ({
-          lang: t.lang,
-          href: `${baseUrl}/${t.lang}/blog/${t.slug}`,
-        }));
+        // hreflang for every available translation — skip bots-unfriendly empty slugs
+        const hreflang = allTranslations
+          .filter(t => t.slug && t.slug.length > 3 && !t.slug.startsWith('--') && !t.slug.startsWith('-'))
+          .map(t => ({
+            lang: t.lang,
+            href: `${baseUrl}/${t.lang}/blog/${t.slug}`,
+          }));
+
+        const canonicalUrl = `${baseUrl}/${actualLang}/blog/${translation.slug}`;
 
         const jsonLd = {
           '@context': 'https://schema.org',
@@ -260,8 +308,8 @@ export async function injectSeoMeta(html: string, req: Request): Promise<string>
           description: trunc(rawDesc, 220),
           ...(heroImage ? { image: heroImage } : {}),
           ...(post.createdAt ? { datePublished: (post.createdAt as Date).toISOString() } : {}),
-          url: `${baseUrl}/${lang}/blog/${translation.slug}`,
-          inLanguage: lang,
+          url: canonicalUrl,
+          inLanguage: actualLang,
           author: {
             '@type': 'Organization',
             name: tenant.universityName,
@@ -283,16 +331,18 @@ export async function injectSeoMeta(html: string, req: Request): Promise<string>
           description,
           ogType: 'article',
           ogImage: heroImage,
-          ogUrl: `${baseUrl}/${lang}/blog/${translation.slug}`,
+          ogUrl: canonicalUrl,
           siteName: tenant.universityName,
           twitterCard: 'summary_large_image',
-          canonical: `${baseUrl}/${lang}/blog/${translation.slug}`,
-          hreflang,
+          canonical: canonicalUrl,
+          hreflang: hreflang.length > 1 ? hreflang : undefined,
           jsonLd,
         };
       } else {
-        // Blog post not found in this lang — fall back to tenant defaults
-        meta = await buildTenantMeta(tenant, baseUrl, lang);
+        // Slug not found anywhere — still set og:type=article with tenant fallback
+        // so at least the page-type signal is correct
+        const fallback = await buildTenantMeta(tenant, baseUrl, lang);
+        meta = { ...fallback, ogType: 'article' };
       }
     }
 
