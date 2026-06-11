@@ -2012,7 +2012,7 @@ Rules:
       const encryptedApiKey = apiKey
         ? encryptApiKey(apiKey)
         : (existing?.encryptedApiKey || undefined);
-      await saveImageConfig(req.tenantId, { source, model: model || 'dall-e-2', encryptedApiKey });
+      await saveImageConfig(req.tenantId, { source, model: model || 'gpt-image-1', encryptedApiKey });
       res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ error: err?.message });

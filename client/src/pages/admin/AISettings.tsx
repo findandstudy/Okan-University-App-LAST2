@@ -30,8 +30,9 @@ const OPENAI_MODELS = [
 ];
 
 const DALLE_MODELS = [
-  { value: 'dall-e-2', label: 'DALL-E 2 (recommended — widely accessible)' },
-  { value: 'dall-e-3', label: 'DALL-E 3 (best quality — requires OpenAI account access)' },
+  { value: 'gpt-image-1', label: 'GPT Image 1 (recommended — newest, works on all account types)' },
+  { value: 'dall-e-2', label: 'DALL-E 2 (legacy — may not be available on newer accounts)' },
+  { value: 'dall-e-3', label: 'DALL-E 3 (legacy — may not be available on newer accounts)' },
 ];
 
 interface AISettingsData {

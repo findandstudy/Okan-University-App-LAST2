@@ -162,25 +162,83 @@ export async function generateBlogImage(
         model,
         prompt: buildDallePrompt(keyword),
         n: 1,
+        // dall-e-3 supports wide landscape; others use square
         size: model === 'dall-e-3' ? '1792x1024' : '1024x1024',
         ...(model === 'dall-e-3' ? { quality: 'standard' } : {}),
+        // gpt-image-1 defaults to b64_json — request URL when possible
+        ...(model === 'gpt-image-1' ? { output_format: 'webp' } : {}),
       });
 
-      // Use the model saved in AI Settings (defaults to dall-e-2 — most widely accessible)
-      const dalleModel = config.model || 'dall-e-2';
-      let resp;
-      try {
-        resp = await client.images.generate(buildParams(dalleModel) as any);
-      } catch (modelErr: any) {
-        // Surface the real OpenAI error message to the caller — never silently swallow it
-        const msg = modelErr?.error?.message || modelErr?.message || String(modelErr);
-        console.error(`[BlogImageService] DALL-E error (model: ${dalleModel}):`, msg);
+      // Fallback chain: configured model first, then alternatives in order
+      const configured = config.model || 'dall-e-2';
+      const FALLBACK_CHAIN = ['dall-e-2', 'dall-e-3', 'gpt-image-1'];
+      // Put configured model first, then the rest (deduped)
+      const modelsToTry = [configured, ...FALLBACK_CHAIN.filter(m => m !== configured)];
+
+      let resp: any;
+      let lastErr: any;
+
+      for (const dalleModel of modelsToTry) {
+        try {
+          console.log(`[BlogImageService] Trying model: ${dalleModel}`);
+          resp = await client.images.generate(buildParams(dalleModel) as any);
+          console.log(`[BlogImageService] ✅ Success with model: ${dalleModel}`);
+          break; // success — stop trying
+        } catch (modelErr: any) {
+          lastErr = modelErr;
+          // Full structured log so we can diagnose exactly what OpenAI returned
+          console.error(`[BlogImageService] ❌ Model ${dalleModel} failed:`, {
+            status:  modelErr?.status,
+            message: modelErr?.message,
+            type:    modelErr?.error?.type,
+            code:    modelErr?.error?.code,
+            param:   modelErr?.error?.param,
+            error:   modelErr?.error,
+          });
+
+          // Only continue to next model if OpenAI says the model doesn't exist
+          const combinedMsg = `${modelErr?.message || ''} ${modelErr?.error?.message || ''}`.toLowerCase();
+          const isModelError =
+            modelErr?.status === 404 ||
+            combinedMsg.includes('does not exist') ||
+            combinedMsg.includes('model_not_found') ||
+            combinedMsg.includes('no such model') ||
+            combinedMsg.includes('unsupported_value');
+
+          if (!isModelError) {
+            // Auth, billing, content-policy, rate-limit errors → don't retry, surface immediately
+            const msg = modelErr?.error?.message || modelErr?.message || String(modelErr);
+            throw new Error(msg);
+          }
+          console.warn(`[BlogImageService] Model ${dalleModel} unavailable, trying next…`);
+        }
+      }
+
+      if (!resp) {
+        const msg = lastErr?.error?.message || lastErr?.message || 'All image models unavailable for this API key';
         throw new Error(msg);
       }
 
-      const imageUrl = resp.data?.[0]?.url;
-      if (!imageUrl) return null;
-      const savedUrl = await downloadAndSaveWebP(imageUrl, `blog-ai-${slug}`);
+      const item = resp.data?.[0];
+      let savedUrl: string;
+
+      if (item?.url) {
+        // DALL-E 2 / DALL-E 3 → temporary URL
+        savedUrl = await downloadAndSaveWebP(item.url, `blog-ai-${slug}`);
+      } else if (item?.b64_json) {
+        // gpt-image-1 → base64-encoded image bytes
+        const sharp = (await import('sharp')).default;
+        const rawBuf = Buffer.from(item.b64_json, 'base64');
+        const webpBuf = await sharp(rawBuf)
+          .resize({ width: 1200, height: 630, fit: 'cover' })
+          .webp({ quality: 82 })
+          .toBuffer();
+        savedUrl = await saveUpload(webpBuf, `blog-ai-${slug}.webp`);
+      } else {
+        console.error('[BlogImageService] Response had no url or b64_json:', JSON.stringify(resp.data));
+        return null;
+      }
+
       return { url: savedUrl, altByLang, source: 'ai_openai' };
     }
 
