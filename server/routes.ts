@@ -1206,6 +1206,49 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/admin/ai/translate-all-sections", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
+    try {
+      const { targetLangs } = req.body;
+      if (!Array.isArray(targetLangs) || targetLangs.length === 0) {
+        return res.status(400).json({ error: "targetLangs array is required" });
+      }
+      const { translateContentByLang } = await import('./aiTranslation');
+
+      const sections = await storage.getSections(req.tenantId);
+      const results: Array<{ id: string; sectionKey: string; translated: Record<string, Record<string, string>> }> = [];
+
+      for (const section of sections) {
+        const enContent = (section.contentByLang as any)?.['en'];
+        if (!enContent) continue;
+
+        // Only translate non-empty fields
+        const sourceContent: Record<string, string> = {};
+        for (const [field, val] of Object.entries(enContent)) {
+          if (typeof val === 'string' && val.trim()) {
+            sourceContent[field] = val;
+          }
+        }
+        if (Object.keys(sourceContent).length === 0) continue;
+
+        const translated = await translateContentByLang(sourceContent, 'en', targetLangs, req.tenantId);
+
+        // Merge translations into existing contentByLang
+        const existingCBL = (section.contentByLang as Record<string, Record<string, string>>) || {};
+        const newCBL: Record<string, Record<string, string>> = { ...existingCBL, en: enContent };
+        for (const [lang, content] of Object.entries(translated)) {
+          newCBL[lang] = { ...(existingCBL[lang] || {}), ...content };
+        }
+
+        await storage.updateSection(section.id, { contentByLang: newCBL });
+        results.push({ id: section.id, sectionKey: section.sectionKey, translated });
+      }
+
+      res.json({ ok: true, sectionsTranslated: results.length, results });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || "Translation failed" });
+    }
+  });
+
   app.post("/api/admin/ai/generate-content", requireAdmin, resolveTenant, requireAdminTenantAccess, upload.single('file'), async (req, res) => {
     try {
       const { url, text } = req.body;
