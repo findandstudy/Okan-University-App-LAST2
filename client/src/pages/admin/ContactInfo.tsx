@@ -9,8 +9,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Save, Loader2, Phone, MapPin, MessageCircle, Mail } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Save, Loader2, Phone, MapPin, MessageCircle, Mail, Code, Globe, Info } from 'lucide-react';
 import { SUPPORTED_LANGUAGES, type SupportedLanguage } from '@shared/schema';
 
 function EmbeddableLayout({ embedded, children }: { embedded?: boolean; children: React.ReactNode }) {
@@ -28,6 +30,8 @@ interface ContactSettings {
   sectionTitle: Partial<Record<SupportedLanguage, string>>;
   sectionSubtitle: Partial<Record<SupportedLanguage, string>>;
   items: ContactItem[];
+  formIframeUrl?: string;
+  formEmbedCode?: string;
 }
 
 interface Section {
@@ -85,10 +89,13 @@ export default function ContactInfo({ embedded }: { embedded?: boolean } = {}) {
   const [, navigate] = useLocation();
   useEffect(() => { if (!embedded && !tenantId) navigate('/admin/sites'); }, [embedded, tenantId]);
   const [activeTab, setActiveTab] = useState<SupportedLanguage>('en');
+  const [widgetMode, setWidgetMode] = useState<'iframe' | 'embed'>('iframe');
   const [settings, setSettings] = useState<ContactSettings>({
     sectionTitle: { en: 'Contact Us', ar: 'اتصل بنا', tr: 'İletişim', fr: 'Contactez-nous', ru: 'Контакты', fa: 'تماس با ما', zh: '联系我们', hi: 'संपर्क करें', es: 'Contáctenos', id: 'Hubungi Kami' },
     sectionSubtitle: { en: 'Have questions? Reach out to our admissions team', ar: 'هل لديك أسئلة؟ تواصل مع فريق القبول لدينا', tr: 'Sorularınız mı var? Kabul ekibimizle iletişime geçin', fr: 'Des questions ? Contactez notre équipe d\'admission', ru: 'Есть вопросы? Свяжитесь с нашей приемной комиссией', fa: 'سوالی دارید؟ با تیم پذیرش ما تماس بگیرید', zh: '有问题？联系我们的招生团队', hi: 'प्रश्न हैं? हमारी प्रवेश टीम से संपर्क करें', es: '¿Preguntas? Contacte a nuestro equipo', id: 'Ada pertanyaan? Hubungi tim penerimaan kami' },
     items: defaultItems,
+    formIframeUrl: '',
+    formEmbedCode: '',
   });
 
   const { data: sections = [], isLoading } = useQuery<Section[]>({
@@ -98,7 +105,10 @@ export default function ContactInfo({ embedded }: { embedded?: boolean } = {}) {
   useEffect(() => {
     const contactSection = sections.find(s => s.sectionKey === 'contact');
     if (contactSection?.settings) {
-      setSettings(contactSection.settings as ContactSettings);
+      const s = contactSection.settings as ContactSettings;
+      setSettings(s);
+      if (s.formEmbedCode) setWidgetMode('embed');
+      else setWidgetMode('iframe');
     }
   }, [sections]);
 
@@ -119,6 +129,7 @@ export default function ContactInfo({ embedded }: { embedded?: boolean } = {}) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/sections' + apiSuffix] });
+      queryClient.invalidateQueries({ queryKey: ['/api/sections'] });
       toast({ title: 'Contact info saved', description: 'Your changes have been saved successfully.' });
     },
     onError: () => {
@@ -127,7 +138,12 @@ export default function ContactInfo({ embedded }: { embedded?: boolean } = {}) {
   });
 
   const handleSave = () => {
-    saveMutation.mutate(settings);
+    const cleanSettings: ContactSettings = {
+      ...settings,
+      formIframeUrl: widgetMode === 'iframe' ? (settings.formIframeUrl || '') : '',
+      formEmbedCode: widgetMode === 'embed' ? (settings.formEmbedCode || '') : '',
+    };
+    saveMutation.mutate(cleanSettings);
   };
 
   const updateItem = (index: number, field: 'value', value: string) => {
@@ -166,7 +182,7 @@ export default function ContactInfo({ embedded }: { embedded?: boolean } = {}) {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold">Contact Info</h1>
-            <p className="text-muted-foreground">Manage contact information displayed on the landing page</p>
+            <p className="text-muted-foreground">Manage the contact section on the landing page</p>
           </div>
           <Button onClick={handleSave} disabled={saveMutation.isPending} data-testid="button-save-contact">
             {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
@@ -174,6 +190,99 @@ export default function ContactInfo({ embedded }: { embedded?: boolean } = {}) {
           </Button>
         </div>
 
+        {/* ── Form Widget ─────────────────────────────────────────── */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Code className="h-5 w-5" />
+              Form Widget (Left Column)
+            </CardTitle>
+            <CardDescription>
+              Embed an external form or widget on the left side. Leave empty to use the built-in contact form.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Alert>
+              <Info className="h-4 w-4" />
+              <AlertDescription>
+                Choose <strong>iframe URL</strong> to embed a clean widget via URL, or <strong>HTML Embed Code</strong> to paste raw HTML/script from your lead system.
+              </AlertDescription>
+            </Alert>
+
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant={widgetMode === 'iframe' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setWidgetMode('iframe')}
+                className="flex items-center gap-2"
+                data-testid="button-mode-iframe"
+              >
+                <Globe className="h-4 w-4" />
+                iframe URL
+              </Button>
+              <Button
+                type="button"
+                variant={widgetMode === 'embed' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setWidgetMode('embed')}
+                className="flex items-center gap-2"
+                data-testid="button-mode-embed"
+              >
+                <Code className="h-4 w-4" />
+                HTML Embed Code
+              </Button>
+            </div>
+
+            {widgetMode === 'iframe' ? (
+              <div>
+                <Label htmlFor="formIframeUrl">Widget URL</Label>
+                <Input
+                  id="formIframeUrl"
+                  value={settings.formIframeUrl || ''}
+                  onChange={(e) => setSettings({ ...settings, formIframeUrl: e.target.value })}
+                  placeholder="https://portal.example.com/embed/form"
+                  className="mt-1.5"
+                  data-testid="input-form-iframe-url"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  The URL will be embedded as an iframe in the left column.
+                </p>
+              </div>
+            ) : (
+              <div>
+                <Label htmlFor="formEmbedCode">HTML Embed Code</Label>
+                <Textarea
+                  id="formEmbedCode"
+                  value={settings.formEmbedCode || ''}
+                  onChange={(e) => setSettings({ ...settings, formEmbedCode: e.target.value })}
+                  placeholder={'<div data-widget="..."></div>\n<script src="..."></script>'}
+                  rows={8}
+                  className="mt-1.5 font-mono text-sm"
+                  data-testid="textarea-form-embed-code"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Paste the complete HTML embed code from your CRM or lead management system.
+                </p>
+              </div>
+            )}
+
+            {(settings.formIframeUrl || settings.formEmbedCode) && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="text-destructive hover:text-destructive"
+                onClick={() => setSettings({ ...settings, formIframeUrl: '', formEmbedCode: '' })}
+                data-testid="button-clear-widget"
+              >
+                Remove widget — use built-in form
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* ── Section header + contact channels ───────────────────── */}
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as SupportedLanguage)}>
           <TabsList className="mb-4">
             {SUPPORTED_LANGUAGES.map((lang) => (
@@ -220,7 +329,7 @@ export default function ContactInfo({ embedded }: { embedded?: boolean } = {}) {
 
               <Card>
                 <CardHeader>
-                  <CardTitle>Contact Information</CardTitle>
+                  <CardTitle>Contact Channels (Right Column)</CardTitle>
                   <CardDescription>Phone, address, WhatsApp, and email details</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">

@@ -15,102 +15,84 @@ export function Contact() {
   const { t, isRTL, language } = useI18n();
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    message: '',
-  });
+  const [formData, setFormData] = useState({ name: '', email: '', message: '' });
   const embedContainerRef = useRef<HTMLDivElement>(null);
 
-  const { data: tenant } = useQuery<Tenant>({
-    queryKey: ['/api/tenant'],
-  });
+  const { data: tenant } = useQuery<Tenant>({ queryKey: ['/api/tenant'] });
+  const { data: sections = [] } = useQuery<any[]>({ queryKey: ['/api/sections'] });
 
-  useEffect(() => {
-    if (tenant?.contactFormEmbed && embedContainerRef.current) {
-      const container = embedContainerRef.current;
-      container.innerHTML = tenant.contactFormEmbed;
-      
-      const scripts = container.querySelectorAll('script');
-      const jqueryScripts: HTMLScriptElement[] = [];
-      const otherExternalScripts: HTMLScriptElement[] = [];
-      const inlineScripts: HTMLScriptElement[] = [];
-      
-      scripts.forEach((oldScript) => {
-        if (oldScript.src) {
-          if (oldScript.src.includes('jquery')) {
-            jqueryScripts.push(oldScript);
-          } else {
-            otherExternalScripts.push(oldScript);
-          }
-        } else {
-          inlineScripts.push(oldScript);
-        }
-      });
-      
-      const loadScript = (oldScript: HTMLScriptElement): Promise<void> => {
-        return new Promise((resolve) => {
-          const newScript = document.createElement('script');
-          newScript.src = oldScript.src;
-          newScript.onload = () => resolve();
-          newScript.onerror = () => resolve();
-          oldScript.parentNode?.replaceChild(newScript, oldScript);
-        });
-      };
-      
-      const loadAllScripts = async () => {
-        for (const script of jqueryScripts) {
-          await loadScript(script);
-        }
-        
-        for (const script of otherExternalScripts) {
-          await loadScript(script);
-        }
-        
-        await new Promise(resolve => setTimeout(resolve, 100));
-        
-        inlineScripts.forEach((oldScript) => {
-          try {
-            const newScript = document.createElement('script');
-            newScript.textContent = oldScript.textContent;
-            oldScript.parentNode?.replaceChild(newScript, oldScript);
-          } catch (e) {
-            console.warn('Inline script error:', e);
-          }
-        });
-      };
-      
-      loadAllScripts();
-    }
-  }, [tenant?.contactFormEmbed]);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-
-    toast({
-      title: 'Message Sent!',
-      description: 'We will get back to you within 24 hours.',
-    });
-
-    setFormData({ name: '', email: '', message: '' });
-    setIsSubmitting(false);
-  };
-
-  const { data: sections = [] } = useQuery<any[]>({
-    queryKey: ['/api/sections'],
-  });
-
-  const contactSection = sections.find(s => s.sectionKey === 'contact');
+  const contactSection = sections.find((s: any) => s.sectionKey === 'contact');
   const contactSettings = contactSection?.settings as {
     sectionTitle?: Record<string, string>;
     sectionSubtitle?: Record<string, string>;
     items?: Array<{ icon: string; label: Record<string, string>; value: string }>;
+    formIframeUrl?: string;
+    formEmbedCode?: string;
   } | undefined;
 
   const currentLang = language as string;
+
+  // Resolve widget: section settings take priority over legacy tenant.contactFormEmbed
+  const formIframeUrl = contactSettings?.formIframeUrl?.trim() || '';
+  const formEmbedCode = contactSettings?.formEmbedCode?.trim() || tenant?.contactFormEmbed?.trim() || '';
+  const hasWidget = !!(formIframeUrl || formEmbedCode);
+
+  useEffect(() => {
+    if (!formEmbedCode || formIframeUrl || !embedContainerRef.current) return;
+    const container = embedContainerRef.current;
+    container.innerHTML = formEmbedCode;
+
+    const scripts = container.querySelectorAll('script');
+    const jqueryScripts: HTMLScriptElement[] = [];
+    const otherExternalScripts: HTMLScriptElement[] = [];
+    const inlineScripts: HTMLScriptElement[] = [];
+
+    scripts.forEach((oldScript) => {
+      if (oldScript.src) {
+        if (oldScript.src.includes('jquery')) jqueryScripts.push(oldScript);
+        else otherExternalScripts.push(oldScript);
+      } else {
+        inlineScripts.push(oldScript);
+      }
+    });
+
+    const loadScript = (oldScript: HTMLScriptElement): Promise<void> => {
+      return new Promise((resolve) => {
+        const newScript = document.createElement('script');
+        newScript.src = oldScript.src;
+        newScript.onload = () => resolve();
+        newScript.onerror = () => resolve();
+        oldScript.parentNode?.replaceChild(newScript, oldScript);
+      });
+    };
+
+    const loadAllScripts = async () => {
+      for (const script of jqueryScripts) await loadScript(script);
+      for (const script of otherExternalScripts) await loadScript(script);
+      await new Promise(resolve => setTimeout(resolve, 100));
+      inlineScripts.forEach((oldScript) => {
+        try {
+          const newScript = document.createElement('script');
+          newScript.textContent = oldScript.textContent;
+          oldScript.parentNode?.replaceChild(newScript, oldScript);
+        } catch (e) {
+          console.warn('Inline script error:', e);
+        }
+      });
+    };
+
+    loadAllScripts();
+    return () => { if (container) container.innerHTML = ''; };
+  }, [formEmbedCode, formIframeUrl]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    toast({ title: 'Message Sent!', description: 'We will get back to you within 24 hours.' });
+    setFormData({ name: '', email: '', message: '' });
+    setIsSubmitting(false);
+  };
 
   const iconMap: Record<string, React.ComponentType<any>> = {
     phone: Phone,
@@ -146,12 +128,11 @@ export function Contact() {
           className="text-center mb-12"
         >
           <h2 className="text-3xl md:text-4xl font-bold mb-4">{sectionTitle}</h2>
-          <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-            {sectionSubtitle}
-          </p>
+          <p className="text-muted-foreground text-lg max-w-2xl mx-auto">{sectionSubtitle}</p>
         </motion.div>
 
         <div className="grid lg:grid-cols-2 gap-8 max-w-5xl mx-auto">
+          {/* ── Left column: widget or default form ── */}
           <motion.div
             initial={{ opacity: 0, x: isRTL ? 20 : -20 }}
             whileInView={{ opacity: 1, x: 0 }}
@@ -160,8 +141,18 @@ export function Contact() {
           >
             <Card className="overflow-visible">
               <CardContent className="p-6">
-                {tenant?.contactFormEmbed ? (
-                  <div 
+                {formIframeUrl ? (
+                  <iframe
+                    src={formIframeUrl}
+                    className="w-full border-0 rounded"
+                    style={{ minHeight: 480 }}
+                    allow="camera; microphone; geolocation"
+                    loading="lazy"
+                    title="Contact Form"
+                    data-testid="iframe-contact-widget"
+                  />
+                ) : formEmbedCode ? (
+                  <div
                     ref={embedContainerRef}
                     className="embed-form-container [&_table]:w-full [&_input]:w-full [&_select]:w-full [&_input]:p-2 [&_input]:border [&_input]:rounded [&_select]:p-2 [&_select]:border [&_select]:rounded [&_label]:block [&_label]:mb-1 [&_label]:font-medium [&_td]:py-2 [&_.btn-primary]:bg-primary [&_.btn-primary]:text-primary-foreground [&_.btn-primary]:px-4 [&_.btn-primary]:py-2 [&_.btn-primary]:rounded [&_.btn-primary]:cursor-pointer [&_.btn-primary]:border-0"
                     data-testid="embed-form-container"
@@ -173,45 +164,36 @@ export function Contact() {
                       <Input
                         id="name"
                         value={formData.name}
-                        onChange={(e) =>
-                          setFormData({ ...formData, name: e.target.value.toUpperCase() })
-                        }
+                        onChange={(e) => setFormData({ ...formData, name: e.target.value.toUpperCase() })}
                         required
                         className="mt-1.5"
                         data-testid="input-contact-name"
                       />
                     </div>
-
                     <div>
                       <Label htmlFor="email">{t('contact.email')}</Label>
                       <Input
                         id="email"
                         type="email"
                         value={formData.email}
-                        onChange={(e) =>
-                          setFormData({ ...formData, email: e.target.value })
-                        }
+                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                         required
                         className="mt-1.5"
                         data-testid="input-contact-email"
                       />
                     </div>
-
                     <div>
                       <Label htmlFor="message">{t('contact.message')}</Label>
                       <Textarea
                         id="message"
                         value={formData.message}
-                        onChange={(e) =>
-                          setFormData({ ...formData, message: e.target.value })
-                        }
+                        onChange={(e) => setFormData({ ...formData, message: e.target.value })}
                         required
                         rows={4}
                         className="mt-1.5 resize-none"
                         data-testid="input-contact-message"
                       />
                     </div>
-
                     <Button
                       type="submit"
                       className="w-full gap-2"
@@ -227,6 +209,7 @@ export function Contact() {
             </Card>
           </motion.div>
 
+          {/* ── Right column: contact channels ── */}
           <motion.div
             initial={{ opacity: 0, x: isRTL ? -20 : 20 }}
             whileInView={{ opacity: 1, x: 0 }}
