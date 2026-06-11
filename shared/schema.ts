@@ -276,6 +276,7 @@ export const blogSchedule = pgTable("blog_schedule", {
   weekdays: text("weekdays").array().default(sql`ARRAY['1','2','3','4','5']::text[]`),
   mode: text("mode").default("onay").notNull(),
   isEnabled: boolean("is_enabled").default(false),
+  autoGenerateImages: boolean("auto_generate_images").default(true),
 });
 
 // Blog Post Images (multiple images per post)

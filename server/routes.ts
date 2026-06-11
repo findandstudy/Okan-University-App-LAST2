@@ -1655,22 +1655,28 @@ Rules:
           console.warn('[BlogGenerate] Status update failed:', (statusErr as any)?.message);
         }
 
-        // Image generation — wrapped so it never affects translation result
+        // Image generation — runs only if autoGenerateImages is enabled in schedule (default: true)
         try {
-          const { generateBlogImage } = await import('./blogImageService');
-          const generated = await generateBlogImage(enContent.title, keyword, req.tenantId);
-          if (generated) {
-            const freshPost = await storage.getBlogPost(id);
-            if (freshPost && !freshPost.featuredImageUrl) {
-              await storage.addBlogPostImage({
-                postId: id, tenantId: req.tenantId,
-                url: generated.url, altByLang: generated.altByLang as any,
-                attribution: generated.attribution || null,
-                source: generated.source, position: 0,
-              });
-              await storage.updateBlogPostFeaturedImage(id, generated.url, generated.altByLang as any);
-              console.log('[BlogGenerate] ✓ featured image saved');
+          const scheduleSettings = await storage.getBlogSchedule(req.tenantId);
+          const shouldAutoImage = scheduleSettings?.autoGenerateImages !== false;
+          if (shouldAutoImage) {
+            const { generateBlogImage } = await import('./blogImageService');
+            const generated = await generateBlogImage(enContent.title, keyword, req.tenantId);
+            if (generated) {
+              const freshPost = await storage.getBlogPost(id);
+              if (freshPost && !freshPost.featuredImageUrl) {
+                await storage.addBlogPostImage({
+                  postId: id, tenantId: req.tenantId,
+                  url: generated.url, altByLang: generated.altByLang as any,
+                  attribution: generated.attribution || null,
+                  source: generated.source, position: 0,
+                });
+                await storage.updateBlogPostFeaturedImage(id, generated.url, generated.altByLang as any);
+                console.log('[BlogGenerate] ✓ featured image saved');
+              }
             }
+          } else {
+            console.log('[BlogGenerate] Auto-image generation disabled in schedule settings — skipping');
           }
         } catch (imgErr) {
           console.warn('[BlogGenerate] Image generation skipped:', (imgErr as any)?.message);
@@ -1702,6 +1708,51 @@ Rules:
   // ─── Excel Import ─────────────────────────────────────────────────────────────
   const xlsxUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
+  // ─── Sample Excel template download ─────────────────────────────────────────
+  app.get("/api/admin/blog/sample-excel", requireAdmin, resolveTenant, requireAdminTenantAccess, async (_req, res) => {
+    try {
+      const xlsx = await import('xlsx');
+      const rows = [
+        {
+          title: 'Why You Should Study Medicine in Turkey',
+          keyword: 'study medicine turkey',
+          backlink_siteleri: 'partner1.edu, partner2.org',
+          auto_gorsel: 1,
+          yayinlanma_tarihi: '2026-07-01 09:00',
+          durum: 'zamanli',
+        },
+        {
+          title: 'Top Engineering Programs in Istanbul',
+          keyword: 'engineering programs istanbul',
+          backlink_siteleri: 'techpartner.com',
+          auto_gorsel: 1,
+          yayinlanma_tarihi: '2026-07-03 09:00',
+          durum: 'zamanli',
+        },
+        {
+          title: 'How to Get a Student Visa for Turkey',
+          keyword: 'turkey student visa guide',
+          backlink_siteleri: '',
+          auto_gorsel: 0,
+          yayinlanma_tarihi: '',
+          durum: 'taslak',
+        },
+      ];
+      const ws = xlsx.utils.json_to_sheet(rows);
+      ws['!cols'] = [
+        { wch: 50 }, { wch: 35 }, { wch: 30 }, { wch: 14 }, { wch: 20 }, { wch: 12 },
+      ];
+      const wb = xlsx.utils.book_new();
+      xlsx.utils.book_append_sheet(wb, ws, 'Blog Posts');
+      const buffer: Buffer = xlsx.write(wb, { type: 'buffer', bookType: 'xlsx' });
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', 'attachment; filename="blog-import-template.xlsx"');
+      res.send(buffer);
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || 'Failed to generate template' });
+    }
+  });
+
   app.post("/api/admin/blog/import", requireAdmin, resolveTenant, requireAdminTenantAccess, xlsxUpload.single("file"), async (req, res) => {
     try {
       const file = req.file;
@@ -1720,6 +1771,12 @@ Rules:
         const backlinkSites = typeof backlinkRaw === 'string'
           ? backlinkRaw.split(/[,;]/).map((s: string) => s.trim()).filter(Boolean)
           : [];
+        const autoGorselRaw = row['auto_gorsel'] ?? row['auto_image'] ?? row['görsel'] ?? '';
+        const shouldAutoImage = ['1', 'true', 'evet', 'yes'].includes(String(autoGorselRaw).toLowerCase().trim());
+        const durumRaw = (row['durum'] || row['status'] || 'taslak').toString().trim();
+        const status = ['taslak','zamanli','yayinda'].includes(durumRaw) ? durumRaw : 'taslak';
+        const publishAtRaw = row['yayinlanma_tarihi'] || row['publish_at'] || '';
+        const publishAt = publishAtRaw ? new Date(publishAtRaw).toISOString() : null;
 
         if (!keyword) continue;
 
@@ -1727,8 +1784,8 @@ Rules:
           tenantId: req.tenantId,
           keyword,
           backlinkSites,
-          publishAt: null,
-          status: 'taslak',
+          publishAt: publishAt as any,
+          status,
           isAiGenerated: false,
         });
 
@@ -1744,6 +1801,27 @@ Rules:
             metaTitle: title,
             metaDesc: null,
           });
+        }
+
+        // Auto-generate image in background if column says so
+        if (shouldAutoImage) {
+          (async () => {
+            try {
+              const { generateBlogImage } = await import('./blogImageService');
+              const generated = await generateBlogImage(title || keyword, keyword, req.tenantId);
+              if (generated) {
+                await storage.addBlogPostImage({
+                  postId: post.id, tenantId: req.tenantId,
+                  url: generated.url, altByLang: generated.altByLang as any,
+                  attribution: generated.attribution || null,
+                  source: generated.source, position: 0,
+                });
+                await storage.updateBlogPostFeaturedImage(post.id, generated.url, generated.altByLang as any);
+              }
+            } catch (imgErr) {
+              console.warn('[ExcelImport] Image generation skipped for', post.id, (imgErr as any)?.message);
+            }
+          })();
         }
 
         created.push(post);
@@ -1768,12 +1846,13 @@ Rules:
 
   app.post("/api/admin/blog/schedule", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
     try {
-      const { dailyLimit, weekdays, mode, isEnabled } = req.body;
+      const { dailyLimit, weekdays, mode, isEnabled, autoGenerateImages } = req.body;
       const schedule = await storage.upsertBlogSchedule(req.tenantId, {
         dailyLimit: dailyLimit ?? 1,
         weekdays: weekdays ?? ['1','2','3','4','5'],
         mode: mode ?? 'onay',
         isEnabled: isEnabled ?? false,
+        autoGenerateImages: autoGenerateImages ?? true,
       });
       res.json(schedule);
     } catch (err: any) {

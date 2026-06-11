@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo } from 'react';
+import { useState, useRef, useMemo, useEffect } from 'react';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import { useQuery, useMutation } from '@tanstack/react-query';
@@ -28,7 +28,7 @@ import { useToast } from '@/hooks/use-toast';
 import {
   Sparkles, Upload, Trash2, CheckCircle, Calendar, Plus,
   ChevronLeft, ChevronRight, LayoutList, Image, Star,
-  Search, ArrowUpDown, X, Pencil, Copy, ExternalLink,
+  Search, ArrowUpDown, X, Pencil, Copy, ExternalLink, Download,
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
@@ -587,6 +587,7 @@ export default function Blog() {
   const [schedLimit, setSchedLimit] = useState(1);
   const [schedWeekdays, setSchedWeekdays] = useState(['1','2','3','4','5']);
   const [schedEnabled, setSchedEnabled] = useState(false);
+  const [schedAutoImage, setSchedAutoImage] = useState(true);
 
   // ── List management state ─────────────────────────────────────────────────
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -606,6 +607,17 @@ export default function Blog() {
   const { data: schedule } = useQuery<BlogSchedule | null>({
     queryKey: ['/api/admin/blog/schedule'],
   });
+
+  // Sync schedule data into form state whenever it loads
+  useEffect(() => {
+    if (schedule) {
+      setSchedMode(schedule.mode ?? 'onay');
+      setSchedLimit(schedule.dailyLimit ?? 1);
+      setSchedWeekdays(schedule.weekdays ?? ['1','2','3','4','5']);
+      setSchedEnabled(schedule.isEnabled ?? false);
+      setSchedAutoImage((schedule as any).autoGenerateImages ?? true);
+    }
+  }, [schedule]);
 
   const { data: tenantData } = useQuery<{ domain?: string }>({
     queryKey: ['/api/tenant'],
@@ -806,8 +818,15 @@ export default function Blog() {
                       ))}
                     </div>
                   </div>
+                  <div className="flex items-center justify-between border rounded-lg p-3 bg-muted/30">
+                    <div>
+                      <Label className="cursor-pointer">Auto-Generate Images</Label>
+                      <p className="text-xs text-muted-foreground mt-0.5">Automatically create AI / stock images for new posts</p>
+                    </div>
+                    <Switch checked={schedAutoImage} onCheckedChange={setSchedAutoImage} data-testid="switch-auto-image" />
+                  </div>
                   <Button className="w-full"
-                    onClick={() => scheduleMutation.mutate({ mode: schedMode, dailyLimit: schedLimit, weekdays: schedWeekdays, isEnabled: schedEnabled })}
+                    onClick={() => scheduleMutation.mutate({ mode: schedMode, dailyLimit: schedLimit, weekdays: schedWeekdays, isEnabled: schedEnabled, autoGenerateImages: schedAutoImage })}
                     disabled={scheduleMutation.isPending} data-testid="button-save-schedule">
                     Save Schedule
                   </Button>
@@ -819,6 +838,9 @@ export default function Blog() {
             <input ref={fileInputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleImport} data-testid="input-excel-import" />
             <Button variant="outline" onClick={() => fileInputRef.current?.click()} data-testid="button-import-excel">
               <Upload className="w-4 h-4 mr-2" />Import Excel
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => { window.open('/api/admin/blog/sample-excel', '_blank'); }} data-testid="button-download-template">
+              <Download className="w-4 h-4 mr-1" />Template
             </Button>
 
             {/* Add post dialog */}
@@ -868,7 +890,8 @@ export default function Blog() {
           <Card className="border-dashed border-blue-200 bg-blue-50/50">
             <CardContent className="pt-4 pb-3">
               <p className="text-sm text-blue-700">
-                <strong>Excel Import:</strong> Upload an .xlsx file with columns: <code>title</code>, <code>keyword</code> (or <code>anahtar_kelime</code>), <code>backlink_siteleri</code>. Each row becomes a draft post.
+                <strong>Excel Import:</strong> Upload an .xlsx file with columns: <code>title</code>, <code>keyword</code>, <code>backlink_siteleri</code>, <code>auto_gorsel</code> (1 = auto-generate image), <code>yayinlanma_tarihi</code> (yyyy-mm-dd hh:mm), <code>durum</code> (taslak / zamanli / yayinda).{' '}
+                <button className="underline font-medium" onClick={() => window.open('/api/admin/blog/sample-excel', '_blank')} data-testid="link-download-template">Download sample template →</button>
               </p>
             </CardContent>
           </Card>

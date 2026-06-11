@@ -182,12 +182,9 @@ export async function generateBlogImage(
           dalleModel = 'dall-e-3';
           resp = await client.images.generate(buildParams('dall-e-3') as any);
         } else if (isModelGone) {
-          // Both models unavailable → likely key has no DALL-E permission
-          throw new Error(
-            `DALL-E models are not available for this API key. ` +
-            `In the OpenAI dashboard, enable image generation for your project ` +
-            `(Platform → Your Project → Settings → Model access), or use an unrestricted API key.`
-          );
+          // Both models unavailable → key has no DALL-E permission, skip silently
+          console.warn('[BlogImageService] DALL-E unavailable for this API key — no image generated. Enable image generation in the OpenAI dashboard or switch to Unsplash/Pexels in AI Settings.');
+          return null;
         } else {
           throw modelErr;
         }
