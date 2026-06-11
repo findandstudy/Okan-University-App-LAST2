@@ -1177,16 +1177,20 @@ export default function Blog() {
                               <Pencil className="w-3.5 h-3.5 mr-1" />Edit
                             </Button>
 
-                            {post.status === 'yayinda' && (() => {
+                            {(() => {
                               const enSlug = post.translations.find(t => t.lang === 'en')?.slug;
                               const firstSlug = enSlug || post.translations[0]?.slug;
                               const firstLang = enSlug ? 'en' : post.translations[0]?.lang;
                               if (!firstSlug) return null;
+                              const isPublished = post.status === 'yayinda';
                               return (
                                 <a href={`/${firstLang}/blog/${firstSlug}`} target="_blank" rel="noopener noreferrer"
                                   data-testid={`button-view-${post.id}`}>
-                                  <Button size="sm" variant="ghost" className="text-blue-600 hover:bg-blue-50 hover:text-blue-700" title="View published post">
-                                    <ExternalLink className="w-3.5 h-3.5 mr-1" />View
+                                  <Button size="sm" variant="ghost"
+                                    className={isPublished ? 'text-blue-600 hover:bg-blue-50 hover:text-blue-700' : 'text-muted-foreground hover:bg-muted'}
+                                    title={isPublished ? 'View published post' : 'Preview draft post'}>
+                                    <ExternalLink className="w-3.5 h-3.5 mr-1" />
+                                    {isPublished ? 'View' : 'Preview'}
                                   </Button>
                                 </a>
                               );
