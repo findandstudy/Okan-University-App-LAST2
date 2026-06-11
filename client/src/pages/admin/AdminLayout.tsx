@@ -71,6 +71,8 @@ const menuGroups: NavGroup[] = [
     title: 'Default Site Content',
     icon: Globe,
     items: [
+      { title: 'Branding & Identity', url: '/admin/branding', icon: ImageIcon },
+      { title: 'SEO Settings', url: '/admin/seo', icon: Search },
       { title: 'Testimonials', url: '/admin/testimonials', icon: MessageSquareQuote },
       { title: 'FAQ', url: '/admin/faq', icon: HelpCircle },
       { title: 'Page Sections', url: '/admin/sections', icon: LayoutList },
@@ -89,9 +91,7 @@ const menuGroups: NavGroup[] = [
     title: 'Settings',
     icon: Settings,
     items: [
-      { title: 'Branding & Identity', url: '/admin/branding', icon: ImageIcon },
       { title: 'Theme', url: '/admin/theme', icon: Palette },
-      { title: 'SEO Settings', url: '/admin/seo', icon: Search },
       { title: 'Contact Form', url: '/admin/contact-form', icon: FormInput },
     ],
   },
