@@ -49,6 +49,7 @@ const defaultTranslations: Record<SupportedLanguage, Record<string, string>> = {
   en: {
     'nav.home': 'Home',
     'nav.programs': 'Programs',
+    'nav.blog': 'Blog',
     'nav.apply': 'Apply Now',
     'nav.contact': 'Contact',
     'nav.faq': 'FAQ',
@@ -112,6 +113,7 @@ const defaultTranslations: Record<SupportedLanguage, Record<string, string>> = {
   ar: {
     'nav.home': 'الرئيسية',
     'nav.programs': 'البرامج',
+    'nav.blog': 'المدونة',
     'nav.apply': 'قدم الآن',
     'nav.contact': 'اتصل بنا',
     'nav.faq': 'الأسئلة الشائعة',
@@ -175,6 +177,7 @@ const defaultTranslations: Record<SupportedLanguage, Record<string, string>> = {
   tr: {
     'nav.home': 'Ana Sayfa',
     'nav.programs': 'Programlar',
+    'nav.blog': 'Blog',
     'nav.apply': 'Şimdi Başvur',
     'nav.contact': 'İletişim',
     'nav.faq': 'SSS',
@@ -238,6 +241,7 @@ const defaultTranslations: Record<SupportedLanguage, Record<string, string>> = {
   fr: {
     'nav.home': 'Accueil',
     'nav.programs': 'Programmes',
+    'nav.blog': 'Blog',
     'nav.apply': 'Postuler',
     'nav.contact': 'Contact',
     'nav.faq': 'FAQ',
@@ -301,6 +305,7 @@ const defaultTranslations: Record<SupportedLanguage, Record<string, string>> = {
   ru: {
     'nav.home': 'Главная',
     'nav.programs': 'Программы',
+    'nav.blog': 'Блог',
     'nav.apply': 'Подать заявку',
     'nav.contact': 'Контакты',
     'nav.faq': 'FAQ',
@@ -364,6 +369,7 @@ const defaultTranslations: Record<SupportedLanguage, Record<string, string>> = {
   fa: {
     'nav.home': 'صفحه اصلی',
     'nav.programs': 'برنامه‌ها',
+    'nav.blog': 'وبلاگ',
     'nav.apply': 'درخواست',
     'nav.contact': 'تماس',
     'nav.faq': 'سوالات متداول',
@@ -427,6 +433,7 @@ const defaultTranslations: Record<SupportedLanguage, Record<string, string>> = {
   zh: {
     'nav.home': '首页',
     'nav.programs': '项目',
+    'nav.blog': '博客',
     'nav.apply': '立即申请',
     'nav.contact': '联系',
     'nav.faq': '常见问题',
@@ -490,6 +497,7 @@ const defaultTranslations: Record<SupportedLanguage, Record<string, string>> = {
   hi: {
     'nav.home': 'होम',
     'nav.programs': 'कार्यक्रम',
+    'nav.blog': 'ब्लॉग',
     'nav.apply': 'अभी आवेदन करें',
     'nav.contact': 'संपर्क',
     'nav.faq': 'सामान्य प्रश्न',
@@ -553,6 +561,7 @@ const defaultTranslations: Record<SupportedLanguage, Record<string, string>> = {
   es: {
     'nav.home': 'Inicio',
     'nav.programs': 'Programas',
+    'nav.blog': 'Blog',
     'nav.apply': 'Aplicar Ahora',
     'nav.contact': 'Contacto',
     'nav.faq': 'Preguntas',
@@ -616,6 +625,7 @@ const defaultTranslations: Record<SupportedLanguage, Record<string, string>> = {
   id: {
     'nav.home': 'Beranda',
     'nav.programs': 'Program',
+    'nav.blog': 'Blog',
     'nav.apply': 'Daftar Sekarang',
     'nav.contact': 'Kontak',
     'nav.faq': 'FAQ',

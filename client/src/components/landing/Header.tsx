@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'wouter';
 import { useI18n } from '@/lib/i18n';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 import { Button } from '@/components/ui/button';
@@ -14,7 +15,7 @@ interface HeaderProps {
 }
 
 export function Header({ universityName = 'University', logoUrl }: HeaderProps) {
-  const { t, isRTL } = useI18n();
+  const { t, isRTL, language } = useI18n();
   const [isOpen, setIsOpen] = useState(false);
   const [logoError, setLogoError] = useState(false);
   
@@ -59,10 +60,13 @@ export function Header({ universityName = 'University', logoUrl }: HeaderProps) 
   const displayLogoUrl = logoUrl || cachedLogoUrl;
   const displayName = universityName !== 'University' ? universityName : (cachedName || universityName);
 
+  const blogUrl = `/${language}/blog`;
+
   const navItems = [
-    { key: 'nav.home', href: '#hero' },
-    { key: 'nav.faq', href: '#faq' },
-    { key: 'nav.contact', href: '#contact' },
+    { key: 'nav.home', href: '#hero', type: 'scroll' as const },
+    { key: 'nav.faq', href: '#faq', type: 'scroll' as const },
+    { key: 'nav.contact', href: '#contact', type: 'scroll' as const },
+    { key: 'nav.blog', href: blogUrl, type: 'link' as const },
   ];
 
   const scrollToSection = (href: string) => {
@@ -97,17 +101,25 @@ export function Header({ universityName = 'University', logoUrl }: HeaderProps) 
         </div>
 
         <nav className="hidden md:flex items-center gap-1">
-          {navItems.map((item) => (
-            <Button
-              key={item.key}
-              variant="ghost"
-              size="sm"
-              onClick={() => scrollToSection(item.href)}
-              data-testid={`nav-${item.key.split('.')[1]}`}
-            >
-              {t(item.key)}
-            </Button>
-          ))}
+          {navItems.map((item) =>
+            item.type === 'link' ? (
+              <Link key={item.key} href={item.href}>
+                <Button variant="ghost" size="sm" data-testid={`nav-${item.key.split('.')[1]}`}>
+                  {t(item.key)}
+                </Button>
+              </Link>
+            ) : (
+              <Button
+                key={item.key}
+                variant="ghost"
+                size="sm"
+                onClick={() => scrollToSection(item.href)}
+                data-testid={`nav-${item.key.split('.')[1]}`}
+              >
+                {t(item.key)}
+              </Button>
+            )
+          )}
         </nav>
 
         <div className="flex items-center gap-2">
@@ -129,16 +141,24 @@ export function Header({ universityName = 'University', logoUrl }: HeaderProps) 
             </SheetTrigger>
             <SheetContent side={isRTL ? 'left' : 'right'} className="w-72">
               <nav className="flex flex-col gap-2 mt-8">
-                {navItems.map((item) => (
-                  <Button
-                    key={item.key}
-                    variant="ghost"
-                    className="justify-start"
-                    onClick={() => scrollToSection(item.href)}
-                  >
-                    {t(item.key)}
-                  </Button>
-                ))}
+                {navItems.map((item) =>
+                  item.type === 'link' ? (
+                    <Link key={item.key} href={item.href} onClick={() => setIsOpen(false)}>
+                      <Button variant="ghost" className="justify-start w-full">
+                        {t(item.key)}
+                      </Button>
+                    </Link>
+                  ) : (
+                    <Button
+                      key={item.key}
+                      variant="ghost"
+                      className="justify-start"
+                      onClick={() => scrollToSection(item.href)}
+                    >
+                      {t(item.key)}
+                    </Button>
+                  )
+                )}
                 <Button
                   className="w-full mt-4"
                   data-testid="button-apply-mobile"
