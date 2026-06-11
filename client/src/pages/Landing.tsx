@@ -83,7 +83,8 @@ export default function Landing() {
 
   const isLoading = isTenantLoading || isSectionsLoading || isThemeLoading;
 
-  const universityName = tenant?.universityName || 'University';
+  const nameByLang = tenant?.nameByLang as Record<string, string> | null | undefined;
+  const universityName = (nameByLang?.[language]) || nameByLang?.['en'] || tenant?.universityName || 'University';
   const logoUrl = tenant?.logoUrl || undefined;
   const faviconUrl = tenant?.faviconUrl || undefined;
 

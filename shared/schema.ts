@@ -29,6 +29,7 @@ export const tenants = pgTable("tenants", {
   contactFormEmbed: text("contact_form_embed"),
   heroVideoUrl: text("hero_video_url"),
   supportedLanguages: text("supported_languages").array().default(sql`ARRAY['en']::text[]`),
+  nameByLang: jsonb("name_by_lang").$type<Partial<Record<string, string>>>(),
   isActive: boolean("is_active").default(true),
   createdAt: timestamp("created_at").defaultNow(),
 });

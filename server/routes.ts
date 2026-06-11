@@ -1249,6 +1249,19 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/admin/ai/translate-university-name", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
+    try {
+      const { enName, targetLangs } = req.body;
+      if (!enName) return res.status(400).json({ error: "enName is required" });
+      if (!Array.isArray(targetLangs) || targetLangs.length === 0) return res.status(400).json({ error: "targetLangs is required" });
+      const { translateText } = await import('./aiTranslation');
+      const translations = await translateText(enName, 'en', targetLangs, req.tenantId);
+      res.json({ ok: true, translations });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || "Translation failed" });
+    }
+  });
+
   app.post("/api/admin/ai/translate-all-faq", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
     try {
       const { targetLangs } = req.body;

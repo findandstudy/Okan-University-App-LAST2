@@ -9,10 +9,17 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { useUpload } from '@/hooks/use-upload';
-import { Globe, Upload, Loader2, X, Image as ImageIcon, Facebook, Instagram, Linkedin, Youtube, Video } from 'lucide-react';
+import { Globe, Upload, Loader2, X, Image as ImageIcon, Facebook, Instagram, Linkedin, Youtube, Video, Languages } from 'lucide-react';
 import AdminLayout from './AdminLayout';
 import { useSiteContext } from '@/lib/siteContext';
-import type { Tenant } from '@shared/schema';
+import type { Tenant, SupportedLanguage } from '@shared/schema';
+
+const ALL_LANGS: { code: SupportedLanguage; label: string }[] = [
+  { code: 'en', label: 'EN' }, { code: 'ar', label: 'AR' }, { code: 'tr', label: 'TR' },
+  { code: 'fr', label: 'FR' }, { code: 'ru', label: 'RU' }, { code: 'fa', label: 'FA' },
+  { code: 'zh', label: 'ZH' }, { code: 'hi', label: 'HI' }, { code: 'es', label: 'ES' },
+  { code: 'id', label: 'ID' },
+];
 
 interface DropZoneProps {
   label: string;
@@ -157,6 +164,8 @@ export default function TenantPage({ embedded }: { embedded?: boolean } = {}) {
     youtubeUrl: '',
     heroVideoUrl: '',
   });
+  const [nameByLang, setNameByLang] = useState<Partial<Record<SupportedLanguage, string>>>({});
+  const [nameLang, setNameLang] = useState<SupportedLanguage>('en');
 
   const { data: tenant, isLoading } = useQuery<Tenant>({
     queryKey: ['/api/tenant' + apiSuffix],
@@ -175,31 +184,47 @@ export default function TenantPage({ embedded }: { embedded?: boolean } = {}) {
         youtubeUrl: tenant.youtubeUrl || '',
         heroVideoUrl: tenant.heroVideoUrl || '',
       });
+      setNameByLang((tenant.nameByLang as Partial<Record<SupportedLanguage, string>>) || {});
     }
   }, [tenant]);
 
   const updateMutation = useMutation({
-    mutationFn: async (data: typeof settings) => {
+    mutationFn: async (data: typeof settings & { nameByLang: Partial<Record<SupportedLanguage, string>> }) => {
       const response = await apiRequest('PATCH', '/api/tenant' + apiSuffix, data);
       return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/tenant' + apiSuffix] });
-      toast({
-        title: 'Settings saved',
-        description: 'Tenant settings have been updated.',
-      });
+      toast({ title: 'Settings saved', description: 'Tenant settings have been updated.' });
     },
     onError: () => {
-      toast({
-        title: 'Failed to save settings',
-        variant: 'destructive',
+      toast({ title: 'Failed to save settings', variant: 'destructive' });
+    },
+  });
+
+  const translateNameMutation = useMutation({
+    mutationFn: async () => {
+      const enName = nameByLang['en'] || settings.universityName;
+      if (!enName) throw new Error('Please enter the English university name first');
+      const res = await apiRequest('POST', `/api/admin/ai/translate-university-name${apiSuffix}`, {
+        enName,
+        targetLangs: ALL_LANGS.filter(l => l.code !== 'en').map(l => l.code),
       });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Translation failed');
+      return data as { translations: Record<string, string> };
+    },
+    onSuccess: (data) => {
+      setNameByLang(prev => ({ ...prev, ...data.translations }));
+      toast({ title: '✅ Name translated', description: 'University name filled for all languages. Save to apply.' });
+    },
+    onError: (err: Error) => {
+      toast({ title: 'Translation failed', description: err.message, variant: 'destructive' });
     },
   });
 
   const handleSave = () => {
-    updateMutation.mutate(settings);
+    updateMutation.mutate({ ...settings, nameByLang });
   };
 
   if (isLoading) {
@@ -227,17 +252,63 @@ export default function TenantPage({ embedded }: { embedded?: boolean } = {}) {
             <CardDescription>Basic information about your institution</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div>
-              <Label>University Name</Label>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>University Name</Label>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="border-primary text-primary hover:bg-primary hover:text-primary-foreground gap-1.5 text-xs h-7"
+                  onClick={() => translateNameMutation.mutate()}
+                  disabled={translateNameMutation.isPending}
+                  data-testid="button-translate-university-name"
+                >
+                  {translateNameMutation.isPending
+                    ? <Loader2 className="h-3 w-3 animate-spin" />
+                    : <Languages className="h-3 w-3" />}
+                  {translateNameMutation.isPending ? 'Translating…' : 'Translate to All Languages'}
+                </Button>
+              </div>
+
+              {/* Language tabs */}
+              <div className="flex flex-wrap gap-1">
+                {ALL_LANGS.map(({ code, label }) => (
+                  <Button
+                    key={code}
+                    type="button"
+                    size="sm"
+                    variant={nameLang === code ? 'default' : 'outline'}
+                    className="h-7 px-2 text-xs"
+                    onClick={() => setNameLang(code)}
+                  >
+                    {label}
+                    {nameByLang[code] && nameLang !== code && (
+                      <span className="ml-1 h-1.5 w-1.5 rounded-full bg-green-500 inline-block" />
+                    )}
+                  </Button>
+                ))}
+              </div>
+
               <Input
-                value={settings.universityName}
-                onChange={(e) =>
-                  setSettings({ ...settings, universityName: e.target.value })
-                }
-                placeholder="e.g., Okan University"
-                className="mt-1.5"
+                value={nameLang === 'en'
+                  ? (nameByLang['en'] ?? settings.universityName)
+                  : (nameByLang[nameLang] ?? '')}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (nameLang === 'en') {
+                    setSettings(s => ({ ...s, universityName: val }));
+                    setNameByLang(prev => ({ ...prev, en: val }));
+                  } else {
+                    setNameByLang(prev => ({ ...prev, [nameLang]: val }));
+                  }
+                }}
+                placeholder={nameLang === 'en' ? 'e.g., Okan University' : `Name in ${ALL_LANGS.find(l => l.code === nameLang)?.label}…`}
                 data-testid="input-university-name"
               />
+              {nameLang === 'en' && (
+                <p className="text-xs text-muted-foreground">This is the primary (English) name. Fill other tabs or use "Translate" to auto-fill.</p>
+              )}
             </div>
 
             <div>
