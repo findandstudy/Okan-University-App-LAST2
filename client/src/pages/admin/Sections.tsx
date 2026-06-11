@@ -209,7 +209,7 @@ export default function Sections({ embedded }: { embedded?: boolean } = {}) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/sections' + apiSuffix] });
       queryClient.invalidateQueries({ queryKey: ['/api/sections'] });
-      toast({ title: 'Content saved', description: 'Section content has been updated.' });
+      toast({ title: 'Content saved', description: 'Changes are live on your site immediately — no re-publish needed.' });
       setEditDialogOpen(false);
       setEditingSection(null);
     },
@@ -310,6 +310,7 @@ export default function Sections({ embedded }: { embedded?: boolean } = {}) {
       zh: { ...emptyContentForm }, hi: { ...emptyContentForm }, es: { ...emptyContentForm },
       id: { ...emptyContentForm },
     };
+    // First populate from contentByLang if available
     if (section.contentByLang) {
       for (const lang of LANGUAGES) {
         const content = section.contentByLang[lang.code];
@@ -324,8 +325,17 @@ export default function Sections({ embedded }: { embedded?: boolean } = {}) {
         }
       }
     }
+    // Fallback: populate from settings.title / settings.subtitle per-lang dicts
+    // (used by hero, trust_badges, and other settings-driven sections)
+    const settingsData = (section.settings || {}) as Record<string, unknown>;
+    for (const lang of LANGUAGES) {
+      const settingsTitle = (settingsData.title as Record<string, string> | undefined)?.[lang.code];
+      const settingsSubtitle = (settingsData.subtitle as Record<string, string> | undefined)?.[lang.code];
+      if (settingsTitle && !newForms[lang.code].title) newForms[lang.code].title = settingsTitle;
+      if (settingsSubtitle && !newForms[lang.code].subtitle) newForms[lang.code].subtitle = settingsSubtitle;
+    }
     setContentForms(newForms);
-    setSettingsForm((section.settings as Record<string, unknown>) || {});
+    setSettingsForm(settingsData);
     setActiveLanguage('en');
     setEditDialogOpen(true);
   };
@@ -355,10 +365,29 @@ export default function Sections({ embedded }: { embedded?: boolean } = {}) {
         };
       }
     }
+
+    // For settings-driven sections (hero, etc.) also mirror title/subtitle back
+    // into settings so the landing page components pick up the changes immediately.
+    let finalSettings = Object.keys(settingsForm).length > 0 ? { ...settingsForm } : undefined;
+    const SETTINGS_DRIVEN = ['hero', 'trust_badges', 'steps'];
+    if (SETTINGS_DRIVEN.includes(editingSection.key)) {
+      const titleByLang: Record<string, string> = {};
+      const subtitleByLang: Record<string, string> = {};
+      for (const lang of LANGUAGES) {
+        if (contentForms[lang.code].title) titleByLang[lang.code] = contentForms[lang.code].title;
+        if (contentForms[lang.code].subtitle) subtitleByLang[lang.code] = contentForms[lang.code].subtitle;
+      }
+      finalSettings = {
+        ...(finalSettings || {}),
+        ...(Object.keys(titleByLang).length ? { title: { ...((settingsForm.title as Record<string, string>) || {}), ...titleByLang } } : {}),
+        ...(Object.keys(subtitleByLang).length ? { subtitle: { ...((settingsForm.subtitle as Record<string, string>) || {}), ...subtitleByLang } } : {}),
+      };
+    }
+
     updateContentMutation.mutate({
       id: editingSection.id,
       contentByLang,
-      settings: Object.keys(settingsForm).length > 0 ? settingsForm : undefined,
+      settings: finalSettings,
     });
   };
 
@@ -819,7 +848,10 @@ export default function Sections({ embedded }: { embedded?: boolean } = {}) {
             ))}
           </Tabs>
 
-          <div className="flex gap-2 pt-4">
+          <p className="text-xs text-muted-foreground text-center pt-2">
+            💡 Changes go live immediately after saving — no re-publish needed.
+          </p>
+          <div className="flex gap-2">
             <Button type="button" variant="outline" onClick={() => setEditDialogOpen(false)} className="flex-1">
               Cancel
             </Button>
