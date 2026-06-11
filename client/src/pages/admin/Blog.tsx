@@ -24,6 +24,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useToast } from '@/hooks/use-toast';
 import {
   Sparkles, Upload, Trash2, CheckCircle, Calendar, Plus,
@@ -466,6 +467,102 @@ interface BlogSchedule {
   weekdays: string[];
   mode: string;
   isEnabled: boolean;
+}
+
+// ── SEO Scoring ──────────────────────────────────────────────────────────────
+function stripHtml(html: string) {
+  return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+}
+function wordCount(text: string) {
+  return text.split(/\s+/).filter(Boolean).length;
+}
+interface SeoCheck { label: string; passed: boolean; points: number; tip: string; }
+
+function calculateSeoScore(post: BlogPostWithTranslations): { score: number; total: number; checks: SeoCheck[] } {
+  const en = post.translations.find(t => t.lang === 'en');
+  const title = en?.title || '';
+  const rawContent = en?.content || '';
+  const content = stripHtml(rawContent);
+  const metaTitle = en?.metaTitle || '';
+  const metaDesc = en?.metaDesc || '';
+  const keyword = (post.keyword || '').toLowerCase().trim();
+  const wc = wordCount(content);
+  const hasH2 = rawContent.includes('<h2');
+
+  const checks: SeoCheck[] = [
+    { label: 'Has English content', passed: wc > 50, points: 5, tip: 'Generate AI content or write it manually' },
+    { label: 'Content ≥ 300 words', passed: wc >= 300, points: 10, tip: `${wc} words now — aim for 300+` },
+    { label: 'Content ≥ 800 words', passed: wc >= 800, points: 10, tip: `${wc} words now — longer articles rank higher` },
+    { label: 'Has H2 subheadings', passed: hasH2, points: 5, tip: 'Add subheadings to structure the content' },
+    { label: 'Keyword in body text', passed: !!keyword && content.toLowerCase().includes(keyword), points: 5, tip: 'Use the keyword naturally in body text' },
+    { label: 'Has meta title', passed: metaTitle.length > 0, points: 5, tip: 'Add meta title in the Edit dialog' },
+    { label: 'Meta title 30–65 chars', passed: metaTitle.length >= 30 && metaTitle.length <= 65, points: 10, tip: `${metaTitle.length} chars now — ideal: 30–65` },
+    { label: 'Has meta description', passed: metaDesc.length > 0, points: 5, tip: 'Add meta description in the Edit dialog' },
+    { label: 'Meta desc 120–165 chars', passed: metaDesc.length >= 120 && metaDesc.length <= 165, points: 10, tip: `${metaDesc.length} chars now — ideal: 120–165` },
+    { label: 'Keyword in title', passed: !!keyword && title.toLowerCase().includes(keyword), points: 10, tip: 'Include the target keyword in the post title' },
+    { label: 'Keyword in meta desc', passed: !!keyword && metaDesc.toLowerCase().includes(keyword), points: 5, tip: 'Include keyword in the meta description' },
+    { label: 'Has featured image', passed: !!post.featuredImageUrl, points: 10, tip: 'Add an image via the Images button' },
+    { label: 'Translated to 3+ languages', passed: post.translations.filter(t => t.content).length >= 3, points: 10, tip: 'Translate into at least 3 languages for broader reach' },
+  ];
+
+  const score = checks.filter(c => c.passed).reduce((s, c) => s + c.points, 0);
+  const total = checks.reduce((s, c) => s + c.points, 0);
+  return { score, total, checks };
+}
+
+function SeoScoreBadge({ post }: { post: BlogPostWithTranslations }) {
+  const { score, total, checks } = calculateSeoScore(post);
+  const pct = Math.round((score / total) * 100);
+  const color = pct >= 70
+    ? 'text-green-700 bg-green-50 border-green-200 hover:bg-green-100'
+    : pct >= 40
+    ? 'text-yellow-700 bg-yellow-50 border-yellow-200 hover:bg-yellow-100'
+    : 'text-red-700 bg-red-50 border-red-200 hover:bg-red-100';
+  const barColor = pct >= 70 ? 'bg-green-500' : pct >= 40 ? 'bg-yellow-500' : 'bg-red-500';
+  const label = pct >= 70 ? 'Good' : pct >= 40 ? 'Fair' : 'Poor';
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button className={`flex items-center gap-1 px-2 py-0.5 rounded-full border text-xs font-semibold transition-colors ${color}`}
+          data-testid={`seo-score-${post.id}`}>
+          {pct}<span className="font-normal opacity-60">/100</span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-76 p-0" align="end" side="left">
+        <div className="p-3 border-b">
+          <div className="flex items-center justify-between mb-2">
+            <span className="font-semibold text-sm">SEO Score</span>
+            <span className={`text-sm font-bold ${pct >= 70 ? 'text-green-600' : pct >= 40 ? 'text-yellow-600' : 'text-red-600'}`}>
+              {pct}/100 — {label}
+            </span>
+          </div>
+          <div className="h-2 bg-muted rounded-full overflow-hidden">
+            <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${pct}%` }} />
+          </div>
+          <p className="text-xs text-muted-foreground mt-1.5">
+            {checks.filter(c => c.passed).length}/{checks.length} checks passed · {score}/{total} pts
+          </p>
+        </div>
+        <div className="p-2 max-h-64 overflow-y-auto">
+          {checks.map((c, i) => (
+            <div key={i} className={`flex items-start gap-2 px-2 py-1 rounded text-xs ${!c.passed ? 'bg-red-50/50' : ''}`}>
+              <span className={`mt-0.5 flex-shrink-0 font-bold ${c.passed ? 'text-green-500' : 'text-red-400'}`}>
+                {c.passed ? '✓' : '✗'}
+              </span>
+              <div className="flex-1 min-w-0">
+                <span className={c.passed ? 'text-foreground' : 'text-muted-foreground'}>{c.label}</span>
+                {!c.passed && (
+                  <p className="text-muted-foreground/70 text-[11px] mt-0.5 leading-tight">{c.tip}</p>
+                )}
+              </div>
+              <span className="text-muted-foreground/60 font-mono flex-shrink-0">+{c.points}</span>
+            </div>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -1016,6 +1113,7 @@ export default function Blog() {
                       </TableHead>
                       <TableHead>Title / Keyword</TableHead>
                       <TableHead>Status</TableHead>
+                      <TableHead>SEO</TableHead>
                       <TableHead>Langs</TableHead>
                       <TableHead>Publish At</TableHead>
                       <TableHead>Actions</TableHead>
@@ -1048,6 +1146,9 @@ export default function Blog() {
                           <span className={`text-xs px-2 py-1 rounded-full font-medium ${STATUS_COLORS[post.status] || ''}`}>
                             {post.status}
                           </span>
+                        </TableCell>
+                        <TableCell>
+                          <SeoScoreBadge post={post} />
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-wrap gap-1">
