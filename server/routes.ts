@@ -170,6 +170,27 @@ export async function registerRoutes(
     message: { error: "Upload rate limit exceeded. Try again shortly." },
   });
 
+  // Public read endpoints: 120 req/min per IP; admin sessions are exempt.
+  // Session middleware runs globally before routes, so req.session is available.
+  const publicReadRateLimit = rateLimit({
+    windowMs: 60_000,
+    max: 120,
+    standardHeaders: true,
+    legacyHeaders: false,
+    skip: (req) => !!req.session?.adminId,
+    message: { error: "Too many requests. Please slow down and try again." },
+  });
+
+  // Images: higher limit (240/min) because a single page load fetches many images.
+  const publicImgRateLimit = rateLimit({
+    windowMs: 60_000,
+    max: 240,
+    standardHeaders: true,
+    legacyHeaders: false,
+    skip: (req) => !!req.session?.adminId,
+    message: { error: "Too many image requests. Please slow down." },
+  });
+
   // ─── PostgreSQL session store ───────────────────────────────────────────────
   app.use(session({
     secret: process.env.SESSION_SECRET!,
@@ -214,7 +235,7 @@ export async function registerRoutes(
   });
 
   // ─── Optimized image endpoint ───────────────────────────────────────────────
-  app.get("/api/img/:id", resolveTenant, async (req, res) => {
+  app.get("/api/img/:id", publicImgRateLimit, resolveTenant, async (req, res) => {
     try {
       const id = req.params.id as string;
       const width = parseInt(req.query.w as string) || 160;
@@ -289,7 +310,7 @@ export async function registerRoutes(
   });
 
   // ─── Bootstrap API ──────────────────────────────────────────────────────────
-  app.get("/api/bootstrap", resolveTenant, requirePublished, async (req, res) => {
+  app.get("/api/bootstrap", publicReadRateLimit, resolveTenant, requirePublished, async (req, res) => {
     try {
       const tenantId = req.tenantId;
       const cached = bootstrapCache.get(tenantId);
@@ -454,7 +475,7 @@ export async function registerRoutes(
   });
 
   // ─── Tenant API ─────────────────────────────────────────────────────────────
-  app.get("/api/tenant", resolveTenant, requirePublished, async (req, res) => {
+  app.get("/api/tenant", publicReadRateLimit, resolveTenant, requirePublished, async (req, res) => {
     res.json(req.tenant);
   });
 
@@ -505,7 +526,7 @@ export async function registerRoutes(
   });
 
   // ─── Theme API ──────────────────────────────────────────────────────────────
-  app.get("/api/theme", resolveTenant, requirePublished, async (req, res) => {
+  app.get("/api/theme", publicReadRateLimit, resolveTenant, requirePublished, async (req, res) => {
     try {
       let theme = await storage.getTheme(req.tenantId);
       if (!theme) theme = await storage.createTheme({ tenantId: req.tenantId });
@@ -533,7 +554,7 @@ export async function registerRoutes(
   });
 
   // ─── Sections API ───────────────────────────────────────────────────────────
-  app.get("/api/sections", resolveTenant, requirePublished, async (req, res) => {
+  app.get("/api/sections", publicReadRateLimit, resolveTenant, requirePublished, async (req, res) => {
     try {
       const list = await storage.getSections(req.tenantId);
       res.json(list);
@@ -726,7 +747,7 @@ export async function registerRoutes(
   });
 
   // ─── Media Assets API ───────────────────────────────────────────────────────
-  app.get("/api/media", resolveTenant, requirePublished, async (req, res) => {
+  app.get("/api/media", publicReadRateLimit, resolveTenant, requirePublished, async (req, res) => {
     try {
       const media = await storage.getMediaAssets(req.tenantId);
       res.json(media);
@@ -758,7 +779,7 @@ export async function registerRoutes(
   });
 
   // ─── Testimonials API ───────────────────────────────────────────────────────
-  app.get("/api/testimonials", resolveTenant, requirePublished, async (req, res) => {
+  app.get("/api/testimonials", publicReadRateLimit, resolveTenant, requirePublished, async (req, res) => {
     try {
       res.json(await storage.getTestimonials(req.tenantId));
     } catch (error) {
@@ -766,7 +787,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/testimonials/:id", resolveTenant, requirePublished, async (req, res) => {
+  app.get("/api/testimonials/:id", publicReadRateLimit, resolveTenant, requirePublished, async (req, res) => {
     try {
       const t = await storage.getTestimonial(req.params.id as string);
       if (!t || t.tenantId !== req.tenantId) return res.status(404).json({ error: "Testimonial not found" });
@@ -812,7 +833,7 @@ export async function registerRoutes(
   });
 
   // ─── FAQ Items API ──────────────────────────────────────────────────────────
-  app.get("/api/faq", resolveTenant, requirePublished, async (req, res) => {
+  app.get("/api/faq", publicReadRateLimit, resolveTenant, requirePublished, async (req, res) => {
     try {
       res.json(await storage.getFaqItems(req.tenantId));
     } catch (error) {
@@ -820,7 +841,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/faq/:id", resolveTenant, requirePublished, async (req, res) => {
+  app.get("/api/faq/:id", publicReadRateLimit, resolveTenant, requirePublished, async (req, res) => {
     try {
       const faq = await storage.getFaqItem(req.params.id as string);
       if (!faq || faq.tenantId !== req.tenantId) return res.status(404).json({ error: "FAQ item not found" });
@@ -866,7 +887,7 @@ export async function registerRoutes(
   });
 
   // ─── SEO Settings API ───────────────────────────────────────────────────────
-  app.get("/api/seo-settings", resolveTenant, requirePublished, async (req, res) => {
+  app.get("/api/seo-settings", publicReadRateLimit, resolveTenant, requirePublished, async (req, res) => {
     try {
       res.json(await storage.getSeoSettings(req.tenantId) || {});
     } catch (error) {
@@ -1151,7 +1172,7 @@ export async function registerRoutes(
   });
 
   // ─── Widget route (public) ────────────────────────────────────────────────────
-  app.get("/api/widgets", resolveTenant, requirePublished, async (req, res) => {
+  app.get("/api/widgets", publicReadRateLimit, resolveTenant, requirePublished, async (req, res) => {
     try {
       const widgets = await storage.getWidgets(req.tenantId);
       res.json(widgets.filter(w => w.isEnabled));
@@ -1728,7 +1749,7 @@ Rules:
   });
 
   // ─── Public Blog API ──────────────────────────────────────────────────────────
-  app.get("/api/blog", resolveTenant, requirePublished, async (req, res) => {
+  app.get("/api/blog", publicReadRateLimit, resolveTenant, requirePublished, async (req, res) => {
     try {
       const lang = (req.query.lang as string) || 'en';
       const posts = await storage.getPublishedBlogPosts(req.tenantId, lang);
@@ -1738,7 +1759,7 @@ Rules:
     }
   });
 
-  app.get("/api/blog/:slug", resolveTenant, requirePublished, async (req, res) => {
+  app.get("/api/blog/:slug", publicReadRateLimit, resolveTenant, requirePublished, async (req, res) => {
     try {
       const slug = req.params.slug as string;
       const lang = (req.query.lang as string) || 'en';
