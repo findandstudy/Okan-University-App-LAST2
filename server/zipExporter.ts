@@ -305,7 +305,7 @@ export async function restoreSnapshot(tenantId: string, snapshot: Record<string,
     for (const s of snapshotSections) {
       const { id, tenantId: _t, ...sData } = s;
       if (currentIds.has(id)) {
-        await storage.updateSection(id, sData);
+        await storage.updateSection(id, tenantId, sData);
       } else {
         await storage.createSection({ tenantId, ...sData, id } as any);
       }
