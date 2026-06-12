@@ -14,8 +14,8 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
-import { Save, Globe, Share2, Twitter, Search, Loader2, Sparkles } from 'lucide-react';
-import type { SeoSettings, SupportedLanguage } from '@shared/schema';
+import { Save, Globe, Share2, Twitter, Search, Loader2, Sparkles, BarChart3 } from 'lucide-react';
+import type { SeoSettings, Tenant, SupportedLanguage } from '@shared/schema';
 import { SUPPORTED_LANGUAGES } from '@shared/schema';
 
 function EmbeddableLayout({ embedded, children }: { embedded?: boolean; children: React.ReactNode }) {
@@ -57,8 +57,38 @@ export default function SEOSettings({ embedded }: { embedded?: boolean } = {}) {
   const { apiSuffix, tenantId } = useSiteContext();
   const [, navigate] = useLocation();
   useEffect(() => { if (!embedded && !tenantId) navigate('/admin/sites'); }, [embedded, tenantId]);
-  const [activeTab, setActiveTab] = useState<'meta' | 'social'>('meta');
+  const [activeTab, setActiveTab] = useState<'meta' | 'social' | 'tracking'>('meta');
   const [activeLang, setActiveLang] = useState<SupportedLanguage>('en');
+
+  // ── Tracking fields (stored on tenant, not seo_settings) ──
+  const [tracking, setTracking] = useState({ googleAnalyticsId: '', googleTagManagerId: '', googleSearchConsoleCode: '' });
+
+  const { data: tenant } = useQuery<Tenant>({
+    queryKey: ['/api/tenant' + apiSuffix],
+  });
+
+  useEffect(() => {
+    if (tenant) {
+      setTracking({
+        googleAnalyticsId: tenant.googleAnalyticsId || '',
+        googleTagManagerId: (tenant as any).googleTagManagerId || '',
+        googleSearchConsoleCode: tenant.googleSearchConsoleCode || '',
+      });
+    }
+  }, [tenant]);
+
+  const saveTrackingMutation = useMutation({
+    mutationFn: async (data: typeof tracking) => {
+      const res = await apiRequest('PATCH', '/api/tenant' + apiSuffix, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/tenant' + apiSuffix] });
+      queryClient.invalidateQueries({ queryKey: ['/api/tenant'] });
+      toast({ title: 'Tracking saved', description: 'Analytics & tracking codes updated.' });
+    },
+    onError: () => toast({ title: 'Error', description: 'Failed to save tracking settings.', variant: 'destructive' }),
+  });
 
   const { data: seoSettings, isLoading } = useQuery<SeoSettings>({
     queryKey: ['/api/admin/seo-settings' + apiSuffix],
@@ -170,21 +200,33 @@ export default function SEOSettings({ embedded }: { embedded?: boolean } = {}) {
                 : <Sparkles className="h-4 w-4" />}
               {generateSeoMutation.isPending ? 'Generating…' : 'Generate with AI'}
             </Button>
-            <Button
-              type="button"
-              onClick={form.handleSubmit(onSubmit)}
-              disabled={saveMutation.isPending}
-              data-testid="button-save-seo"
-            >
-              <Save className="h-4 w-4 mr-2" />
-              {saveMutation.isPending ? 'Saving...' : 'Save Changes'}
-            </Button>
+            {activeTab === 'tracking' ? (
+              <Button
+                type="button"
+                onClick={() => saveTrackingMutation.mutate(tracking)}
+                disabled={saveTrackingMutation.isPending}
+                data-testid="button-save-tracking"
+              >
+                <Save className="h-4 w-4 mr-2" />
+                {saveTrackingMutation.isPending ? 'Saving...' : 'Save Tracking'}
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                onClick={form.handleSubmit(onSubmit)}
+                disabled={saveMutation.isPending}
+                data-testid="button-save-seo"
+              >
+                <Save className="h-4 w-4 mr-2" />
+                {saveMutation.isPending ? 'Saving...' : 'Save Changes'}
+              </Button>
+            )}
           </div>
         </div>
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'meta' | 'social')}>
+            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'meta' | 'social' | 'tracking')}>
               <TabsList>
                 <TabsTrigger value="meta" className="flex items-center gap-2">
                   <Search className="h-4 w-4" />
@@ -193,6 +235,10 @@ export default function SEOSettings({ embedded }: { embedded?: boolean } = {}) {
                 <TabsTrigger value="social" className="flex items-center gap-2">
                   <Share2 className="h-4 w-4" />
                   Social Media
+                </TabsTrigger>
+                <TabsTrigger value="tracking" className="flex items-center gap-2">
+                  <BarChart3 className="h-4 w-4" />
+                  Tracking
                 </TabsTrigger>
               </TabsList>
 
@@ -494,6 +540,95 @@ export default function SEOSettings({ embedded }: { embedded?: boolean } = {}) {
                     />
                   </CardContent>
                 </Card>
+              </TabsContent>
+
+              <TabsContent value="tracking" className="space-y-6 mt-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <BarChart3 className="h-5 w-5" />
+                      Google Analytics 4
+                    </CardTitle>
+                    <CardDescription>
+                      Track visitor behaviour with GA4. Find your Measurement ID in Google Analytics → Admin → Data Streams.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="ga-id">GA4 Measurement ID</Label>
+                      <Input
+                        id="ga-id"
+                        value={tracking.googleAnalyticsId}
+                        onChange={e => setTracking(t => ({ ...t, googleAnalyticsId: e.target.value }))}
+                        placeholder="G-XXXXXXXXXX"
+                        data-testid="input-ga-id"
+                      />
+                      <p className="text-xs text-muted-foreground">Format: <code className="bg-muted px-1 rounded">G-XXXXXXXXXX</code></p>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <BarChart3 className="h-5 w-5" />
+                      Google Tag Manager
+                    </CardTitle>
+                    <CardDescription>
+                      Deploy and manage tags without editing code. Find your Container ID in GTM → Admin → Container Settings.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="gtm-id">GTM Container ID</Label>
+                      <Input
+                        id="gtm-id"
+                        value={tracking.googleTagManagerId}
+                        onChange={e => setTracking(t => ({ ...t, googleTagManagerId: e.target.value }))}
+                        placeholder="GTM-XXXXXXX"
+                        data-testid="input-gtm-id"
+                      />
+                      <p className="text-xs text-muted-foreground">Format: <code className="bg-muted px-1 rounded">GTM-XXXXXXX</code></p>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Search className="h-5 w-5" />
+                      Google Search Console
+                    </CardTitle>
+                    <CardDescription>
+                      Verify ownership of your site. Paste the full meta tag from Search Console → Settings → Ownership verification → HTML tag.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="gsc-code">Verification Meta Tag</Label>
+                      <Input
+                        id="gsc-code"
+                        value={tracking.googleSearchConsoleCode}
+                        onChange={e => setTracking(t => ({ ...t, googleSearchConsoleCode: e.target.value }))}
+                        placeholder='<meta name="google-site-verification" content="XXXX..." />'
+                        data-testid="input-gsc-code"
+                      />
+                      <p className="text-xs text-muted-foreground">Paste the complete <code className="bg-muted px-1 rounded">&lt;meta&gt;</code> tag exactly as provided by Google.</p>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <div className="flex justify-end">
+                  <Button
+                    type="button"
+                    onClick={() => saveTrackingMutation.mutate(tracking)}
+                    disabled={saveTrackingMutation.isPending}
+                    data-testid="button-save-tracking-bottom"
+                  >
+                    <Save className="h-4 w-4 mr-2" />
+                    {saveTrackingMutation.isPending ? 'Saving...' : 'Save Tracking Settings'}
+                  </Button>
+                </div>
               </TabsContent>
             </Tabs>
           </form>
