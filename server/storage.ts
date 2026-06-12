@@ -1,5 +1,5 @@
 import { db } from './db';
-import { eq, desc, and, asc } from 'drizzle-orm';
+import { eq, desc, and, asc, like } from 'drizzle-orm';
 import {
   tenants, tenantDomains, tenantThemes, sections, menuItems,
   adminUsers, integrationSettings, mediaAssets, faqItems,
@@ -123,6 +123,9 @@ export interface IStorage {
   createSiteVersion(version: InsertSiteVersion): Promise<SiteVersion>;
   deleteSiteVersion(id: string): Promise<boolean>;
   pruneOldVersions(tenantId: string, keep?: number): Promise<void>;
+
+  // Image ownership
+  doesImageBelongToTenant(imageId: string, tenantId: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -617,6 +620,41 @@ export class DatabaseStorage implements IStorage {
     for (const v of toDelete) {
       await db.delete(siteVersions).where(eq(siteVersions.id, v.id));
     }
+  }
+
+  // Image ownership
+  async doesImageBelongToTenant(imageId: string, tenantId: string): Promise<boolean> {
+    // 1. media_assets: direct tenantId column + LIKE on url
+    const [ma] = await db.select({ id: mediaAssets.id })
+      .from(mediaAssets)
+      .where(and(eq(mediaAssets.tenantId, tenantId), like(mediaAssets.fileUrl, `%${imageId}%`)))
+      .limit(1);
+    if (ma) return true;
+
+    // 2. tenant logo / favicon (plain string includes check — no SQL needed)
+    const [t] = await db.select({ logoUrl: tenants.logoUrl, faviconUrl: tenants.faviconUrl })
+      .from(tenants)
+      .where(eq(tenants.id, tenantId))
+      .limit(1);
+    if (t && ((t.logoUrl?.includes(imageId)) || (t.faviconUrl?.includes(imageId)))) {
+      return true;
+    }
+
+    // 3. blog_post_images: has direct tenantId column
+    const [bi] = await db.select({ id: blogPostImages.id })
+      .from(blogPostImages)
+      .where(and(eq(blogPostImages.tenantId, tenantId), like(blogPostImages.url, `%${imageId}%`)))
+      .limit(1);
+    if (bi) return true;
+
+    // 4. testimonial student photos
+    const [te] = await db.select({ id: testimonials.id })
+      .from(testimonials)
+      .where(and(eq(testimonials.tenantId, tenantId), like(testimonials.studentPhoto, `%${imageId}%`)))
+      .limit(1);
+    if (te) return true;
+
+    return false;
   }
 }
 

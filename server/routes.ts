@@ -214,20 +214,34 @@ export async function registerRoutes(
   });
 
   // ─── Optimized image endpoint ───────────────────────────────────────────────
-  app.get("/api/img/:id", async (req, res) => {
+  app.get("/api/img/:id", resolveTenant, async (req, res) => {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const width = parseInt(req.query.w as string) || 160;
       const height = req.query.h ? parseInt(req.query.h as string) : undefined;
       const format = (req.query.fmt as string) || 'webp';
       const quality = parseInt(req.query.q as string) || 75;
 
-      const cacheKey = `${id}_${width}_${height || 'auto'}_${format}_${quality}`;
+      // Cache key is tenant-scoped to prevent cross-tenant cache hits
+      const cacheKey = `${req.tenantId}_${id}_${width}_${height || 'auto'}_${format}_${quality}`;
       const cached = imageCache.get(cacheKey);
       if (cached && Date.now() - cached.timestamp < IMAGE_CACHE_TTL) {
         res.set('Content-Type', cached.contentType);
         res.set('Cache-Control', 'public, max-age=86400');
         return res.send(cached.buffer);
+      }
+
+      // Superadmin can access any tenant's images; everyone else must own the image
+      let isSuperAdmin = false;
+      if (req.session?.adminId) {
+        const admin = await storage.getAdminById(req.session.adminId as string);
+        isSuperAdmin = admin?.role === 'super_admin';
+      }
+      if (!isSuperAdmin) {
+        const belongs = await storage.doesImageBelongToTenant(id, req.tenantId as string);
+        if (!belongs) {
+          return res.status(403).json({ error: "Forbidden" });
+        }
       }
 
       let buffer: Buffer;

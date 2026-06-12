@@ -94,6 +94,7 @@ vi.mock('../server/storage', () => ({
     updateSection: vi.fn(),
     updateSections: vi.fn(),
     deleteSection: vi.fn(),
+    doesImageBelongToTenant: vi.fn(),
   },
 }));
 
