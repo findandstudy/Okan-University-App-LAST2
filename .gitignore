@@ -4,3 +4,13 @@ dist
 server/public
 vite.config.ts.*
 *.tar.gz
+*.log
+
+# Environment — never commit real secrets
+.env
+.env.*
+!.env.example
+
+# Sensitive / generated at runtime
+cookies.txt
+uploads/
