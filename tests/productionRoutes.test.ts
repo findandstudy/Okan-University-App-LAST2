@@ -90,6 +90,7 @@ vi.mock('../server/storage', () => ({
     createLead: vi.fn(),
     updateLead: vi.fn(),
     createSection: vi.fn(),
+    getSection: vi.fn(),
     updateSection: vi.fn(),
     updateSections: vi.fn(),
     deleteSection: vi.fn(),

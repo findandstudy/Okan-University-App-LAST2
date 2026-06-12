@@ -558,7 +558,9 @@ export async function registerRoutes(
 
   app.patch("/api/sections/:id", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
     try {
-      const section = await storage.updateSection(req.params.id as string, req.body);
+      const existing = await storage.getSection(req.params.id as string);
+      if (!existing || existing.tenantId !== req.tenantId) return res.status(404).json({ error: "Section not found" });
+      const section = await storage.updateSection(req.params.id as string, req.tenantId, req.body);
       if (!section) return res.status(404).json({ error: "Section not found" });
       bootstrapCache.delete(req.tenantId);
       res.json(section);
@@ -570,7 +572,7 @@ export async function registerRoutes(
   app.patch("/api/sections", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
     try {
       const updates = req.body.sections as Array<{ id: string; isEnabled?: boolean; displayOrder?: number }>;
-      const result = await storage.updateSections(updates);
+      const result = await storage.updateSections(req.tenantId, updates);
       bootstrapCache.delete(req.tenantId);
       res.json(result);
     } catch (error) {
@@ -1240,7 +1242,7 @@ export async function registerRoutes(
         for (const [lang, content] of Object.entries(translated)) {
           newCBL[lang] = { ...(existingCBL[lang] || {}), ...content };
         }
-        await storage.updateSection(section.id, { contentByLang: newCBL });
+        await storage.updateSection(section.id, tenantId, { contentByLang: newCBL });
         sectionsCount++;
       }
       steps.push(`sections:${sectionsCount}`);
@@ -1332,7 +1334,7 @@ export async function registerRoutes(
             if (c.contactTitle) newSettings.contactTitle = { ...newSettings.contactTitle, [lang]: c.contactTitle };
             if (c.contactAddress) newSettings.contactAddress = { ...newSettings.contactAddress, [lang]: c.contactAddress };
           }
-          await storage.updateSection(footerSection.id, { settings: newSettings });
+          await storage.updateSection(footerSection.id, tenantId, { settings: newSettings });
           steps.push('footer');
         }
       }
@@ -1376,7 +1378,7 @@ export async function registerRoutes(
           newCBL[lang] = { ...(existingCBL[lang] || {}), ...content };
         }
 
-        await storage.updateSection(section.id, { contentByLang: newCBL });
+        await storage.updateSection(section.id, req.tenantId, { contentByLang: newCBL });
         results.push({ id: section.id, sectionKey: section.sectionKey, translated });
       }
 
@@ -1518,7 +1520,7 @@ export async function registerRoutes(
       const heroMerged: Record<string, any> = { ...heroExisting, en: heroEnContent };
 
       if (heroSection) {
-        await storage.updateSection(heroSection.id, { contentByLang: heroMerged });
+        await storage.updateSection(heroSection.id, req.tenantId, { contentByLang: heroMerged });
       } else {
         await storage.createSection({
           tenantId: req.tenantId,
@@ -1538,7 +1540,7 @@ export async function registerRoutes(
         const aboutExisting = (aboutSection?.contentByLang as Record<string, any>) || {};
         const aboutMerged: Record<string, any> = { ...aboutExisting, en: aboutEnContent };
         if (aboutSection) {
-          await storage.updateSection(aboutSection.id, { contentByLang: aboutMerged });
+          await storage.updateSection(aboutSection.id, req.tenantId, { contentByLang: aboutMerged });
           aboutSectionId = aboutSection.id;
         } else {
           const created = await storage.createSection({

@@ -46,9 +46,10 @@ export interface IStorage {
 
   // Sections
   getSections(tenantId: string): Promise<Section[]>;
+  getSection(id: string): Promise<Section | undefined>;
   createSection(section: InsertSection): Promise<Section>;
-  updateSection(id: string, data: Partial<InsertSection>): Promise<Section | undefined>;
-  updateSections(updates: Array<{ id: string; isEnabled?: boolean; displayOrder?: number }>): Promise<Section[]>;
+  updateSection(id: string, tenantId: string, data: Partial<InsertSection>): Promise<Section | undefined>;
+  updateSections(tenantId: string, updates: Array<{ id: string; isEnabled?: boolean; displayOrder?: number }>): Promise<Section[]>;
   deleteSection(id: string, tenantId: string): Promise<boolean>;
 
   // Themes
@@ -233,12 +234,20 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
-  async updateSection(id: string, data: Partial<InsertSection>): Promise<Section | undefined> {
-    const [updated] = await db.update(sections).set(data as any).where(eq(sections.id, id)).returning();
+  async getSection(id: string): Promise<Section | undefined> {
+    const [section] = await db.select().from(sections).where(eq(sections.id, id));
+    return section;
+  }
+
+  async updateSection(id: string, tenantId: string, data: Partial<InsertSection>): Promise<Section | undefined> {
+    const [updated] = await db.update(sections)
+      .set(data as any)
+      .where(and(eq(sections.id, id), eq(sections.tenantId, tenantId)))
+      .returning();
     return updated;
   }
 
-  async updateSections(updates: Array<{ id: string; isEnabled?: boolean; displayOrder?: number }>): Promise<Section[]> {
+  async updateSections(tenantId: string, updates: Array<{ id: string; isEnabled?: boolean; displayOrder?: number }>): Promise<Section[]> {
     const results: Section[] = [];
     for (const update of updates) {
       const setData: Record<string, unknown> = {};
@@ -247,7 +256,7 @@ export class DatabaseStorage implements IStorage {
       if (Object.keys(setData).length === 0) continue;
       const [updated] = await db.update(sections)
         .set(setData)
-        .where(eq(sections.id, update.id))
+        .where(and(eq(sections.id, update.id), eq(sections.tenantId, tenantId)))
         .returning();
       if (updated) results.push(updated);
     }
