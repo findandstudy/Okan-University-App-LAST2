@@ -1017,8 +1017,9 @@ export default function SiteEditor() {
               <TenantMediaTab tenantId={tenantId} />
             </TabsContent>
 
-            <TabsContent value="settings" className="mt-4">
+            <TabsContent value="settings" className="mt-4 space-y-6">
               <TenantSettingsTab tenantId={tenantId} />
+              <FooterContent embedded />
             </TabsContent>
 
             <TabsContent value="translations" className="mt-4">

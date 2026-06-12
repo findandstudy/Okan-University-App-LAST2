@@ -4,6 +4,8 @@ import { Link, useParams } from 'wouter';
 import { useI18n } from '@/lib/i18n';
 import { formatDate } from '@/lib/utils';
 import type { Tenant } from '@shared/schema';
+import { Header } from '@/components/landing/Header';
+import { Footer } from '@/components/landing/Footer';
 
 interface BlogPostDetail {
   post: {
@@ -189,27 +191,20 @@ export default function BlogPost() {
       : `${window.location.origin}${post.featuredImageUrl}`)
     : undefined;
 
+  const universityName = tenant?.universityName || 'University';
+  const logoUrl = tenant?.logoUrl || '';
+
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background flex flex-col">
       {/* hreflang for blog post alternates */}
       {alternates && Object.entries(alternates).map(([l, s]) => {
         const href = `${window.location.origin}${l === 'en' ? '' : `/${l}`}/blog/${s}`;
         return <link key={l} rel="alternate" hrefLang={l} href={href} />;
       })}
 
-      {/* Header */}
-      <header className="border-b bg-white sticky top-0 z-10">
-        <div className="max-w-3xl mx-auto px-4 py-4 flex items-center gap-4">
-          <Link href={`${langPrefix}/blog`} className="text-primary font-semibold hover:underline">
-            ← Blog
-          </Link>
-          {tenant && (
-            <span className="text-muted-foreground text-sm">/ {tenant.universityName}</span>
-          )}
-        </div>
-      </header>
+      <Header universityName={universityName} logoUrl={logoUrl} />
 
-      <main className="max-w-3xl mx-auto px-4 py-12">
+      <main className="flex-1 max-w-3xl mx-auto w-full px-4 py-12">
         <article>
           <header className="mb-8">
             <h1 className="text-3xl md:text-4xl font-bold text-foreground mb-3" data-testid="blog-post-title">
@@ -347,6 +342,15 @@ export default function BlogPost() {
           />
         )}
       </main>
+
+      <Footer
+        universityName={universityName}
+        logoUrl={logoUrl}
+        facebookUrl={(tenant as any)?.facebookUrl}
+        instagramUrl={(tenant as any)?.instagramUrl}
+        linkedinUrl={(tenant as any)?.linkedinUrl}
+        youtubeUrl={(tenant as any)?.youtubeUrl}
+      />
     </div>
   );
 }

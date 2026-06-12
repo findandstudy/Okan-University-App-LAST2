@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Save, Loader2 } from 'lucide-react';
+import { Save, Loader2, Globe } from 'lucide-react';
 import { SUPPORTED_LANGUAGES, type SupportedLanguage } from '@shared/schema';
 
 function EmbeddableLayout({ embedded, children }: { embedded?: boolean; children: React.ReactNode }) {
@@ -115,10 +115,45 @@ export default function FooterContent({ embedded }: { embedded?: boolean } = {})
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/sections' + apiSuffix] });
-      toast({ title: 'Footer content saved', description: 'Your changes have been saved successfully.' });
+      toast({ title: 'Footer content saved', description: 'Changes are live on your site immediately.' });
     },
     onError: () => {
       toast({ title: 'Error', description: 'Failed to save changes.', variant: 'destructive' });
+    },
+  });
+
+  const translateMutation = useMutation({
+    mutationFn: async () => {
+      const sourceContent = {
+        description: settings.description.en || '',
+        contactTitle: settings.contactTitle.en || '',
+        contactAddress: settings.contactAddress.en || '',
+      };
+      const targetLangs = SUPPORTED_LANGUAGES.filter(l => l !== 'en');
+      const res = await apiRequest('POST', `/api/admin/ai/translate${apiSuffix}`, {
+        sourceContent,
+        sourceLang: 'en',
+        targetLangs,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Translation failed');
+      }
+      return res.json();
+    },
+    onSuccess: (translated: Record<string, { description?: string; contactTitle?: string; contactAddress?: string }>) => {
+      const newSettings = { ...settings };
+      for (const [lang, fields] of Object.entries(translated)) {
+        const l = lang as SupportedLanguage;
+        if (fields.description) newSettings.description = { ...newSettings.description, [l]: fields.description };
+        if (fields.contactTitle) newSettings.contactTitle = { ...newSettings.contactTitle, [l]: fields.contactTitle };
+        if (fields.contactAddress) newSettings.contactAddress = { ...newSettings.contactAddress, [l]: fields.contactAddress };
+      }
+      setSettings(newSettings);
+      toast({ title: 'Auto-translated', description: 'Footer text translated to all languages. Review and save.' });
+    },
+    onError: (err: any) => {
+      toast({ title: 'Translation failed', description: err.message || 'Check your AI settings.', variant: 'destructive' });
     },
   });
 
@@ -144,10 +179,21 @@ export default function FooterContent({ embedded }: { embedded?: boolean } = {})
             <h1 className="text-2xl font-bold">Footer Content</h1>
             <p className="text-muted-foreground">Manage footer description and contact information</p>
           </div>
-          <Button onClick={handleSave} disabled={saveMutation.isPending} data-testid="button-save-footer">
-            {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
-            Save Changes
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() => translateMutation.mutate()}
+              disabled={translateMutation.isPending || !settings.description.en}
+              data-testid="button-auto-translate-footer"
+            >
+              {translateMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Globe className="h-4 w-4 mr-2" />}
+              Auto Translate
+            </Button>
+            <Button onClick={handleSave} disabled={saveMutation.isPending} data-testid="button-save-footer">
+              {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+              Save Changes
+            </Button>
+          </div>
         </div>
 
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as SupportedLanguage)}>

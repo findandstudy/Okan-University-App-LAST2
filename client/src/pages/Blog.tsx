@@ -4,6 +4,8 @@ import { useI18n } from '@/lib/i18n';
 import { formatDate } from '@/lib/utils';
 import type { Tenant } from '@shared/schema';
 import SEOMetaTags from '@/components/SEOMetaTags';
+import { Header } from '@/components/landing/Header';
+import { Footer } from '@/components/landing/Footer';
 
 interface BlogListItem {
   post: {
@@ -27,24 +29,19 @@ export default function Blog() {
   });
 
   const langPrefix = language === 'en' ? '' : `/${language}`;
+  const universityName = tenant?.universityName || 'University';
+  const logoUrl = tenant?.logoUrl || '';
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background flex flex-col">
       <SEOMetaTags lang={language as any} />
 
-      {/* Header */}
-      <header className="border-b bg-white sticky top-0 z-10">
-        <div className="max-w-5xl mx-auto px-4 py-4 flex items-center gap-4">
-          <Link href={`${langPrefix}/`} className="text-primary font-semibold hover:underline">
-            ← {tenant?.universityName || 'Home'}
-          </Link>
-        </div>
-      </header>
+      <Header universityName={universityName} logoUrl={logoUrl} />
 
-      <main className="max-w-5xl mx-auto px-4 py-12">
+      <main className="flex-1 max-w-5xl mx-auto w-full px-4 py-12">
         <h1 className="text-4xl font-bold text-foreground mb-2">Blog</h1>
         <p className="text-muted-foreground mb-10">
-          {tenant?.universityName} — Articles for international students
+          {universityName} — Articles for international students
         </p>
 
         {isLoading ? (
@@ -87,6 +84,15 @@ export default function Blog() {
         )}
       </main>
 
+      <Footer
+        universityName={universityName}
+        logoUrl={logoUrl}
+        facebookUrl={(tenant as any)?.facebookUrl}
+        instagramUrl={(tenant as any)?.instagramUrl}
+        linkedinUrl={(tenant as any)?.linkedinUrl}
+        youtubeUrl={(tenant as any)?.youtubeUrl}
+      />
+
       {/* ── JSON-LD: Blog + ItemList ── */}
       {posts.length > 0 && (
         <script
@@ -95,13 +101,13 @@ export default function Blog() {
             __html: JSON.stringify({
               '@context': 'https://schema.org',
               '@type': 'Blog',
-              name: `${tenant?.universityName || 'University'} Blog`,
-              description: `Articles for international students by ${tenant?.universityName || 'University'}`,
+              name: `${universityName} Blog`,
+              description: `Articles for international students by ${universityName}`,
               url: `${window.location.origin}${langPrefix}/blog`,
               inLanguage: language,
               publisher: {
                 '@type': 'Organization',
-                name: tenant?.universityName || 'University',
+                name: universityName,
               },
               blogPost: posts.map(({ post, translation }) => ({
                 '@type': 'BlogPosting',
@@ -115,7 +121,6 @@ export default function Blog() {
         />
       )}
 
-      {/* ── JSON-LD: BreadcrumbList ── */}
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
@@ -126,7 +131,7 @@ export default function Blog() {
               {
                 '@type': 'ListItem',
                 position: 1,
-                name: tenant?.universityName || 'Home',
+                name: universityName,
                 item: `${window.location.origin}${langPrefix}/`,
               },
               {
