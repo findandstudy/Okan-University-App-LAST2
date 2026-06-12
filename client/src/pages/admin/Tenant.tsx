@@ -11,6 +11,7 @@ import { apiRequest, queryClient } from '@/lib/queryClient';
 import { useUpload } from '@/hooks/use-upload';
 import { Globe, Upload, Loader2, X, Image as ImageIcon, Facebook, Instagram, Linkedin, Youtube, Video, Languages } from 'lucide-react';
 import AdminLayout from './AdminLayout';
+import FooterContent from './FooterContent';
 import { useSiteContext } from '@/lib/siteContext';
 import type { Tenant, SupportedLanguage } from '@shared/schema';
 
@@ -487,6 +488,8 @@ export default function TenantPage({ embedded }: { embedded?: boolean } = {}) {
             )}
           </CardContent>
         </Card>
+
+        <FooterContent embedded />
 
         <div className="flex justify-end">
           <Button 
