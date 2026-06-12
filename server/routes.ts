@@ -1312,6 +1312,31 @@ export async function registerRoutes(
         }
       }
 
+      // 6. Footer section (description, contactTitle, contactAddress from settings)
+      const footerSection = sections.find((s: any) => s.sectionKey === 'footer');
+      if (footerSection?.settings) {
+        const fs = footerSection.settings as Record<string, any>;
+        const enDesc = fs.description?.en || '';
+        const enContactTitle = fs.contactTitle?.en || '';
+        const enContactAddress = fs.contactAddress?.en || '';
+        const sourceFooter: Record<string, string> = {};
+        if (enDesc.trim()) sourceFooter.description = enDesc;
+        if (enContactTitle.trim()) sourceFooter.contactTitle = enContactTitle;
+        if (enContactAddress.trim()) sourceFooter.contactAddress = enContactAddress;
+        if (Object.keys(sourceFooter).length > 0) {
+          const translated = await translateContentByLang(sourceFooter, 'en', TARGET_LANGS, tenantId);
+          const newSettings = { ...fs };
+          for (const [lang, content] of Object.entries(translated)) {
+            const c = content as Record<string, string>;
+            if (c.description) newSettings.description = { ...newSettings.description, [lang]: c.description };
+            if (c.contactTitle) newSettings.contactTitle = { ...newSettings.contactTitle, [lang]: c.contactTitle };
+            if (c.contactAddress) newSettings.contactAddress = { ...newSettings.contactAddress, [lang]: c.contactAddress };
+          }
+          await storage.updateSection(footerSection.id, { settings: newSettings });
+          steps.push('footer');
+        }
+      }
+
       res.json({ ok: true, steps });
     } catch (err: any) {
       res.status(500).json({ error: err?.message || "Translation failed" });

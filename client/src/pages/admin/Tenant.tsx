@@ -222,7 +222,7 @@ export default function TenantPage({ embedded }: { embedded?: boolean } = {}) {
       queryClient.invalidateQueries({ queryKey: ['/api/faq' + apiSuffix] });
       queryClient.invalidateQueries({ queryKey: ['/api/testimonials' + apiSuffix] });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/seo-settings' + apiSuffix] });
-      toast({ title: '✅ Everything translated', description: 'University name, sections, FAQ, testimonials and SEO meta tags are now translated into 9 languages.' });
+      toast({ title: '✅ Everything translated', description: 'University name, sections, FAQ, testimonials, footer content and SEO meta tags are now translated into 9 languages.' });
     },
     onError: (err: Error) => {
       setTranslateProgress(null);
