@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'wouter';
+import { Link, useLocation } from 'wouter';
 import { useI18n } from '@/lib/i18n';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 import { Button } from '@/components/ui/button';
@@ -16,7 +16,14 @@ interface HeaderProps {
 
 export function Header({ universityName = 'University', logoUrl }: HeaderProps) {
   const { t, isRTL, language } = useI18n();
+  const [location] = useLocation();
   const [isOpen, setIsOpen] = useState(false);
+
+  // Determine if we're on the home/landing page so we can scroll vs. navigate
+  const homeBase = language === 'en' ? '' : `/${language}`;
+  const nonHomeSegments = ['blog', 'apply'];
+  const pathSegments = location.split('/').filter(Boolean);
+  const isHomePage = !pathSegments.some(seg => nonHomeSegments.includes(seg));
   const [logoError, setLogoError] = useState(false);
   
   // Use cached values for instant display, then update with fresh data
@@ -60,21 +67,35 @@ export function Header({ universityName = 'University', logoUrl }: HeaderProps) 
   const displayLogoUrl = logoUrl || cachedLogoUrl;
   const displayName = universityName !== 'University' ? universityName : (cachedName || universityName);
 
-  const blogUrl = `/${language}/blog`;
+  const blogUrl = language === 'en' ? '/blog' : `/${language}/blog`;
 
   const navItems = [
-    { key: 'nav.home', href: '#hero', type: 'scroll' as const },
-    { key: 'nav.faq', href: '#faq', type: 'scroll' as const },
-    { key: 'nav.contact', href: '#contact', type: 'scroll' as const },
-    { key: 'nav.blog', href: blogUrl, type: 'link' as const },
+    { key: 'nav.home', hash: '#hero' },
+    { key: 'nav.faq', hash: '#faq' },
+    { key: 'nav.contact', hash: '#contact' },
+    { key: 'nav.blog', hash: null, href: blogUrl },
   ];
 
-  const scrollToSection = (href: string) => {
-    const element = document.querySelector(href);
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth' });
-    }
+  const handleScrollNav = (hash: string) => {
     setIsOpen(false);
+    if (isHomePage) {
+      const element = document.querySelector(hash);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth' });
+      }
+    } else {
+      window.location.href = `${homeBase}/${hash}`;
+    }
+  };
+
+  const handleApply = () => {
+    setIsOpen(false);
+    if (isHomePage) {
+      const element = document.querySelector('#contact');
+      if (element) element.scrollIntoView({ behavior: 'smooth' });
+    } else {
+      window.location.href = `${homeBase}/#contact`;
+    }
   };
 
   return (
@@ -102,8 +123,8 @@ export function Header({ universityName = 'University', logoUrl }: HeaderProps) 
 
         <nav className="hidden md:flex items-center gap-1">
           {navItems.map((item) =>
-            item.type === 'link' ? (
-              <Link key={item.key} href={item.href}>
+            item.hash === null ? (
+              <Link key={item.key} href={item.href!}>
                 <Button variant="ghost" size="sm" data-testid={`nav-${item.key.split('.')[1]}`}>
                   {t(item.key)}
                 </Button>
@@ -113,7 +134,7 @@ export function Header({ universityName = 'University', logoUrl }: HeaderProps) 
                 key={item.key}
                 variant="ghost"
                 size="sm"
-                onClick={() => scrollToSection(item.href)}
+                onClick={() => handleScrollNav(item.hash!)}
                 data-testid={`nav-${item.key.split('.')[1]}`}
               >
                 {t(item.key)}
@@ -128,7 +149,7 @@ export function Header({ universityName = 'University', logoUrl }: HeaderProps) 
             size="sm"
             className="hidden sm:flex"
             data-testid="button-apply-header"
-            onClick={() => scrollToSection('#contact')}
+            onClick={handleApply}
           >
             {t('nav.apply')}
           </Button>
@@ -142,8 +163,8 @@ export function Header({ universityName = 'University', logoUrl }: HeaderProps) 
             <SheetContent side={isRTL ? 'left' : 'right'} className="w-72">
               <nav className="flex flex-col gap-2 mt-8">
                 {navItems.map((item) =>
-                  item.type === 'link' ? (
-                    <Link key={item.key} href={item.href} onClick={() => setIsOpen(false)}>
+                  item.hash === null ? (
+                    <Link key={item.key} href={item.href!} onClick={() => setIsOpen(false)}>
                       <Button variant="ghost" className="justify-start w-full">
                         {t(item.key)}
                       </Button>
@@ -153,7 +174,7 @@ export function Header({ universityName = 'University', logoUrl }: HeaderProps) 
                       key={item.key}
                       variant="ghost"
                       className="justify-start"
-                      onClick={() => scrollToSection(item.href)}
+                      onClick={() => handleScrollNav(item.hash!)}
                     >
                       {t(item.key)}
                     </Button>
@@ -162,7 +183,7 @@ export function Header({ universityName = 'University', logoUrl }: HeaderProps) 
                 <Button
                   className="w-full mt-4"
                   data-testid="button-apply-mobile"
-                  onClick={() => scrollToSection('#contact')}
+                  onClick={handleApply}
                 >
                   {t('nav.apply')}
                 </Button>
