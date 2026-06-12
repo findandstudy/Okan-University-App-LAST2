@@ -273,4 +273,31 @@ describe('/api/img/:id tenant isolation', () => {
     // Superadmin bypass: ownership check must NOT be called
     expect(storage.doesImageBelongToTenant).not.toHaveBeenCalled();
   });
+
+  it('cache bypass prevention: superadmin-warmed image is still 403 for unauthorized tenant', async () => {
+    // Step 1: Superadmin warms the cache for IMAGE_ID_B under tenant-a context
+    vi.mocked(storage.getAdminByEmail).mockResolvedValue(SUPER_ADMIN as any);
+    vi.mocked(storage.getAdminById).mockResolvedValue(SUPER_ADMIN as any);
+
+    const superCookie = await loginAs(SUPER_ADMIN.email, 'secret-super');
+
+    const warmRes = await request(testApp)
+      .get(`/api/img/${IMAGE_ID_B}?w=320`)
+      .set('Host', 'uni-a.edu')
+      .set('Cookie', superCookie);
+    expect(warmRes.status).toBe(200); // superadmin can access
+
+    // Step 2: Non-admin anonymous request for the same image on the same host
+    // Authorization runs before cache read, so this must be denied even if cached
+    vi.mocked(storage.getAdminById).mockResolvedValue(undefined as any);
+    vi.mocked(storage.doesImageBelongToTenant).mockResolvedValue(false);
+
+    const anonRes = await request(testApp)
+      .get(`/api/img/${IMAGE_ID_B}?w=320`)
+      .set('Host', 'uni-a.edu');
+
+    expect(anonRes.status).toBe(403);
+    expect(anonRes.body.error).toBe('Forbidden');
+    expect(storage.doesImageBelongToTenant).toHaveBeenCalledWith(IMAGE_ID_B, 'tenant-a');
+  });
 });

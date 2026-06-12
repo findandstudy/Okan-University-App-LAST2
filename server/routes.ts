@@ -222,16 +222,9 @@ export async function registerRoutes(
       const format = (req.query.fmt as string) || 'webp';
       const quality = parseInt(req.query.q as string) || 75;
 
-      // Cache key is tenant-scoped to prevent cross-tenant cache hits
-      const cacheKey = `${req.tenantId}_${id}_${width}_${height || 'auto'}_${format}_${quality}`;
-      const cached = imageCache.get(cacheKey);
-      if (cached && Date.now() - cached.timestamp < IMAGE_CACHE_TTL) {
-        res.set('Content-Type', cached.contentType);
-        res.set('Cache-Control', 'public, max-age=86400');
-        return res.send(cached.buffer);
-      }
-
-      // Superadmin can access any tenant's images; everyone else must own the image
+      // Authorization runs BEFORE the cache check so that a superadmin
+      // warming the cache for a cross-tenant image cannot make it visible
+      // to subsequent non-admin requests from the same tenant context.
       let isSuperAdmin = false;
       if (req.session?.adminId) {
         const admin = await storage.getAdminById(req.session.adminId as string);
@@ -242,6 +235,15 @@ export async function registerRoutes(
         if (!belongs) {
           return res.status(403).json({ error: "Forbidden" });
         }
+      }
+
+      // Cache key is tenant-scoped to prevent cross-tenant cache key collisions
+      const cacheKey = `${req.tenantId}_${id}_${width}_${height || 'auto'}_${format}_${quality}`;
+      const cached = imageCache.get(cacheKey);
+      if (cached && Date.now() - cached.timestamp < IMAGE_CACHE_TTL) {
+        res.set('Content-Type', cached.contentType);
+        res.set('Cache-Control', 'public, max-age=86400');
+        return res.send(cached.buffer);
       }
 
       let buffer: Buffer;

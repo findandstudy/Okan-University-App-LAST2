@@ -1,5 +1,5 @@
 import { db } from './db';
-import { eq, desc, and, asc, like } from 'drizzle-orm';
+import { eq, desc, and, asc, ilike } from 'drizzle-orm';
 import {
   tenants, tenantDomains, tenantThemes, sections, menuItems,
   adminUsers, integrationSettings, mediaAssets, faqItems,
@@ -627,7 +627,7 @@ export class DatabaseStorage implements IStorage {
     // 1. media_assets: direct tenantId column + LIKE on url
     const [ma] = await db.select({ id: mediaAssets.id })
       .from(mediaAssets)
-      .where(and(eq(mediaAssets.tenantId, tenantId), like(mediaAssets.fileUrl, `%${imageId}%`)))
+      .where(and(eq(mediaAssets.tenantId, tenantId), ilike(mediaAssets.fileUrl, `%${imageId}%`)))
       .limit(1);
     if (ma) return true;
 
@@ -643,14 +643,14 @@ export class DatabaseStorage implements IStorage {
     // 3. blog_post_images: has direct tenantId column
     const [bi] = await db.select({ id: blogPostImages.id })
       .from(blogPostImages)
-      .where(and(eq(blogPostImages.tenantId, tenantId), like(blogPostImages.url, `%${imageId}%`)))
+      .where(and(eq(blogPostImages.tenantId, tenantId), ilike(blogPostImages.url, `%${imageId}%`)))
       .limit(1);
     if (bi) return true;
 
     // 4. testimonial student photos
     const [te] = await db.select({ id: testimonials.id })
       .from(testimonials)
-      .where(and(eq(testimonials.tenantId, tenantId), like(testimonials.studentPhoto, `%${imageId}%`)))
+      .where(and(eq(testimonials.tenantId, tenantId), ilike(testimonials.studentPhoto, `%${imageId}%`)))
       .limit(1);
     if (te) return true;
 
