@@ -11,6 +11,8 @@ interface HeroSettings {
   title?: Record<SupportedLanguage, string>;
   subtitle?: Record<SupportedLanguage, string>;
   features?: Record<SupportedLanguage, string[]>;
+  primaryCtaLink?: string;
+  secondaryCtaLink?: string;
   stats?: {
     stat1Value?: string;
     stat1Label?: Record<SupportedLanguage, string>;
@@ -70,6 +72,17 @@ export function Hero({ title, subtitle, ctaLabel, backgroundImage }: HeroProps) 
 
   const heroSection = sections.find(s => s.sectionKey === 'hero');
   const heroSettings = heroSection?.settings as HeroSettings | undefined;
+
+  const primaryCtaLink = heroSettings?.primaryCtaLink || '#contact';
+  const secondaryCtaLink = heroSettings?.secondaryCtaLink || '#faq';
+
+  function scrollOrNavigate(link: string) {
+    if (link.startsWith('#')) {
+      document.querySelector(link)?.scrollIntoView({ behavior: 'smooth' });
+    } else {
+      window.location.href = link;
+    }
+  }
 
   const heroVideoUrl = tenant?.heroVideoUrl || '';
   const embedUrl = getYouTubeEmbedUrl(heroVideoUrl);
@@ -140,9 +153,7 @@ export function Hero({ title, subtitle, ctaLabel, backgroundImage }: HeroProps) 
                 size="lg"
                 className="gap-2 text-base px-8"
                 data-testid="button-hero-apply"
-                onClick={() => {
-                  document.querySelector('#contact')?.scrollIntoView({ behavior: 'smooth' });
-                }}
+                onClick={() => scrollOrNavigate(primaryCtaLink)}
               >
                 {ctaLabel || t('hero.cta')}
                 <ArrowRight className="h-5 w-5 rtl:rotate-180" />
@@ -151,9 +162,7 @@ export function Hero({ title, subtitle, ctaLabel, backgroundImage }: HeroProps) 
                 variant="outline"
                 size="lg"
                 className="gap-2 text-base"
-                onClick={() => {
-                  document.querySelector('#faq')?.scrollIntoView({ behavior: 'smooth' });
-                }}
+                onClick={() => scrollOrNavigate(secondaryCtaLink)}
                 data-testid="button-hero-programs"
               >
                 {t('hero.secondary_cta')}

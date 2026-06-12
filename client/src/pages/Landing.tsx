@@ -88,6 +88,10 @@ export default function Landing() {
   const logoUrl = tenant?.logoUrl || undefined;
   const faviconUrl = tenant?.faviconUrl || undefined;
 
+  const heroSection = sections.find(s => s.sectionKey === 'hero');
+  const heroSettings = heroSection?.settings as { headerApplyLink?: string } | undefined;
+  const headerApplyLink = heroSettings?.headerApplyLink || '#contact';
+
   useEffect(() => {
     if (theme) {
       const root = document.documentElement;
@@ -123,7 +127,7 @@ export default function Landing() {
       <TrackingScripts />
       <SEOMetaTags lang={language as SupportedLanguage} primaryDomain={bootstrap?.primaryDomain || tenant?.domain} />
       <JsonLd primaryDomain={bootstrap?.primaryDomain || tenant?.domain} />
-      <Header universityName={universityName} logoUrl={logoUrl} />
+      <Header universityName={universityName} logoUrl={logoUrl} applyLink={headerApplyLink} />
       <main className="flex-1">
         {orderedSections.length > 0
           ? orderedSections.map(renderSection)

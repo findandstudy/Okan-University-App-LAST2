@@ -12,9 +12,23 @@ const NAME_CACHE_KEY = 'cached_university_name';
 interface HeaderProps {
   universityName?: string;
   logoUrl?: string;
+  applyLink?: string;
 }
 
-export function Header({ universityName = 'University', logoUrl }: HeaderProps) {
+function resolveLink(link: string, homeBase: string, isHomePage: boolean) {
+  if (!link) return;
+  if (link.startsWith('#')) {
+    if (isHomePage) {
+      document.querySelector(link)?.scrollIntoView({ behavior: 'smooth' });
+    } else {
+      window.location.href = `${homeBase}/${link}`;
+    }
+  } else if (link.startsWith('/') || link.startsWith('http')) {
+    window.location.href = link;
+  }
+}
+
+export function Header({ universityName = 'University', logoUrl, applyLink }: HeaderProps) {
   const { t, isRTL, language } = useI18n();
   const [location] = useLocation();
   const [isOpen, setIsOpen] = useState(false);
@@ -90,12 +104,7 @@ export function Header({ universityName = 'University', logoUrl }: HeaderProps) 
 
   const handleApply = () => {
     setIsOpen(false);
-    if (isHomePage) {
-      const element = document.querySelector('#contact');
-      if (element) element.scrollIntoView({ behavior: 'smooth' });
-    } else {
-      window.location.href = `${homeBase}/#contact`;
-    }
+    resolveLink(applyLink || '#contact', homeBase, isHomePage);
   };
 
   return (

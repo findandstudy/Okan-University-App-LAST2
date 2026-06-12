@@ -11,8 +11,20 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Save, Plus, Trash2, Loader2 } from 'lucide-react';
+import { Save, Plus, Trash2, Loader2, Link2 } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { SUPPORTED_LANGUAGES, type SupportedLanguage } from '@shared/schema';
+
+const SECTION_ANCHORS = [
+  { value: '#contact', label: 'Contact / Apply Form (#contact)' },
+  { value: '#hero', label: 'Hero Section (#hero)' },
+  { value: '#trust', label: 'Trust Badges (#trust)' },
+  { value: '#steps', label: 'Steps / How It Works (#steps)' },
+  { value: '#testimonials', label: 'Testimonials (#testimonials)' },
+  { value: '#faq', label: 'FAQ (#faq)' },
+  { value: '/apply', label: 'Apply Page (/apply)' },
+  { value: 'custom', label: 'Custom URL...' },
+];
 
 function EmbeddableLayout({ embedded, children }: { embedded?: boolean; children: React.ReactNode }) {
   if (embedded) return <>{children}</>;
@@ -24,6 +36,9 @@ interface HeroSettings {
   title: Partial<Record<SupportedLanguage, string>>;
   subtitle: Partial<Record<SupportedLanguage, string>>;
   features: Partial<Record<SupportedLanguage, string[]>>;
+  primaryCtaLink?: string;
+  secondaryCtaLink?: string;
+  headerApplyLink?: string;
   stats: {
     stat1Value: string;
     stat1Label: Partial<Record<SupportedLanguage, string>>;
@@ -92,6 +107,9 @@ export default function HeroContent({ embedded }: { embedded?: boolean } = {}) {
           title: { ...prev.title, ...(savedSettings.title || {}) },
           subtitle: { ...prev.subtitle, ...(savedSettings.subtitle || {}) },
           features: { ...prev.features, ...(savedSettings.features || {}) },
+          primaryCtaLink: savedSettings.primaryCtaLink ?? prev.primaryCtaLink,
+          secondaryCtaLink: savedSettings.secondaryCtaLink ?? prev.secondaryCtaLink,
+          headerApplyLink: savedSettings.headerApplyLink ?? prev.headerApplyLink,
           stats: {
             stat1Value: savedSettings.stats?.stat1Value || prev.stats.stat1Value,
             stat1Label: { ...prev.stats.stat1Label, ...(savedSettings.stats?.stat1Label || {}) },
@@ -282,6 +300,61 @@ export default function HeroContent({ embedded }: { embedded?: boolean } = {}) {
             </TabsContent>
           ))}
         </Tabs>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Link2 className="h-5 w-5" />
+              Button Link Targets
+            </CardTitle>
+            <CardDescription>
+              Choose where each button scrolls or navigates to. Pick a section anchor or enter a custom path.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            {([
+              { key: 'primaryCtaLink', label: 'Hero "Apply Now" button', defaultVal: '#contact' },
+              { key: 'secondaryCtaLink', label: 'Hero secondary CTA button', defaultVal: '#faq' },
+              { key: 'headerApplyLink', label: 'Header "Apply Now" button', defaultVal: '#contact' },
+            ] as { key: 'primaryCtaLink' | 'secondaryCtaLink' | 'headerApplyLink'; label: string; defaultVal: string }[]).map(({ key, label, defaultVal }) => {
+              const current = settings[key] ?? defaultVal;
+              const isKnown = SECTION_ANCHORS.some(a => a.value !== 'custom' && a.value === current);
+              const selectVal = isKnown ? current : 'custom';
+              return (
+                <div key={key} className="space-y-2">
+                  <Label>{label}</Label>
+                  <div className="flex gap-2">
+                    <Select
+                      value={selectVal}
+                      onValueChange={(v) => {
+                        if (v !== 'custom') setSettings(p => ({ ...p, [key]: v }));
+                      }}
+                    >
+                      <SelectTrigger className="w-72" data-testid={`select-${key}`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {SECTION_ANCHORS.map(a => (
+                          <SelectItem key={a.value} value={a.value}>{a.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {(selectVal === 'custom' || !isKnown) && (
+                      <Input
+                        className="flex-1"
+                        value={current}
+                        onChange={e => setSettings(p => ({ ...p, [key]: e.target.value }))}
+                        placeholder="e.g. /apply or https://..."
+                        data-testid={`input-${key}-custom`}
+                      />
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">Current: <code className="bg-muted px-1 rounded">{current || defaultVal}</code></p>
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
 
         <Card>
           <CardHeader>
