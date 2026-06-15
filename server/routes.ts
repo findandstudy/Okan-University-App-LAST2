@@ -1411,6 +1411,90 @@ export async function registerRoutes(
         }
       }
 
+      // 8. Trust badges section (sectionTitle, sectionSubtitle, badges[].title, badges[].description from settings)
+      const trustSection = sections.find((s: any) => s.sectionKey === 'trust_badges');
+      if (trustSection?.settings) {
+        const ts = trustSection.settings as Record<string, any>;
+        const badges: Array<{ icon: string; title: Record<string, string>; description: Record<string, string> }> = ts.badges || [];
+        const sourceTrust: Record<string, string> = {};
+        if (ts.sectionTitle?.en?.trim()) sourceTrust.sectionTitle = ts.sectionTitle.en;
+        if (ts.sectionSubtitle?.en?.trim()) sourceTrust.sectionSubtitle = ts.sectionSubtitle.en;
+        for (let i = 0; i < badges.length; i++) {
+          if (badges[i]?.title?.en?.trim()) sourceTrust[`badge_${i}_title`] = badges[i].title.en;
+          if (badges[i]?.description?.en?.trim()) sourceTrust[`badge_${i}_description`] = badges[i].description.en;
+        }
+        if (Object.keys(sourceTrust).length > 0) {
+          const translated = await translateContentByLang(sourceTrust, 'en', TARGET_LANGS, tenantId);
+          const newSettings = { ...ts };
+          const newBadges = badges.map(b => ({ ...b, title: { ...b.title }, description: { ...b.description } }));
+          for (const [lang, content] of Object.entries(translated)) {
+            const c = content as Record<string, string>;
+            if (c.sectionTitle) newSettings.sectionTitle = { ...newSettings.sectionTitle, [lang]: c.sectionTitle };
+            if (c.sectionSubtitle) newSettings.sectionSubtitle = { ...newSettings.sectionSubtitle, [lang]: c.sectionSubtitle };
+            for (let i = 0; i < newBadges.length; i++) {
+              if (c[`badge_${i}_title`]) newBadges[i].title[lang] = c[`badge_${i}_title`];
+              if (c[`badge_${i}_description`]) newBadges[i].description[lang] = c[`badge_${i}_description`];
+            }
+          }
+          newSettings.badges = newBadges;
+          await storage.updateSection(trustSection.id, tenantId, { settings: newSettings });
+          steps.push('trust_badges');
+        }
+      }
+
+      // 9. Hero section (badge, title, subtitle, stats labels, features[] from settings)
+      const heroSection = sections.find((s: any) => s.sectionKey === 'hero');
+      if (heroSection?.settings) {
+        const hs = heroSection.settings as Record<string, any>;
+        const sourceHero: Record<string, string> = {};
+        if (hs.badge?.en?.trim()) sourceHero.badge = hs.badge.en;
+        if (hs.title?.en?.trim()) sourceHero.title = hs.title.en;
+        if (hs.subtitle?.en?.trim()) sourceHero.subtitle = hs.subtitle.en;
+        if (hs.stats?.stat1Label?.en?.trim()) sourceHero.stat1Label = hs.stats.stat1Label.en;
+        if (hs.stats?.stat1Sublabel?.en?.trim()) sourceHero.stat1Sublabel = hs.stats.stat1Sublabel.en;
+        if (hs.stats?.stat2Label?.en?.trim()) sourceHero.stat2Label = hs.stats.stat2Label.en;
+        if (hs.stats?.stat2Sublabel?.en?.trim()) sourceHero.stat2Sublabel = hs.stats.stat2Sublabel.en;
+        const enFeatures: string[] = hs.features?.en || [];
+        for (let i = 0; i < enFeatures.length; i++) {
+          if (enFeatures[i]?.trim()) sourceHero[`feature_${i}`] = enFeatures[i];
+        }
+        if (Object.keys(sourceHero).length > 0) {
+          const translated = await translateContentByLang(sourceHero, 'en', TARGET_LANGS, tenantId);
+          const newSettings = { ...hs };
+          newSettings.badge = { ...hs.badge };
+          newSettings.title = { ...hs.title };
+          newSettings.subtitle = { ...hs.subtitle };
+          newSettings.stats = {
+            ...hs.stats,
+            stat1Label: { ...(hs.stats?.stat1Label || {}) },
+            stat1Sublabel: { ...(hs.stats?.stat1Sublabel || {}) },
+            stat2Label: { ...(hs.stats?.stat2Label || {}) },
+            stat2Sublabel: { ...(hs.stats?.stat2Sublabel || {}) },
+          };
+          const newFeatures: Record<string, string[]> = { ...(hs.features || {}) };
+          for (const [lang, content] of Object.entries(translated)) {
+            const c = content as Record<string, string>;
+            if (c.badge) newSettings.badge[lang] = c.badge;
+            if (c.title) newSettings.title[lang] = c.title;
+            if (c.subtitle) newSettings.subtitle[lang] = c.subtitle;
+            if (c.stat1Label) newSettings.stats.stat1Label[lang] = c.stat1Label;
+            if (c.stat1Sublabel) newSettings.stats.stat1Sublabel[lang] = c.stat1Sublabel;
+            if (c.stat2Label) newSettings.stats.stat2Label[lang] = c.stat2Label;
+            if (c.stat2Sublabel) newSettings.stats.stat2Sublabel[lang] = c.stat2Sublabel;
+            if (enFeatures.length > 0) {
+              const langFeatures: string[] = [];
+              for (let i = 0; i < enFeatures.length; i++) {
+                langFeatures.push(c[`feature_${i}`] || enFeatures[i]);
+              }
+              newFeatures[lang] = langFeatures;
+            }
+          }
+          newSettings.features = newFeatures;
+          await storage.updateSection(heroSection.id, tenantId, { settings: newSettings });
+          steps.push('hero');
+        }
+      }
+
       res.json({ ok: true, steps });
     } catch (err: any) {
       res.status(500).json({ error: err?.message || "Translation failed" });

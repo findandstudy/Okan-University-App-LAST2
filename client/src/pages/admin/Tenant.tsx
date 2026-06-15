@@ -223,7 +223,7 @@ export default function TenantPage({ embedded }: { embedded?: boolean } = {}) {
       queryClient.invalidateQueries({ queryKey: ['/api/faq' + apiSuffix] });
       queryClient.invalidateQueries({ queryKey: ['/api/testimonials' + apiSuffix] });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/seo-settings' + apiSuffix] });
-      toast({ title: '✅ Everything translated', description: 'University name, sections, FAQ, testimonials, contact info, footer content and SEO meta tags are now translated into 9 languages.' });
+      toast({ title: '✅ Everything translated', description: 'University name, sections (including hero & trust badges), FAQ, testimonials, contact info, footer and SEO meta tags are now translated into 9 languages.' });
     },
     onError: (err: Error) => {
       setTranslateProgress(null);
@@ -260,7 +260,7 @@ export default function TenantPage({ embedded }: { embedded?: boolean } = {}) {
             <div className="flex-1">
               <p className="font-semibold text-sm">AI — Translate Everything</p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Translates <span className="font-medium">university name, all sections, FAQ, testimonials, contact info and SEO meta tags</span> into <span className="font-medium">AR, TR, FR, RU, FA, ZH, HI, ES, ID</span> in one click. Existing translations will be overwritten.
+                Translates <span className="font-medium">university name, all sections (hero, trust badges, footer, contact info), FAQ, testimonials and SEO meta tags</span> into <span className="font-medium">AR, TR, FR, RU, FA, ZH, HI, ES, ID</span> in one click. Existing translations will be overwritten.
               </p>
               {translateProgress && (
                 <p className="text-xs text-primary mt-1 flex items-center gap-1">
