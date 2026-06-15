@@ -18,9 +18,9 @@ function EmbeddableLayout({ embedded, children }: { embedded?: boolean; children
 }
 
 const ANTHROPIC_MODELS = [
-  { value: 'claude-3-5-haiku-20241022', label: 'Claude 3.5 Haiku (fast, affordable)' },
-  { value: 'claude-3-5-sonnet-20241022', label: 'Claude 3.5 Sonnet (balanced)' },
-  { value: 'claude-opus-4-5', label: 'Claude Opus 4 (most capable)' },
+  { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5 (fast, affordable)' },
+  { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6 (balanced)' },
+  { value: 'claude-opus-4-8', label: 'Claude Opus 4.8 (most capable)' },
 ];
 
 const OPENAI_MODELS = [
@@ -53,7 +53,7 @@ export default function AISettings({ embedded }: { embedded?: boolean } = {}) {
 
   // ── AI Text settings ──────────────────────────────────────────────────────
   const [provider, setProvider] = useState<'anthropic' | 'openai'>('anthropic');
-  const [model, setModel] = useState('claude-3-5-haiku-20241022');
+  const [model, setModel] = useState('claude-haiku-4-5-20251001');
   const [apiKey, setApiKey] = useState('');
   const [showKey, setShowKey] = useState(false);
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle');
@@ -87,7 +87,7 @@ export default function AISettings({ embedded }: { embedded?: boolean } = {}) {
   useEffect(() => {
     if (settings && !settingsLoaded) {
       setProvider((settings.provider as any) || 'anthropic');
-      setModel(settings.model || 'claude-3-5-haiku-20241022');
+      setModel(settings.model || 'claude-haiku-4-5-20251001');
       setSettingsLoaded(true);
     }
   }, [settings, settingsLoaded]);
@@ -102,7 +102,7 @@ export default function AISettings({ embedded }: { embedded?: boolean } = {}) {
 
   const handleProviderChange = (v: 'anthropic' | 'openai') => {
     setProvider(v);
-    if (v === 'anthropic') setModel('claude-3-5-haiku-20241022');
+    if (v === 'anthropic') setModel('claude-haiku-4-5-20251001');
     else setModel('gpt-4o-mini');
   };
 

@@ -47,7 +47,7 @@ export async function getAIConfig(tenantId: string): Promise<AIConfig | null> {
 }
 
 export function defaultModel(provider: string): string {
-  if (provider === 'anthropic') return 'claude-3-5-haiku-20241022';
+  if (provider === 'anthropic') return 'claude-haiku-4-5-20251001';
   if (provider === 'openai') return 'gpt-4o-mini';
   return 'gpt-4o-mini';
 }
