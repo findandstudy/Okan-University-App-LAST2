@@ -952,6 +952,9 @@ export async function registerRoutes(
       if (!admin || admin.role !== 'super_admin') return res.status(403).json({ error: "Forbidden" });
       const { universityName, domain, languages } = req.body;
       if (!universityName || !domain) return res.status(400).json({ error: "universityName and domain are required" });
+      // Check domain availability before insert to give a clear error
+      const existing = await storage.getTenantByDomain(domain);
+      if (existing) return res.status(409).json({ error: `Domain "${domain}" is already in use by another site.` });
       const supportedLanguages = Array.isArray(languages) && languages.length > 0 ? languages : ['en'];
       const tenant = await storage.createTenant({ universityName, domain, status: 'taslak', supportedLanguages });
       // Create primary domain record
@@ -1053,6 +1056,10 @@ export async function registerRoutes(
       const { universityName, domain, languages } = req.body;
       if (!universityName || !domain) return res.status(400).json({ error: "universityName and domain are required" });
 
+      // Check domain availability before insert to give a clear error
+      const existingDomain = await storage.getTenantByDomain(domain);
+      if (existingDomain) return res.status(409).json({ error: `Domain "${domain}" is already in use by another site.` });
+
       // Resolve source tenant (supports literal 'default' id)
       const srcTenant = await storage.getTenant(id);
       if (!srcTenant) return res.status(404).json({ error: "Source tenant not found" });
@@ -1077,7 +1084,7 @@ export async function registerRoutes(
         await storage.updateTenant(newTenant.id, brandingPatch);
       }
 
-      // ── Clone sections ──
+      // ── Clone sections (core — must succeed) ──
       const srcSections = await storage.getSections(id);
       for (const s of srcSections) {
         const { id: _id, tenantId: _tid, ...rest } = s as any;
@@ -1098,31 +1105,37 @@ export async function registerRoutes(
         await storage.createTestimonial({ ...rest, tenantId: newTenant.id });
       }
 
-      // ── Clone theme ──
-      const srcTheme = await storage.getTheme(id);
-      if (srcTheme) {
-        const { id: _id, tenantId: _tid, ...rest } = srcTheme as any;
-        await storage.createTheme({ ...rest, tenantId: newTenant.id });
-      }
+      // ── Clone theme (optional — skip if table missing on older installs) ──
+      try {
+        const srcTheme = await storage.getTheme(id);
+        if (srcTheme) {
+          const { id: _id, tenantId: _tid, ...rest } = srcTheme as any;
+          await storage.createTheme({ ...rest, tenantId: newTenant.id });
+        }
+      } catch (e) { console.warn('Clone: skipping theme —', (e as any)?.message); }
 
-      // ── Clone SEO settings ──
-      const srcSeo = await storage.getSeoSettings(id);
-      if (srcSeo) {
-        const { id: _id, tenantId: _tid, ...rest } = srcSeo as any;
-        await storage.createSeoSettings({ ...rest, tenantId: newTenant.id });
-      }
+      // ── Clone SEO settings (optional) ──
+      try {
+        const srcSeo = await storage.getSeoSettings(id);
+        if (srcSeo) {
+          const { id: _id, tenantId: _tid, ...rest } = srcSeo as any;
+          await storage.createSeoSettings({ ...rest, tenantId: newTenant.id });
+        }
+      } catch (e) { console.warn('Clone: skipping SEO —', (e as any)?.message); }
 
-      // ── Clone widgets ──
-      const srcWidgets = await storage.getWidgets(id);
-      for (const w of srcWidgets) {
-        const { id: _id, tenantId: _tid, ...rest } = w as any;
-        await storage.createWidget({ ...rest, tenantId: newTenant.id });
-      }
+      // ── Clone widgets (optional — table may not exist on older installs) ──
+      try {
+        const srcWidgets = await storage.getWidgets(id);
+        for (const w of srcWidgets) {
+          const { id: _id, tenantId: _tid, ...rest } = w as any;
+          await storage.createWidget({ ...rest, tenantId: newTenant.id });
+        }
+      } catch (e) { console.warn('Clone: skipping widgets —', (e as any)?.message); }
 
       res.json(newTenant);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Clone error:', error);
-      res.status(500).json({ error: "Failed to clone tenant" });
+      res.status(500).json({ error: error?.message || "Failed to clone tenant" });
     }
   });
 
