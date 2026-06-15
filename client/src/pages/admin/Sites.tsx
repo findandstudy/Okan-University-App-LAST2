@@ -132,7 +132,7 @@ function NewSiteDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v
       onOpenChange(false);
       setForm({ universityName: '', domain: '', languages: ['en'] });
     },
-    onError: () => toast({ title: 'Failed to create site', variant: 'destructive' }),
+    onError: (err: Error) => toast({ title: 'Failed to create site', description: err.message, variant: 'destructive' }),
   });
 
   return (
@@ -243,7 +243,7 @@ export default function Sites() {
       setCloneForm({ universityName: '', domain: '' });
       bumpRefresh(sourceId);
     },
-    onError: () => toast({ title: 'Failed to clone site', variant: 'destructive' }),
+    onError: (err: Error) => toast({ title: 'Failed to clone site', description: err.message, variant: 'destructive' }),
   });
 
   const deleteMutation = useMutation({
