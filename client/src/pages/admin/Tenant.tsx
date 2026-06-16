@@ -215,11 +215,30 @@ export default function TenantPage({ embedded }: { embedded?: boolean } = {}) {
     mutationFn: async () => {
       const enName = nameByLang['en'] || settings.universityName;
       if (!enName) throw new Error('Please enter the English university name first');
-      setTranslateProgress('Translating university name…');
-      const res = await apiRequest('POST', `/api/admin/ai/translate-everything${apiSuffix}`, { enName });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Translation failed');
-      return data as { steps: string[] };
+      setTranslateProgress('Starting translation…');
+
+      // Start background job — returns immediately with jobId
+      const startRes = await apiRequest('POST', `/api/admin/ai/translate-everything${apiSuffix}`, { enName });
+      const startData = await startRes.json();
+      if (!startRes.ok) throw new Error(startData.error || 'Failed to start translation');
+      const { jobId } = startData as { jobId: string };
+
+      // Poll for completion every 3 seconds
+      return new Promise<{ steps: string[] }>((resolve, reject) => {
+        const interval = setInterval(async () => {
+          try {
+            const pollRes = await apiRequest('GET', `/api/admin/ai/translate-job/${jobId}${apiSuffix}`);
+            if (!pollRes.ok) { clearInterval(interval); reject(new Error('Job not found')); return; }
+            const job = await pollRes.json() as { status: string; step: string; steps: string[]; error?: string };
+            setTranslateProgress(job.step || 'Translating…');
+            if (job.status === 'done') { clearInterval(interval); resolve({ steps: job.steps }); }
+            if (job.status === 'error') { clearInterval(interval); reject(new Error(job.error || 'Translation failed')); }
+          } catch (e) {
+            clearInterval(interval);
+            reject(e);
+          }
+        }, 3000);
+      });
     },
     onSuccess: () => {
       setTranslateProgress(null);
@@ -228,7 +247,7 @@ export default function TenantPage({ embedded }: { embedded?: boolean } = {}) {
       queryClient.invalidateQueries({ queryKey: ['/api/faq' + apiSuffix] });
       queryClient.invalidateQueries({ queryKey: ['/api/testimonials' + apiSuffix] });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/seo-settings' + apiSuffix] });
-      toast({ title: '✅ Everything translated', description: 'University name, sections (including hero & trust badges), FAQ, testimonials, contact info, footer and SEO meta tags are now translated into 9 languages.' });
+      toast({ title: '✅ Everything translated', description: 'University name, sections (hero, trust badges, footer, contact), FAQ, testimonials and SEO tags are now translated into 9 languages.' });
     },
     onError: (err: Error) => {
       setTranslateProgress(null);

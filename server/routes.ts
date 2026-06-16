@@ -46,6 +46,23 @@ const MAX_CACHE_SIZE = 100;
 
 // ─── Bootstrap cache — keyed by tenantId ──────────────────────────────────────
 const bootstrapCache = new Map<string, { data: any; timestamp: number }>();
+
+// ─── Background translate-everything job store ───────────────────────────────
+interface TranslateJob {
+  status: 'running' | 'done' | 'error';
+  step: string;
+  steps: string[];
+  error?: string;
+}
+const translateJobs = new Map<string, TranslateJob>();
+// Cleanup old jobs after 10 minutes
+setInterval(() => {
+  const cutoff = Date.now() - 10 * 60 * 1000;
+  for (const [id] of translateJobs) {
+    const ts = parseInt(id.split('-')[0] || '0', 10);
+    if (ts < cutoff) translateJobs.delete(id);
+  }
+}, 5 * 60 * 1000);
 const BOOTSTRAP_CACHE_TTL = 60000; // 60 seconds
 
 // ─── Admin middleware ─────────────────────────────────────────────────────────
@@ -1284,278 +1301,295 @@ export async function registerRoutes(
   });
 
   // ─── Master: Translate Everything ────────────────────────────────────────────
+  // ─── Translate-everything job status polling ──────────────────────────────
+  app.get("/api/admin/ai/translate-job/:id", requireAdmin, (req, res) => {
+    const job = translateJobs.get(req.params.id);
+    if (!job) return res.status(404).json({ error: 'Job not found' });
+    res.json(job);
+  });
+
   app.post("/api/admin/ai/translate-everything", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
-    try {
-      const { enName } = req.body;
-      const tenantId = req.tenantId;
-      const TARGET_LANGS = ['ar','tr','fr','ru','fa','zh','hi','es','id'];
-      const { translateText, translateContentByLang } = await import('./aiTranslation');
-      const { callAI } = await import('./aiService');
-      const steps: string[] = [];
+    const { enName } = req.body;
+    const tenantId = req.tenantId;
+    const jobId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const job: TranslateJob = { status: 'running', step: 'Starting…', steps: [] };
+    translateJobs.set(jobId, job);
 
-      // 1. University name
-      if (enName) {
-        const existingTenant = await storage.getTenant(tenantId);
-        const existingNameByLang = (existingTenant?.nameByLang as Record<string, string>) || {};
-        const nameTranslations = await translateText(enName, 'en', TARGET_LANGS, tenantId);
-        // Merge: keep existing translations for langs where AI returned nothing
-        const mergedNameByLang: Record<string, string> = { ...existingNameByLang, en: enName };
-        for (const lang of TARGET_LANGS) {
-          if (nameTranslations[lang]) mergedNameByLang[lang] = nameTranslations[lang];
+    // Respond immediately so the HTTP connection is freed
+    res.json({ jobId });
+
+    // ── Background processing ─────────────────────────────────────────────
+    (async () => {
+      try {
+        const TARGET_LANGS = ['ar','tr','fr','ru','fa','zh','hi','es','id'];
+        const { translateText, translateContentByLang } = await import('./aiTranslation');
+        const { callAI } = await import('./aiService');
+
+        // 1. University name
+        if (enName) {
+          job.step = 'Translating university name…';
+          const existingTenant = await storage.getTenant(tenantId);
+          const existingNameByLang = (existingTenant?.nameByLang as Record<string, string>) || {};
+          const nameTranslations = await translateText(enName, 'en', TARGET_LANGS, tenantId);
+          const mergedNameByLang: Record<string, string> = { ...existingNameByLang, en: enName };
+          for (const lang of TARGET_LANGS) {
+            if (nameTranslations[lang]) mergedNameByLang[lang] = nameTranslations[lang];
+          }
+          await storage.updateTenant(tenantId, { universityName: enName, nameByLang: mergedNameByLang });
+          job.steps.push('university_name');
         }
-        await storage.updateTenant(tenantId, { universityName: enName, nameByLang: mergedNameByLang });
-        steps.push('university_name');
-      }
 
-      // 2. Sections
-      const sections = await storage.getSections(tenantId);
-      let sectionsCount = 0;
-      for (const section of sections) {
-        const enContent = (section.contentByLang as any)?.['en'];
-        if (!enContent) continue;
-        const sourceContent: Record<string, string> = {};
-        for (const [field, val] of Object.entries(enContent)) {
-          if (typeof val === 'string' && val.trim()) sourceContent[field] = val;
+        // 2. Sections (contentByLang)
+        job.step = 'Translating sections…';
+        const sections = await storage.getSections(tenantId);
+        let sectionsCount = 0;
+        for (const section of sections) {
+          const enContent = (section.contentByLang as any)?.['en'];
+          if (!enContent) continue;
+          const sourceContent: Record<string, string> = {};
+          for (const [field, val] of Object.entries(enContent)) {
+            if (typeof val === 'string' && val.trim()) sourceContent[field] = val;
+          }
+          if (Object.keys(sourceContent).length === 0) continue;
+          const translated = await translateContentByLang(sourceContent, 'en', TARGET_LANGS, tenantId);
+          const existingCBL = (section.contentByLang as Record<string, Record<string, string>>) || {};
+          const newCBL: Record<string, Record<string, string>> = { ...existingCBL, en: enContent };
+          for (const [lang, content] of Object.entries(translated)) {
+            newCBL[lang] = { ...(existingCBL[lang] || {}), ...content };
+          }
+          await storage.updateSection(section.id, tenantId, { contentByLang: newCBL });
+          sectionsCount++;
         }
-        if (Object.keys(sourceContent).length === 0) continue;
-        const translated = await translateContentByLang(sourceContent, 'en', TARGET_LANGS, tenantId);
-        const existingCBL = (section.contentByLang as Record<string, Record<string, string>>) || {};
-        const newCBL: Record<string, Record<string, string>> = { ...existingCBL, en: enContent };
-        for (const [lang, content] of Object.entries(translated)) {
-          newCBL[lang] = { ...(existingCBL[lang] || {}), ...content };
+        job.steps.push(`sections:${sectionsCount}`);
+
+        // 3. FAQ
+        job.step = 'Translating FAQ…';
+        const faqItems = await storage.getFaqItems(tenantId);
+        let faqCount = 0;
+        for (const item of faqItems) {
+          const enQ = (item.questionByLang as any)?.en;
+          const enA = (item.answerByLang as any)?.en;
+          const source: Record<string, string> = {};
+          if (enQ?.trim()) source.question = enQ;
+          if (enA?.trim()) source.answer = enA;
+          if (Object.keys(source).length === 0) continue;
+          const result = await translateContentByLang(source, 'en', TARGET_LANGS, tenantId);
+          const newQ: Record<string, string> = { ...((item.questionByLang as any) || {}) };
+          const newA: Record<string, string> = { ...((item.answerByLang as any) || {}) };
+          for (const [lang, content] of Object.entries(result)) {
+            if ((content as any).question) newQ[lang] = (content as any).question;
+            if ((content as any).answer) newA[lang] = (content as any).answer;
+          }
+          await storage.updateFaqItem(item.id, { questionByLang: newQ as any, answerByLang: newA as any });
+          faqCount++;
         }
-        await storage.updateSection(section.id, tenantId, { contentByLang: newCBL });
-        sectionsCount++;
-      }
-      steps.push(`sections:${sectionsCount}`);
+        job.steps.push(`faq:${faqCount}`);
 
-      // 3. FAQ
-      const faqItems = await storage.getFaqItems(tenantId);
-      let faqCount = 0;
-      for (const item of faqItems) {
-        const enQ = (item.questionByLang as any)?.en;
-        const enA = (item.answerByLang as any)?.en;
-        const source: Record<string, string> = {};
-        if (enQ?.trim()) source.question = enQ;
-        if (enA?.trim()) source.answer = enA;
-        if (Object.keys(source).length === 0) continue;
-        const result = await translateContentByLang(source, 'en', TARGET_LANGS, tenantId);
-        const newQ: Record<string, string> = { ...((item.questionByLang as any) || {}) };
-        const newA: Record<string, string> = { ...((item.answerByLang as any) || {}) };
-        for (const [lang, content] of Object.entries(result)) {
-          if ((content as any).question) newQ[lang] = (content as any).question;
-          if ((content as any).answer) newA[lang] = (content as any).answer;
+        // 4. Testimonials
+        job.step = 'Translating testimonials…';
+        const testimonials = await storage.getTestimonials(tenantId);
+        let testimonialCount = 0;
+        for (const t of testimonials) {
+          const enContent = (t.contentByLang as any)?.en;
+          if (!enContent?.trim()) continue;
+          const result = await translateText(enContent, 'en', TARGET_LANGS, tenantId);
+          await storage.updateTestimonial(t.id, { contentByLang: { ...((t.contentByLang as any) || {}), ...result } as any });
+          testimonialCount++;
         }
-        await storage.updateFaqItem(item.id, { questionByLang: newQ as any, answerByLang: newA as any });
-        faqCount++;
-      }
-      steps.push(`faq:${faqCount}`);
+        job.steps.push(`testimonials:${testimonialCount}`);
 
-      // 4. Testimonials
-      const testimonials = await storage.getTestimonials(tenantId);
-      let testimonialCount = 0;
-      for (const t of testimonials) {
-        const enContent = (t.contentByLang as any)?.en;
-        if (!enContent?.trim()) continue;
-        const result = await translateText(enContent, 'en', TARGET_LANGS, tenantId);
-        await storage.updateTestimonial(t.id, { contentByLang: { ...((t.contentByLang as any) || {}), ...result } as any });
-        testimonialCount++;
-      }
-      steps.push(`testimonials:${testimonialCount}`);
-
-      // 5. SEO meta tags (read from DB, localize culturally, save back)
-      const seoSettings = await storage.getSeoSettings(tenantId);
-      if (seoSettings) {
-        const metaTitleByLang = (seoSettings.metaTitleByLang || {}) as Record<string, string>;
-        const metaDescByLang = (seoSettings.metaDescriptionByLang || {}) as Record<string, string>;
-        const metaKwByLang = (seoSettings.metaKeywordsByLang || {}) as Record<string, string>;
-        const enTitle = metaTitleByLang.en || '';
-        const enDesc = metaDescByLang.en || '';
-        const enKw = metaKwByLang.en || '';
-        if (enTitle) {
-          const prompt = `Given this English SEO metadata for a university landing page:\nTitle: ${enTitle}\nDescription: ${enDesc || ''}\nKeywords: ${enKw || ''}\n\nCreate localized (culturally adapted, SEO-effective) versions for: ${TARGET_LANGS.join(', ')}\n\nReturn ONLY valid JSON:\n{"ar":{"metaTitle":"...","metaDescription":"...","keywords":"..."},"tr":{...},"fr":{...},"ru":{...},"fa":{...},"zh":{...},"hi":{...},"es":{...},"id":{...}}\n\nRules: titles <60 chars, descriptions <160 chars, keywords comma-separated in target language`;
-          const raw = await callAI(prompt, tenantId, 'You are an expert SEO consultant and multilingual copywriter. Return only valid JSON.');
-          const match = raw.match(/\{[\s\S]*\}/);
-          if (match) {
-            const localized = JSON.parse(match[0]) as Record<string, { metaTitle: string; metaDescription: string; keywords: string }>;
-            const newTitle = { ...metaTitleByLang };
-            const newDesc = { ...metaDescByLang };
-            const newKw = { ...metaKwByLang };
-            for (const [lang, v] of Object.entries(localized)) {
-              if (v.metaTitle) newTitle[lang] = v.metaTitle;
-              if (v.metaDescription) newDesc[lang] = v.metaDescription;
-              if (v.keywords) newKw[lang] = v.keywords;
+        // 5. SEO meta tags
+        job.step = 'Translating SEO metadata…';
+        const seoSettings = await storage.getSeoSettings(tenantId);
+        if (seoSettings) {
+          const metaTitleByLang = (seoSettings.metaTitleByLang || {}) as Record<string, string>;
+          const metaDescByLang = (seoSettings.metaDescriptionByLang || {}) as Record<string, string>;
+          const metaKwByLang = (seoSettings.metaKeywordsByLang || {}) as Record<string, string>;
+          const enTitle = metaTitleByLang.en || '';
+          const enDesc = metaDescByLang.en || '';
+          const enKw = metaKwByLang.en || '';
+          if (enTitle) {
+            const prompt = `Given this English SEO metadata for a university landing page:\nTitle: ${enTitle}\nDescription: ${enDesc || ''}\nKeywords: ${enKw || ''}\n\nCreate localized (culturally adapted, SEO-effective) versions for: ${TARGET_LANGS.join(', ')}\n\nReturn ONLY valid JSON:\n{"ar":{"metaTitle":"...","metaDescription":"...","keywords":"..."},"tr":{...},"fr":{...},"ru":{...},"fa":{...},"zh":{...},"hi":{...},"es":{...},"id":{...}}\n\nRules: titles <60 chars, descriptions <160 chars, keywords comma-separated in target language`;
+            const raw = await callAI(prompt, tenantId, 'You are an expert SEO consultant and multilingual copywriter. Return only valid JSON.');
+            const match = raw.match(/\{[\s\S]*\}/);
+            if (match) {
+              const localized = JSON.parse(match[0]) as Record<string, { metaTitle: string; metaDescription: string; keywords: string }>;
+              const newTitle = { ...metaTitleByLang };
+              const newDesc = { ...metaDescByLang };
+              const newKw = { ...metaKwByLang };
+              for (const [lang, v] of Object.entries(localized)) {
+                if (v.metaTitle) newTitle[lang] = v.metaTitle;
+                if (v.metaDescription) newDesc[lang] = v.metaDescription;
+                if (v.keywords) newKw[lang] = v.keywords;
+              }
+              await storage.updateSeoSettings(tenantId, { metaTitleByLang: newTitle, metaDescriptionByLang: newDesc, metaKeywordsByLang: newKw } as any);
+              job.steps.push('seo');
             }
-            await storage.updateSeoSettings(tenantId, {
-              metaTitleByLang: newTitle,
-              metaDescriptionByLang: newDesc,
-              metaKeywordsByLang: newKw,
-            } as any);
-            steps.push('seo');
           }
         }
-      }
 
-      // 6. Footer section (description, contactTitle, contactAddress from settings)
-      const footerSection = sections.find((s: any) => s.sectionKey === 'footer');
-      if (footerSection?.settings) {
-        const fs = footerSection.settings as Record<string, any>;
-        // Support both {en:'...'} objects and legacy plain strings
-        const enDesc = (typeof fs.description === 'object' ? fs.description?.en : fs.description) || '';
-        const enContactTitle = (typeof fs.contactTitle === 'object' ? fs.contactTitle?.en : fs.contactTitle) || '';
-        const enContactAddress = (typeof fs.contactAddress === 'object' ? fs.contactAddress?.en : fs.contactAddress) || '';
-        const sourceFooter: Record<string, string> = {};
-        if (enDesc.trim()) sourceFooter.description = enDesc;
-        if (enContactTitle.trim()) sourceFooter.contactTitle = enContactTitle;
-        if (enContactAddress.trim()) sourceFooter.contactAddress = enContactAddress;
-        if (Object.keys(sourceFooter).length > 0) {
-          const translated = await translateContentByLang(sourceFooter, 'en', TARGET_LANGS, tenantId);
-          const newSettings = { ...fs };
-          // Pre-build accumulator objects so each lang merges into the previous result (not the original)
-          newSettings.description = typeof fs.description === 'object' ? { ...fs.description } : { en: enDesc };
-          newSettings.contactTitle = typeof fs.contactTitle === 'object' ? { ...fs.contactTitle } : { en: enContactTitle };
-          newSettings.contactAddress = typeof fs.contactAddress === 'object' ? { ...fs.contactAddress } : { en: enContactAddress };
-          for (const [lang, content] of Object.entries(translated)) {
-            const c = content as Record<string, string>;
-            if (c.description) newSettings.description[lang] = c.description;
-            if (c.contactTitle) newSettings.contactTitle[lang] = c.contactTitle;
-            if (c.contactAddress) newSettings.contactAddress[lang] = c.contactAddress;
+        // 6. Footer section
+        job.step = 'Translating footer…';
+        const footerSection = sections.find((s: any) => s.sectionKey === 'footer');
+        if (footerSection?.settings) {
+          const fs = footerSection.settings as Record<string, any>;
+          const enDesc = (typeof fs.description === 'object' ? fs.description?.en : fs.description) || '';
+          const enContactTitle = (typeof fs.contactTitle === 'object' ? fs.contactTitle?.en : fs.contactTitle) || '';
+          const enContactAddress = (typeof fs.contactAddress === 'object' ? fs.contactAddress?.en : fs.contactAddress) || '';
+          const sourceFooter: Record<string, string> = {};
+          if (enDesc.trim()) sourceFooter.description = enDesc;
+          if (enContactTitle.trim()) sourceFooter.contactTitle = enContactTitle;
+          if (enContactAddress.trim()) sourceFooter.contactAddress = enContactAddress;
+          if (Object.keys(sourceFooter).length > 0) {
+            const translated = await translateContentByLang(sourceFooter, 'en', TARGET_LANGS, tenantId);
+            const newSettings = { ...fs };
+            newSettings.description = typeof fs.description === 'object' ? { ...fs.description } : { en: enDesc };
+            newSettings.contactTitle = typeof fs.contactTitle === 'object' ? { ...fs.contactTitle } : { en: enContactTitle };
+            newSettings.contactAddress = typeof fs.contactAddress === 'object' ? { ...fs.contactAddress } : { en: enContactAddress };
+            for (const [lang, content] of Object.entries(translated)) {
+              const c = content as Record<string, string>;
+              if (c.description) newSettings.description[lang] = c.description;
+              if (c.contactTitle) newSettings.contactTitle[lang] = c.contactTitle;
+              if (c.contactAddress) newSettings.contactAddress[lang] = c.contactAddress;
+            }
+            await storage.updateSection(footerSection.id, tenantId, { settings: newSettings });
+            job.steps.push('footer');
           }
-          await storage.updateSection(footerSection.id, tenantId, { settings: newSettings });
-          steps.push('footer');
         }
-      }
 
-      // 7. Contact section (sectionTitle, sectionSubtitle, items[].label from settings)
-      const contactSection = sections.find((s: any) => s.sectionKey === 'contact');
-      if (contactSection?.settings) {
-        const cs = contactSection.settings as Record<string, any>;
-        // Support both {en:'...'} objects and legacy plain strings
-        const enTitle = (typeof cs.sectionTitle === 'object' ? cs.sectionTitle?.en : cs.sectionTitle) || '';
-        const enSubtitle = (typeof cs.sectionSubtitle === 'object' ? cs.sectionSubtitle?.en : cs.sectionSubtitle) || '';
-        const items: Array<{ icon: string; label: any; value: string }> = cs.items || [];
-        const sourceContact: Record<string, string> = {};
-        if (enTitle.trim()) sourceContact.sectionTitle = enTitle;
-        if (enSubtitle.trim()) sourceContact.sectionSubtitle = enSubtitle;
-        for (let i = 0; i < items.length; i++) {
-          const rawLabel = items[i]?.label;
-          const enLabel = (typeof rawLabel === 'object' ? rawLabel?.en : rawLabel) || '';
-          if (enLabel.trim()) sourceContact[`item_${i}_label`] = enLabel;
-        }
-        if (Object.keys(sourceContact).length > 0) {
-          const translated = await translateContentByLang(sourceContact, 'en', TARGET_LANGS, tenantId);
-          const newSettings = { ...cs };
-          // Pre-build accumulator objects (same fix as footer — avoids overwriting each lang with the previous)
-          newSettings.sectionTitle = typeof cs.sectionTitle === 'object' ? { ...cs.sectionTitle } : { en: enTitle };
-          newSettings.sectionSubtitle = typeof cs.sectionSubtitle === 'object' ? { ...cs.sectionSubtitle } : { en: enSubtitle };
-          const newItems = [...items].map(it => ({
-            ...it,
-            label: typeof it.label === 'object' ? { ...it.label } : { en: it.label || '' },
-          }));
-          for (const [lang, content] of Object.entries(translated)) {
-            const c = content as Record<string, string>;
-            if (c.sectionTitle) newSettings.sectionTitle[lang] = c.sectionTitle;
-            if (c.sectionSubtitle) newSettings.sectionSubtitle[lang] = c.sectionSubtitle;
-            for (let i = 0; i < newItems.length; i++) {
-              if (c[`item_${i}_label`]) {
-                newItems[i].label[lang] = c[`item_${i}_label`];
+        // 7. Contact section
+        job.step = 'Translating contact section…';
+        const contactSection = sections.find((s: any) => s.sectionKey === 'contact');
+        if (contactSection?.settings) {
+          const cs = contactSection.settings as Record<string, any>;
+          const enTitle = (typeof cs.sectionTitle === 'object' ? cs.sectionTitle?.en : cs.sectionTitle) || '';
+          const enSubtitle = (typeof cs.sectionSubtitle === 'object' ? cs.sectionSubtitle?.en : cs.sectionSubtitle) || '';
+          const items: Array<{ icon: string; label: any; value: string }> = cs.items || [];
+          const sourceContact: Record<string, string> = {};
+          if (enTitle.trim()) sourceContact.sectionTitle = enTitle;
+          if (enSubtitle.trim()) sourceContact.sectionSubtitle = enSubtitle;
+          for (let i = 0; i < items.length; i++) {
+            const rawLabel = items[i]?.label;
+            const enLabel = (typeof rawLabel === 'object' ? rawLabel?.en : rawLabel) || '';
+            if (enLabel.trim()) sourceContact[`item_${i}_label`] = enLabel;
+          }
+          if (Object.keys(sourceContact).length > 0) {
+            const translated = await translateContentByLang(sourceContact, 'en', TARGET_LANGS, tenantId);
+            const newSettings = { ...cs };
+            newSettings.sectionTitle = typeof cs.sectionTitle === 'object' ? { ...cs.sectionTitle } : { en: enTitle };
+            newSettings.sectionSubtitle = typeof cs.sectionSubtitle === 'object' ? { ...cs.sectionSubtitle } : { en: enSubtitle };
+            const newItems = [...items].map(it => ({
+              ...it,
+              label: typeof it.label === 'object' ? { ...it.label } : { en: it.label || '' },
+            }));
+            for (const [lang, content] of Object.entries(translated)) {
+              const c = content as Record<string, string>;
+              if (c.sectionTitle) newSettings.sectionTitle[lang] = c.sectionTitle;
+              if (c.sectionSubtitle) newSettings.sectionSubtitle[lang] = c.sectionSubtitle;
+              for (let i = 0; i < newItems.length; i++) {
+                if (c[`item_${i}_label`]) newItems[i].label[lang] = c[`item_${i}_label`];
               }
             }
+            newSettings.items = newItems;
+            await storage.updateSection(contactSection.id, tenantId, { settings: newSettings });
+            job.steps.push('contact');
           }
-          newSettings.items = newItems;
-          await storage.updateSection(contactSection.id, tenantId, { settings: newSettings });
-          steps.push('contact');
         }
-      }
 
-      // 8. Trust badges section (sectionTitle, sectionSubtitle, badges[].title, badges[].description from settings)
-      const trustSection = sections.find((s: any) => s.sectionKey === 'trust_badges');
-      if (trustSection?.settings) {
-        const ts = trustSection.settings as Record<string, any>;
-        const badges: Array<{ icon: string; title: Record<string, string>; description: Record<string, string> }> = ts.badges || [];
-        const sourceTrust: Record<string, string> = {};
-        if (ts.sectionTitle?.en?.trim()) sourceTrust.sectionTitle = ts.sectionTitle.en;
-        if (ts.sectionSubtitle?.en?.trim()) sourceTrust.sectionSubtitle = ts.sectionSubtitle.en;
-        for (let i = 0; i < badges.length; i++) {
-          if (badges[i]?.title?.en?.trim()) sourceTrust[`badge_${i}_title`] = badges[i].title.en;
-          if (badges[i]?.description?.en?.trim()) sourceTrust[`badge_${i}_description`] = badges[i].description.en;
-        }
-        if (Object.keys(sourceTrust).length > 0) {
-          const translated = await translateContentByLang(sourceTrust, 'en', TARGET_LANGS, tenantId);
-          const newSettings = { ...ts };
-          const newBadges = badges.map(b => ({ ...b, title: { ...b.title }, description: { ...b.description } }));
-          for (const [lang, content] of Object.entries(translated)) {
-            const c = content as Record<string, string>;
-            if (c.sectionTitle) newSettings.sectionTitle = { ...newSettings.sectionTitle, [lang]: c.sectionTitle };
-            if (c.sectionSubtitle) newSettings.sectionSubtitle = { ...newSettings.sectionSubtitle, [lang]: c.sectionSubtitle };
-            for (let i = 0; i < newBadges.length; i++) {
-              if (c[`badge_${i}_title`]) newBadges[i].title[lang] = c[`badge_${i}_title`];
-              if (c[`badge_${i}_description`]) newBadges[i].description[lang] = c[`badge_${i}_description`];
-            }
+        // 8. Trust badges section
+        job.step = 'Translating trust badges…';
+        const trustSection = sections.find((s: any) => s.sectionKey === 'trust_badges');
+        if (trustSection?.settings) {
+          const ts = trustSection.settings as Record<string, any>;
+          const badges: Array<{ icon: string; title: Record<string, string>; description: Record<string, string> }> = ts.badges || [];
+          const sourceTrust: Record<string, string> = {};
+          if (ts.sectionTitle?.en?.trim()) sourceTrust.sectionTitle = ts.sectionTitle.en;
+          if (ts.sectionSubtitle?.en?.trim()) sourceTrust.sectionSubtitle = ts.sectionSubtitle.en;
+          for (let i = 0; i < badges.length; i++) {
+            if (badges[i]?.title?.en?.trim()) sourceTrust[`badge_${i}_title`] = badges[i].title.en;
+            if (badges[i]?.description?.en?.trim()) sourceTrust[`badge_${i}_description`] = badges[i].description.en;
           }
-          newSettings.badges = newBadges;
-          await storage.updateSection(trustSection.id, tenantId, { settings: newSettings });
-          steps.push('trust_badges');
-        }
-      }
-
-      // 9. Hero section (badge, title, subtitle, stats labels, features[] from settings)
-      const heroSection = sections.find((s: any) => s.sectionKey === 'hero');
-      if (heroSection?.settings) {
-        const hs = heroSection.settings as Record<string, any>;
-        const sourceHero: Record<string, string> = {};
-        if (hs.badge?.en?.trim()) sourceHero.badge = hs.badge.en;
-        if (hs.title?.en?.trim()) sourceHero.title = hs.title.en;
-        if (hs.subtitle?.en?.trim()) sourceHero.subtitle = hs.subtitle.en;
-        if (hs.stats?.stat1Label?.en?.trim()) sourceHero.stat1Label = hs.stats.stat1Label.en;
-        if (hs.stats?.stat1Sublabel?.en?.trim()) sourceHero.stat1Sublabel = hs.stats.stat1Sublabel.en;
-        if (hs.stats?.stat2Label?.en?.trim()) sourceHero.stat2Label = hs.stats.stat2Label.en;
-        if (hs.stats?.stat2Sublabel?.en?.trim()) sourceHero.stat2Sublabel = hs.stats.stat2Sublabel.en;
-        const enFeatures: string[] = hs.features?.en || [];
-        for (let i = 0; i < enFeatures.length; i++) {
-          if (enFeatures[i]?.trim()) sourceHero[`feature_${i}`] = enFeatures[i];
-        }
-        if (Object.keys(sourceHero).length > 0) {
-          const translated = await translateContentByLang(sourceHero, 'en', TARGET_LANGS, tenantId);
-          const newSettings = { ...hs };
-          newSettings.badge = { ...hs.badge };
-          newSettings.title = { ...hs.title };
-          newSettings.subtitle = { ...hs.subtitle };
-          newSettings.stats = {
-            ...hs.stats,
-            stat1Label: { ...(hs.stats?.stat1Label || {}) },
-            stat1Sublabel: { ...(hs.stats?.stat1Sublabel || {}) },
-            stat2Label: { ...(hs.stats?.stat2Label || {}) },
-            stat2Sublabel: { ...(hs.stats?.stat2Sublabel || {}) },
-          };
-          const newFeatures: Record<string, string[]> = { ...(hs.features || {}) };
-          for (const [lang, content] of Object.entries(translated)) {
-            const c = content as Record<string, string>;
-            if (c.badge) newSettings.badge[lang] = c.badge;
-            if (c.title) newSettings.title[lang] = c.title;
-            if (c.subtitle) newSettings.subtitle[lang] = c.subtitle;
-            if (c.stat1Label) newSettings.stats.stat1Label[lang] = c.stat1Label;
-            if (c.stat1Sublabel) newSettings.stats.stat1Sublabel[lang] = c.stat1Sublabel;
-            if (c.stat2Label) newSettings.stats.stat2Label[lang] = c.stat2Label;
-            if (c.stat2Sublabel) newSettings.stats.stat2Sublabel[lang] = c.stat2Sublabel;
-            if (enFeatures.length > 0) {
-              const langFeatures: string[] = [];
-              for (let i = 0; i < enFeatures.length; i++) {
-                langFeatures.push(c[`feature_${i}`] || enFeatures[i]);
+          if (Object.keys(sourceTrust).length > 0) {
+            const translated = await translateContentByLang(sourceTrust, 'en', TARGET_LANGS, tenantId);
+            const newSettings = { ...ts };
+            const newBadges = badges.map(b => ({ ...b, title: { ...b.title }, description: { ...b.description } }));
+            for (const [lang, content] of Object.entries(translated)) {
+              const c = content as Record<string, string>;
+              if (c.sectionTitle) newSettings.sectionTitle = { ...newSettings.sectionTitle, [lang]: c.sectionTitle };
+              if (c.sectionSubtitle) newSettings.sectionSubtitle = { ...newSettings.sectionSubtitle, [lang]: c.sectionSubtitle };
+              for (let i = 0; i < newBadges.length; i++) {
+                if (c[`badge_${i}_title`]) newBadges[i].title[lang] = c[`badge_${i}_title`];
+                if (c[`badge_${i}_description`]) newBadges[i].description[lang] = c[`badge_${i}_description`];
               }
-              newFeatures[lang] = langFeatures;
             }
+            newSettings.badges = newBadges;
+            await storage.updateSection(trustSection.id, tenantId, { settings: newSettings });
+            job.steps.push('trust_badges');
           }
-          newSettings.features = newFeatures;
-          await storage.updateSection(heroSection.id, tenantId, { settings: newSettings });
-          steps.push('hero');
         }
-      }
 
-      res.json({ ok: true, steps });
-    } catch (err: any) {
-      res.status(500).json({ error: err?.message || "Translation failed" });
-    }
+        // 9. Hero section
+        job.step = 'Translating hero section…';
+        const heroSection = sections.find((s: any) => s.sectionKey === 'hero');
+        if (heroSection?.settings) {
+          const hs = heroSection.settings as Record<string, any>;
+          const sourceHero: Record<string, string> = {};
+          if (hs.badge?.en?.trim()) sourceHero.badge = hs.badge.en;
+          if (hs.title?.en?.trim()) sourceHero.title = hs.title.en;
+          if (hs.subtitle?.en?.trim()) sourceHero.subtitle = hs.subtitle.en;
+          if (hs.stats?.stat1Label?.en?.trim()) sourceHero.stat1Label = hs.stats.stat1Label.en;
+          if (hs.stats?.stat1Sublabel?.en?.trim()) sourceHero.stat1Sublabel = hs.stats.stat1Sublabel.en;
+          if (hs.stats?.stat2Label?.en?.trim()) sourceHero.stat2Label = hs.stats.stat2Label.en;
+          if (hs.stats?.stat2Sublabel?.en?.trim()) sourceHero.stat2Sublabel = hs.stats.stat2Sublabel.en;
+          const enFeatures: string[] = hs.features?.en || [];
+          for (let i = 0; i < enFeatures.length; i++) {
+            if (enFeatures[i]?.trim()) sourceHero[`feature_${i}`] = enFeatures[i];
+          }
+          if (Object.keys(sourceHero).length > 0) {
+            const translated = await translateContentByLang(sourceHero, 'en', TARGET_LANGS, tenantId);
+            const newSettings = { ...hs };
+            newSettings.badge = { ...hs.badge };
+            newSettings.title = { ...hs.title };
+            newSettings.subtitle = { ...hs.subtitle };
+            newSettings.stats = {
+              ...hs.stats,
+              stat1Label: { ...(hs.stats?.stat1Label || {}) },
+              stat1Sublabel: { ...(hs.stats?.stat1Sublabel || {}) },
+              stat2Label: { ...(hs.stats?.stat2Label || {}) },
+              stat2Sublabel: { ...(hs.stats?.stat2Sublabel || {}) },
+            };
+            const newFeatures: Record<string, string[]> = { ...(hs.features || {}) };
+            for (const [lang, content] of Object.entries(translated)) {
+              const c = content as Record<string, string>;
+              if (c.badge) newSettings.badge[lang] = c.badge;
+              if (c.title) newSettings.title[lang] = c.title;
+              if (c.subtitle) newSettings.subtitle[lang] = c.subtitle;
+              if (c.stat1Label) newSettings.stats.stat1Label[lang] = c.stat1Label;
+              if (c.stat1Sublabel) newSettings.stats.stat1Sublabel[lang] = c.stat1Sublabel;
+              if (c.stat2Label) newSettings.stats.stat2Label[lang] = c.stat2Label;
+              if (c.stat2Sublabel) newSettings.stats.stat2Sublabel[lang] = c.stat2Sublabel;
+              if (enFeatures.length > 0) {
+                const langFeatures: string[] = [];
+                for (let i = 0; i < enFeatures.length; i++) {
+                  langFeatures.push(c[`feature_${i}`] || enFeatures[i]);
+                }
+                newFeatures[lang] = langFeatures;
+              }
+            }
+            newSettings.features = newFeatures;
+            await storage.updateSection(heroSection.id, tenantId, { settings: newSettings });
+            job.steps.push('hero');
+          }
+        }
+
+        job.status = 'done';
+        job.step = 'Complete';
+      } catch (err: any) {
+        console.error('[translate-everything] job error:', err?.message);
+        job.status = 'error';
+        job.error = err?.message || 'Translation failed';
+      }
+    })();
   });
 
   app.post("/api/admin/ai/translate-all-sections", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
