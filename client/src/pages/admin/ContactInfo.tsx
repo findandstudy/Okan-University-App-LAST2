@@ -100,7 +100,14 @@ export default function ContactInfo({ embedded, saveTriggerRef }: { embedded?: b
   useEffect(() => {
     const contactSection = sections.find(s => s.sectionKey === 'contact');
     if (contactSection?.settings) {
-      setSettings(contactSection.settings as ContactSettings);
+      const loaded = contactSection.settings as ContactSettings;
+      setSettings(prev => ({
+        ...prev,
+        ...loaded,
+        sectionTitle: loaded.sectionTitle || prev.sectionTitle,
+        sectionSubtitle: loaded.sectionSubtitle || prev.sectionSubtitle,
+        items: (loaded.items && loaded.items.length > 0) ? loaded.items : prev.items,
+      }));
     }
   }, [sections]);
 
@@ -203,7 +210,7 @@ export default function ContactInfo({ embedded, saveTriggerRef }: { embedded?: b
                   <div>
                     <Label>Section Title ({languageLabels[lang]})</Label>
                     <Input
-                      value={settings.sectionTitle[lang] || ''}
+                      value={settings.sectionTitle?.[lang] || ''}
                       onChange={(e) => setSettings({
                         ...settings,
                         sectionTitle: { ...settings.sectionTitle, [lang]: e.target.value }
@@ -215,7 +222,7 @@ export default function ContactInfo({ embedded, saveTriggerRef }: { embedded?: b
                   <div>
                     <Label>Section Subtitle ({languageLabels[lang]})</Label>
                     <Input
-                      value={settings.sectionSubtitle[lang] || ''}
+                      value={settings.sectionSubtitle?.[lang] || ''}
                       onChange={(e) => setSettings({
                         ...settings,
                         sectionSubtitle: { ...settings.sectionSubtitle, [lang]: e.target.value }
