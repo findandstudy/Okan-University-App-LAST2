@@ -212,6 +212,7 @@ export default function Sites() {
   const [cloneDialogOpen, setCloneDialogOpen] = useState<string | null>(null);
   const [cloneForm, setCloneForm] = useState<CloneForm>({ universityName: '', domain: '' });
   const [refreshKeys, setRefreshKeys] = useState<Record<string, number>>({});
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   // List management state
   const [view, setView] = useState<'card' | 'list'>('card');
@@ -404,7 +405,7 @@ export default function Sites() {
         {tenant.id !== 'default' && (
           <Button variant="ghost" size="icon" className={`${compact ? 'h-8 w-8' : 'h-8 w-8 ml-auto'}`}
             data-testid={`button-delete-${tenant.id}`}
-            onClick={() => { if (confirm(`Delete "${tenant.universityName}"? This cannot be undone.`)) deleteMutation.mutate(tenant.id); }}
+            onClick={() => setDeleteConfirmId(tenant.id)}
             disabled={deleteMutation.isPending}>
             <Trash2 className="h-4 w-4 text-destructive" />
           </Button>
@@ -660,6 +661,34 @@ export default function Sites() {
 
       {/* New site dialog */}
       <NewSiteDialog open={newDialogOpen} onOpenChange={setNewDialogOpen} />
+
+      {/* Single delete confirmation */}
+      <AlertDialog open={!!deleteConfirmId} onOpenChange={open => { if (!open) setDeleteConfirmId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this site?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete{' '}
+              <span className="font-semibold">
+                {tenants.find(t => t.id === deleteConfirmId)?.universityName ?? 'this site'}
+              </span>{' '}
+              and all its content, programs, leads and settings. The domain will be freed up for reuse. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-delete-cancel">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (deleteConfirmId) deleteMutation.mutate(deleteConfirmId);
+                setDeleteConfirmId(null);
+              }}
+              data-testid="button-delete-confirm">
+              Delete site
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Bulk delete confirmation */}
       <AlertDialog open={bulkDeleteConfirm} onOpenChange={setBulkDeleteConfirm}>
