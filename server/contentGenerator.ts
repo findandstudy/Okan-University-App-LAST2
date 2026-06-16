@@ -1,6 +1,9 @@
+import { createRequire } from 'module';
 import { callAI } from './aiService';
 import { translateText } from './aiTranslation';
 import { SUPPORTED_LANGUAGES } from '@shared/schema';
+
+const _require = createRequire(import.meta.url);
 
 export interface GeneratedContent {
   hero: {
@@ -91,7 +94,7 @@ export async function extractTextFromUrl(url: string): Promise<string> {
 }
 
 export async function extractTextFromPdf(buffer: Buffer): Promise<string> {
-  const pdfParse = (await import('pdf-parse')).default;
+  const pdfParse = _require('pdf-parse');
   const data = await pdfParse(buffer);
   return data.text.substring(0, 8000);
 }
