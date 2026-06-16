@@ -103,7 +103,7 @@ export default function BlogPost() {
   const { data: tenant } = useQuery<Tenant>({ queryKey: ['/api/tenant'] });
   const { data, isLoading, isError } = useQuery<BlogPostDetail>({
     queryKey: ['/api/blog', lang, slug],
-    queryFn: () => fetch(`/api/blog/${slug}?lang=${lang}`).then(async r => {
+    queryFn: () => fetch(`/api/blog/${slug}?lang=${lang}`, { credentials: 'include' }).then(async r => {
       if (!r.ok) throw new Error('Not found');
       return r.json();
     }),
