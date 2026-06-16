@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Upload, Globe, FileText, AlignLeft, Sparkles, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Loader2, Upload, Globe, FileText, AlignLeft, Sparkles, CheckCircle2, AlertTriangle, Plus, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import AdminLayout from './AdminLayout';
@@ -201,50 +201,179 @@ export default function ContentGenerator({ embedded }: { embedded?: boolean } = 
               <div className="flex items-center gap-3 p-3 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg">
                 <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0" />
                 <p className="text-sm text-amber-700 dark:text-amber-300">
-                  <strong>{needsVerificationCount} item(s)</strong> marked [DOĞRULANMALI] — please verify these claims before publishing.
+                  <strong>{needsVerificationCount} item(s)</strong> flagged for verification — review and edit before saving.
                 </p>
               </div>
             )}
 
+            {/* Hero */}
             <Card>
-              <CardHeader><CardTitle>Hero Section Preview</CardTitle></CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                <div><span className="font-medium text-muted-foreground">Title: </span>{generatedContent.hero.title}</div>
-                <div><span className="font-medium text-muted-foreground">Subtitle: </span>{generatedContent.hero.subtitle}</div>
-                <div><span className="font-medium text-muted-foreground">Body: </span>{generatedContent.hero.body}</div>
-                <div><span className="font-medium text-muted-foreground">CTA: </span>{generatedContent.hero.ctaLabel}</div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader><CardTitle>About Section Preview</CardTitle></CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                <div><span className="font-medium text-muted-foreground">Title: </span>{generatedContent.about.title}</div>
-                <div><span className="font-medium text-muted-foreground">Body: </span>{generatedContent.about.body}</div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader><CardTitle>FAQ Preview ({generatedContent.faq.length} items)</CardTitle></CardHeader>
+              <CardHeader>
+                <CardTitle>Hero Section</CardTitle>
+                <CardDescription>Edit the headline and call-to-action for your landing page.</CardDescription>
+              </CardHeader>
               <CardContent className="space-y-3">
+                <div className="space-y-1">
+                  <Label>Title</Label>
+                  <Input
+                    value={generatedContent.hero.title}
+                    onChange={e => setGeneratedContent(c => c && { ...c, hero: { ...c.hero, title: e.target.value } })}
+                    data-testid="input-hero-title"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>Subtitle</Label>
+                  <Input
+                    value={generatedContent.hero.subtitle}
+                    onChange={e => setGeneratedContent(c => c && { ...c, hero: { ...c.hero, subtitle: e.target.value } })}
+                    data-testid="input-hero-subtitle"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>Body</Label>
+                  <Textarea
+                    value={generatedContent.hero.body}
+                    onChange={e => setGeneratedContent(c => c && { ...c, hero: { ...c.hero, body: e.target.value } })}
+                    className="min-h-[80px]"
+                    data-testid="textarea-hero-body"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>CTA Button Label</Label>
+                  <Input
+                    value={generatedContent.hero.ctaLabel}
+                    onChange={e => setGeneratedContent(c => c && { ...c, hero: { ...c.hero, ctaLabel: e.target.value } })}
+                    data-testid="input-hero-cta"
+                  />
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* About */}
+            <Card>
+              <CardHeader>
+                <CardTitle>About Section</CardTitle>
+                <CardDescription>A short description shown in the about/intro block.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="space-y-1">
+                  <Label>Title</Label>
+                  <Input
+                    value={generatedContent.about.title}
+                    onChange={e => setGeneratedContent(c => c && { ...c, about: { ...c.about, title: e.target.value } })}
+                    data-testid="input-about-title"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>Body</Label>
+                  <Textarea
+                    value={generatedContent.about.body}
+                    onChange={e => setGeneratedContent(c => c && { ...c, about: { ...c.about, body: e.target.value } })}
+                    className="min-h-[100px]"
+                    data-testid="textarea-about-body"
+                  />
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* FAQ */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>FAQ ({generatedContent.faq.length} items)</CardTitle>
+                  <CardDescription>Edit questions and answers, or remove ones you don't need.</CardDescription>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() => setGeneratedContent(c => c && {
+                    ...c,
+                    faq: [...c.faq, { question: '', answer: '', needsVerification: false }],
+                  })}
+                  data-testid="button-add-faq"
+                >
+                  <Plus className="h-3.5 w-3.5" /> Add item
+                </Button>
+              </CardHeader>
+              <CardContent className="space-y-4">
                 {generatedContent.faq.map((item, i) => (
-                  <div key={i} className="text-sm border-b pb-2 last:border-0 last:pb-0">
-                    <div className="flex items-start gap-2">
-                      <span className="font-medium">{item.question}</span>
-                      {item.needsVerification && <Badge variant="outline" className="text-amber-600 border-amber-400 text-xs shrink-0">Verify</Badge>}
+                  <div key={i} className="space-y-2 border rounded-lg p-3 relative">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-medium text-muted-foreground w-4">{i + 1}</span>
+                      {item.needsVerification && (
+                        <Badge variant="outline" className="text-amber-600 border-amber-400 text-xs">Verify</Badge>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 ml-auto text-muted-foreground hover:text-destructive"
+                        onClick={() => setGeneratedContent(c => c && { ...c, faq: c.faq.filter((_, idx) => idx !== i) })}
+                        data-testid={`button-delete-faq-${i}`}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
                     </div>
-                    <p className="text-muted-foreground mt-1">{item.answer}</p>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Question</Label>
+                      <Input
+                        value={item.question}
+                        onChange={e => setGeneratedContent(c => c && {
+                          ...c,
+                          faq: c.faq.map((f, idx) => idx === i ? { ...f, question: e.target.value } : f),
+                        })}
+                        data-testid={`input-faq-question-${i}`}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Answer</Label>
+                      <Textarea
+                        value={item.answer}
+                        onChange={e => setGeneratedContent(c => c && {
+                          ...c,
+                          faq: c.faq.map((f, idx) => idx === i ? { ...f, answer: e.target.value } : f),
+                        })}
+                        className="min-h-[70px]"
+                        data-testid={`textarea-faq-answer-${i}`}
+                      />
+                    </div>
                   </div>
                 ))}
               </CardContent>
             </Card>
 
+            {/* SEO */}
             <Card>
-              <CardHeader><CardTitle>SEO Preview</CardTitle></CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                <div><span className="font-medium text-muted-foreground">Title: </span>{generatedContent.seo.metaTitle}</div>
-                <div><span className="font-medium text-muted-foreground">Description: </span>{generatedContent.seo.metaDescription}</div>
-                <div><span className="font-medium text-muted-foreground">Keywords: </span>{generatedContent.seo.keywords}</div>
+              <CardHeader>
+                <CardTitle>SEO Settings</CardTitle>
+                <CardDescription>Meta tags used by search engines to index your page.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="space-y-1">
+                  <Label>Meta Title</Label>
+                  <Input
+                    value={generatedContent.seo.metaTitle}
+                    onChange={e => setGeneratedContent(c => c && { ...c, seo: { ...c.seo, metaTitle: e.target.value } })}
+                    data-testid="input-seo-title"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>Meta Description</Label>
+                  <Textarea
+                    value={generatedContent.seo.metaDescription}
+                    onChange={e => setGeneratedContent(c => c && { ...c, seo: { ...c.seo, metaDescription: e.target.value } })}
+                    className="min-h-[70px]"
+                    data-testid="textarea-seo-description"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>Keywords</Label>
+                  <Input
+                    value={generatedContent.seo.keywords}
+                    onChange={e => setGeneratedContent(c => c && { ...c, seo: { ...c.seo, keywords: e.target.value } })}
+                    data-testid="input-seo-keywords"
+                  />
+                </div>
               </CardContent>
             </Card>
 
