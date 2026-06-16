@@ -933,6 +933,7 @@ export default function Blog({ embedded }: { embedded?: boolean } = {}) {
   const [editPost, setEditPost] = useState<BlogPostWithTranslations | null>(null);
   const [generatingId, setGeneratingId] = useState<string | null>(null);
   const [translatingId, setTranslatingId] = useState<string | null>(null);
+  const [aipoweringId, setAipoweringId] = useState<string | null>(null);
   const [view, setView] = useState<'list' | 'calendar'>('list');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -1107,6 +1108,20 @@ export default function Blog({ embedded }: { embedded?: boolean } = {}) {
       toast({ title: 'Generation failed', description: e.message, variant: 'destructive' });
     } finally {
       setGeneratingId(null);
+    }
+  };
+
+  const handleAIPower = async (post: BlogPostWithTranslations) => {
+    setAipoweringId(post.id);
+    try {
+      const res = await apiRequest('POST', `/api/admin/blog/${post.id}/ai-power${apiSuffix}`, {});
+      if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error || `HTTP ${res.status}`); }
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/blog' + apiSuffix] });
+      toast({ title: 'AI Power complete!', description: 'Content rewritten with better SEO. Translating to 9 languages in background.' });
+    } catch (e: any) {
+      toast({ title: 'AI Power failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setAipoweringId(null);
     }
   };
 
@@ -1478,6 +1493,16 @@ export default function Blog({ embedded }: { embedded?: boolean } = {}) {
                               disabled={generatingId === post.id || post.status === 'generating'} data-testid={`button-generate-${post.id}`} title="Generate with AI (EN + all 9 languages)">
                               <Sparkles className="w-3.5 h-3.5 mr-1" />
                               {generatingId === post.id ? 'Generating…' : 'AI Generate'}
+                            </Button>
+
+                            <Button size="sm" variant="outline"
+                              onClick={() => handleAIPower(post)}
+                              disabled={aipoweringId === post.id || post.status === 'generating'}
+                              data-testid={`button-aipower-${post.id}`}
+                              title="AI Power — rewrite existing content with better SEO, H1/H2 structure and meta tags"
+                              className="text-violet-700 border-violet-200 hover:bg-violet-50">
+                              <Wand2 className="w-3.5 h-3.5 mr-1" />
+                              {aipoweringId === post.id ? 'Powering…' : 'AI Power'}
                             </Button>
 
                             <Button size="sm" variant="outline" onClick={() => handleTranslateAll(post)}

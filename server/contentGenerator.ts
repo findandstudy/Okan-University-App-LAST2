@@ -239,49 +239,51 @@ export async function generateBlogPost(
     ? `\nINTERNAL LINKS (links to other posts on this blog — you MUST naturally include at least ${Math.min(2, internalLinks.length)} of these using the title as anchor text):\n${internalLinks.map(l => `- [${l.title}](${l.url})`).join('\n')}\n`
     : '';
 
-  const systemPrompt = `You are an expert SEO content writer for a university recruitment platform. 
-Write factual, well-structured blog articles that help international students.
-Never fabricate statistics, rankings, or specific facts you cannot verify.
-When internal or external links are provided, embed them naturally as Markdown hyperlinks in the body — do NOT list them at the bottom.
-Return ONLY valid JSON, no markdown, no explanation.`;
+  const systemPrompt = `You are a senior SEO content strategist for a university recruitment platform.
+Write authoritative, in-depth blog articles targeting international students.
+Rules:
+- Never fabricate statistics, rankings, or specific facts you cannot verify.
+- Use precise, specific language — avoid vague filler phrases.
+- When internal or external links are provided, embed them naturally as Markdown hyperlinks in the body — do NOT list them at the bottom.
+- Every H2 must contain a semantically related variant of the target keyword or a strong supporting topic.
+- Return ONLY valid JSON. No markdown fences, no explanation outside the JSON.`;
 
-  const prompt = `Write an SEO-optimized blog article targeting the keyword: "${keyword}"
+  const prompt = `Write a high-quality, SEO-optimized blog article targeting the keyword: "${keyword}"
 ${externalBlock}${internalBlock}
-Article requirements:
-- 750-1000 words (excluding the FAQ section)
-- Professional but accessible tone
-- Structured with clear headings (use ## for H2, ### for H3)
-- Include a compelling introduction and a clear conclusion
-- Target international students considering university enrollment
-- Use the keyword naturally in the first paragraph, at least one H2, and the conclusion
+CONTENT STRUCTURE (mandatory):
+1. # H1 Title — compelling, keyword-rich, under 65 chars (use a single #)
+2. Introduction paragraph — hook + keyword in first sentence + what the reader will learn
+3. At least 4 ## H2 sections, each 200-300 words, each with ## heading containing keyword variations
+4. Use ### H3 sub-headings inside at least 2 of the H2 sections for deeper structure
+5. Bullet lists or numbered steps where appropriate (at least 2 lists in the article)
+6. A clear "Conclusion" ## section that restates the keyword and has a call-to-action
+7. End with a ## Frequently Asked Questions section (exactly 5 Q&A pairs)
 
-MANDATORY: End the article with a FAQ section using EXACTLY this format (5 questions):
+TOTAL LENGTH: 1500-2000 words (body only, not counting FAQ)
 
+KEYWORD USAGE RULES:
+- Keyword in the very first sentence
+- Keyword or close variant in at least 3 of the ## H2 headings
+- Keyword in the conclusion paragraph
+
+FAQ FORMAT (use exactly):
 ## Frequently Asked Questions
 
-**Q: [question]?**
-A: [answer in 1-3 sentences]
+**Q: [question relevant to the keyword]?**
+A: [answer in 2-4 sentences]
 
-**Q: [question]?**
-A: [answer in 1-3 sentences]
+(repeat for all 5 questions)
 
-**Q: [question]?**
-A: [answer in 1-3 sentences]
+SEO FIELDS:
+- metaTitle: 50-60 chars, primary keyword near the start, compelling
+- metaDesc: 140-155 chars, includes keyword, includes a benefit/CTA, no truncation
 
-**Q: [question]?**
-A: [answer in 1-3 sentences]
-
-**Q: [question]?**
-A: [answer in 1-3 sentences]
-
-The FAQ questions should address real concerns of international students about this topic.
-
-Return this exact JSON structure:
+Return ONLY this JSON (no markdown, no extra keys):
 {
-  "title": "SEO-optimized article title (under 65 chars)",
-  "content": "Full article in Markdown format including the FAQ section at the end",
-  "metaTitle": "Meta title (under 60 chars, includes keyword)",
-  "metaDesc": "Meta description (120-155 chars, compelling, includes keyword)"
+  "title": "H1 title string (under 65 chars)",
+  "content": "Full article in Markdown — starts with # H1, then body, then FAQ",
+  "metaTitle": "Meta title 50-60 chars",
+  "metaDesc": "Meta description 140-155 chars"
 }`;
 
   const raw = await callAI(prompt, tenantId, systemPrompt);

@@ -2523,6 +2523,144 @@ Return ONLY valid JSON, no markdown.`;
     }
   });
 
+  // ─── AI Power: rewrite existing content to higher quality ────────────────────
+  app.post("/api/admin/blog/:id/ai-power", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
+    const id = req.params.id as string;
+    try {
+      const post = await storage.getBlogPost(id);
+      if (!post || post.tenantId !== req.tenantId) return res.status(404).json({ error: 'Not found' });
+
+      const { callAI, getAIConfig } = await import('./aiService');
+      if (!await getAIConfig(req.tenantId)) return res.status(400).json({ error: 'AI not configured.' });
+
+      const { toSlug, fetchLinkTitle } = await import('./contentGenerator');
+      const { translateText } = await import('./aiTranslation');
+
+      const keyword = post.keyword || 'university education';
+      const translations = await storage.getBlogPostTranslations(id);
+      const existing = translations.find(t => t.lang === 'en');
+
+      // Resolve backlinks
+      const rawLinks: string[] = post.backlinkSites || [];
+      const externalLinks = await Promise.all(
+        rawLinks.filter(l => l.startsWith('http'))
+          .map(async url => ({ url, title: await fetchLinkTitle(url) }))
+      );
+      rawLinks.filter(l => !l.startsWith('http')).forEach(d =>
+        externalLinks.push({ url: `https://${d}`, title: d })
+      );
+
+      const allPosts = await storage.getBlogPosts(req.tenantId);
+      const internalLinks: { url: string; title: string }[] = [];
+      for (const p of allPosts.filter(p => p.id !== id && p.status === 'yayinda').slice(0, 6)) {
+        const tr = await storage.getBlogPostTranslations(p.id);
+        const en = tr.find(t => t.lang === 'en');
+        if (en?.slug && en?.title) internalLinks.push({ url: `/blog/${en.slug}`, title: en.title });
+      }
+
+      const externalBlock = externalLinks.length > 0
+        ? `\nEXTERNAL LINKS TO INCLUDE (embed naturally as Markdown hyperlinks):\n${externalLinks.map(l => `- [${l.title}](${l.url})`).join('\n')}\n`
+        : '';
+      const internalBlock = internalLinks.length > 0
+        ? `\nINTERNAL LINKS (embed at least ${Math.min(2, internalLinks.length)} naturally):\n${internalLinks.map(l => `- [${l.title}](${l.url})`).join('\n')}\n`
+        : '';
+
+      const existingContext = existing?.content
+        ? `\nEXISTING DRAFT (use as a reference for topic/angle, but fully rewrite for quality):\n${existing.content.substring(0, 1500)}\n`
+        : '';
+
+      const systemPrompt = `You are a senior SEO content strategist for a university recruitment platform.
+Rewrite or generate authoritative, in-depth articles for international students.
+Rules:
+- Never fabricate statistics or unverifiable facts.
+- Use precise language — no vague filler.
+- Embed links naturally as Markdown hyperlinks — never list them at the bottom.
+- Every H2 must contain a keyword variant or strong supporting topic.
+- Return ONLY valid JSON. No markdown fences, no extra text.`;
+
+      const prompt = `Rewrite and significantly improve this blog article targeting the keyword: "${keyword}"
+${existingContext}${externalBlock}${internalBlock}
+REQUIRED STRUCTURE:
+1. # H1 Title — compelling, keyword-rich, under 65 chars
+2. Strong introduction: hook + keyword in first sentence + reader benefit
+3. At least 4 ## H2 sections (200-300 words each), headings contain keyword variants
+4. ### H3 sub-headings inside at least 2 H2 sections
+5. At least 2 bullet or numbered lists
+6. ## Conclusion section with keyword + clear call-to-action
+7. ## Frequently Asked Questions with exactly 5 Q&A pairs (2-4 sentences each)
+
+TOTAL LENGTH: 1500-2000 words (body only, not counting FAQ)
+
+KEYWORD RULES:
+- Keyword in first sentence
+- Keyword or variant in at least 3 H2 headings
+- Keyword in conclusion
+
+Return ONLY this JSON:
+{
+  "title": "H1 title under 65 chars",
+  "content": "Full Markdown article starting with # H1 through FAQ",
+  "metaTitle": "50-60 chars, keyword near start",
+  "metaDesc": "140-155 chars, keyword + benefit + CTA"
+}`;
+
+      const raw = await callAI(prompt, req.tenantId, systemPrompt);
+      const match = raw.match(/\{[\s\S]*\}/);
+      if (!match) throw new Error('AI returned invalid JSON');
+      const parsed = JSON.parse(match[0]) as { title: string; content: string; metaTitle: string; metaDesc: string };
+
+      const slug = toSlug(parsed.title);
+
+      // Save EN immediately
+      await storage.upsertBlogPostTranslation({
+        postId: id, tenantId: req.tenantId, lang: 'en',
+        title: parsed.title, slug,
+        content: parsed.content,
+        metaTitle: parsed.metaTitle, metaDesc: parsed.metaDesc,
+      });
+      await storage.updateBlogPost(id, { isAiGenerated: true, status: 'generating' });
+
+      const enTranslations = await storage.getBlogPostTranslations(id);
+      res.json({ success: true, translations: enTranslations, backgroundTranslating: true });
+
+      // Background: translate to 9 other languages
+      (async () => {
+        const otherLangs = SUPPORTED_LANGUAGES.filter(l => l !== 'en');
+        let ok = 0;
+        for (const lang of otherLangs) {
+          try {
+            const fields = ['title', 'content', 'metaTitle', 'metaDesc'] as const;
+            const translated: Record<string, string> = {};
+            for (const field of fields) {
+              try {
+                const src = parsed[field];
+                if (!src) { translated[field] = ''; continue; }
+                const r = await translateText(src, 'en', [lang], req.tenantId);
+                translated[field] = r[lang] || src;
+              } catch { translated[field] = parsed[field]; }
+            }
+            const langSlug = toSlug(translated['title'] || parsed.title) + `-${lang}`;
+            await storage.upsertBlogPostTranslation({
+              postId: id, tenantId: req.tenantId, lang,
+              title: translated['title'] || parsed.title, slug: langSlug,
+              content: translated['content'] || parsed.content,
+              metaTitle: translated['metaTitle'] || parsed.metaTitle,
+              metaDesc: translated['metaDesc'] || parsed.metaDesc,
+            });
+            ok++;
+          } catch (e) { console.warn(`[AIPower] lang=${lang} failed:`, (e as any)?.message); }
+        }
+        const finalStatus = ok > 0 ? 'taslak' : 'failed';
+        await storage.updateBlogPost(id, { status: finalStatus }).catch(() => {});
+        console.log(`[AIPower] Done. status=${finalStatus} langs=${ok}/${otherLangs.length}`);
+      })().catch(e => console.error('[AIPower] Background error:', e));
+
+    } catch (err: any) {
+      try { await storage.updateBlogPost(id, { status: 'failed' }); } catch {}
+      if (!res.headersSent) res.status(500).json({ error: err?.message || 'AI Power failed' });
+    }
+  });
+
   // ─── Approve blog post (onay mode) ───────────────────────────────────────────
   app.post("/api/admin/blog/:id/approve", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
     try {
