@@ -1404,14 +1404,15 @@ export async function registerRoutes(
         if (Object.keys(sourceFooter).length > 0) {
           const translated = await translateContentByLang(sourceFooter, 'en', TARGET_LANGS, tenantId);
           const newSettings = { ...fs };
-          const existingDesc = typeof fs.description === 'object' ? fs.description : { en: enDesc };
-          const existingCTitle = typeof fs.contactTitle === 'object' ? fs.contactTitle : { en: enContactTitle };
-          const existingCAddr = typeof fs.contactAddress === 'object' ? fs.contactAddress : { en: enContactAddress };
+          // Pre-build accumulator objects so each lang merges into the previous result (not the original)
+          newSettings.description = typeof fs.description === 'object' ? { ...fs.description } : { en: enDesc };
+          newSettings.contactTitle = typeof fs.contactTitle === 'object' ? { ...fs.contactTitle } : { en: enContactTitle };
+          newSettings.contactAddress = typeof fs.contactAddress === 'object' ? { ...fs.contactAddress } : { en: enContactAddress };
           for (const [lang, content] of Object.entries(translated)) {
             const c = content as Record<string, string>;
-            if (c.description) newSettings.description = { ...existingDesc, [lang]: c.description };
-            if (c.contactTitle) newSettings.contactTitle = { ...existingCTitle, [lang]: c.contactTitle };
-            if (c.contactAddress) newSettings.contactAddress = { ...existingCAddr, [lang]: c.contactAddress };
+            if (c.description) newSettings.description[lang] = c.description;
+            if (c.contactTitle) newSettings.contactTitle[lang] = c.contactTitle;
+            if (c.contactAddress) newSettings.contactAddress[lang] = c.contactAddress;
           }
           await storage.updateSection(footerSection.id, tenantId, { settings: newSettings });
           steps.push('footer');
@@ -1437,19 +1438,20 @@ export async function registerRoutes(
         if (Object.keys(sourceContact).length > 0) {
           const translated = await translateContentByLang(sourceContact, 'en', TARGET_LANGS, tenantId);
           const newSettings = { ...cs };
-          const existingTitle = typeof cs.sectionTitle === 'object' ? cs.sectionTitle : { en: enTitle };
-          const existingSubtitle = typeof cs.sectionSubtitle === 'object' ? cs.sectionSubtitle : { en: enSubtitle };
+          // Pre-build accumulator objects (same fix as footer — avoids overwriting each lang with the previous)
+          newSettings.sectionTitle = typeof cs.sectionTitle === 'object' ? { ...cs.sectionTitle } : { en: enTitle };
+          newSettings.sectionSubtitle = typeof cs.sectionSubtitle === 'object' ? { ...cs.sectionSubtitle } : { en: enSubtitle };
           const newItems = [...items].map(it => ({
             ...it,
             label: typeof it.label === 'object' ? { ...it.label } : { en: it.label || '' },
           }));
           for (const [lang, content] of Object.entries(translated)) {
             const c = content as Record<string, string>;
-            if (c.sectionTitle) newSettings.sectionTitle = { ...existingTitle, [lang]: c.sectionTitle };
-            if (c.sectionSubtitle) newSettings.sectionSubtitle = { ...existingSubtitle, [lang]: c.sectionSubtitle };
+            if (c.sectionTitle) newSettings.sectionTitle[lang] = c.sectionTitle;
+            if (c.sectionSubtitle) newSettings.sectionSubtitle[lang] = c.sectionSubtitle;
             for (let i = 0; i < newItems.length; i++) {
               if (c[`item_${i}_label`]) {
-                newItems[i].label = { ...newItems[i].label, [lang]: c[`item_${i}_label`] };
+                newItems[i].label[lang] = c[`item_${i}_label`];
               }
             }
           }
