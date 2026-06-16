@@ -1369,9 +1369,10 @@ export async function registerRoutes(
       const footerSection = sections.find((s: any) => s.sectionKey === 'footer');
       if (footerSection?.settings) {
         const fs = footerSection.settings as Record<string, any>;
-        const enDesc = fs.description?.en || '';
-        const enContactTitle = fs.contactTitle?.en || '';
-        const enContactAddress = fs.contactAddress?.en || '';
+        // Support both {en:'...'} objects and legacy plain strings
+        const enDesc = (typeof fs.description === 'object' ? fs.description?.en : fs.description) || '';
+        const enContactTitle = (typeof fs.contactTitle === 'object' ? fs.contactTitle?.en : fs.contactTitle) || '';
+        const enContactAddress = (typeof fs.contactAddress === 'object' ? fs.contactAddress?.en : fs.contactAddress) || '';
         const sourceFooter: Record<string, string> = {};
         if (enDesc.trim()) sourceFooter.description = enDesc;
         if (enContactTitle.trim()) sourceFooter.contactTitle = enContactTitle;
@@ -1379,11 +1380,14 @@ export async function registerRoutes(
         if (Object.keys(sourceFooter).length > 0) {
           const translated = await translateContentByLang(sourceFooter, 'en', TARGET_LANGS, tenantId);
           const newSettings = { ...fs };
+          const existingDesc = typeof fs.description === 'object' ? fs.description : { en: enDesc };
+          const existingCTitle = typeof fs.contactTitle === 'object' ? fs.contactTitle : { en: enContactTitle };
+          const existingCAddr = typeof fs.contactAddress === 'object' ? fs.contactAddress : { en: enContactAddress };
           for (const [lang, content] of Object.entries(translated)) {
             const c = content as Record<string, string>;
-            if (c.description) newSettings.description = { ...newSettings.description, [lang]: c.description };
-            if (c.contactTitle) newSettings.contactTitle = { ...newSettings.contactTitle, [lang]: c.contactTitle };
-            if (c.contactAddress) newSettings.contactAddress = { ...newSettings.contactAddress, [lang]: c.contactAddress };
+            if (c.description) newSettings.description = { ...existingDesc, [lang]: c.description };
+            if (c.contactTitle) newSettings.contactTitle = { ...existingCTitle, [lang]: c.contactTitle };
+            if (c.contactAddress) newSettings.contactAddress = { ...existingCAddr, [lang]: c.contactAddress };
           }
           await storage.updateSection(footerSection.id, tenantId, { settings: newSettings });
           steps.push('footer');
@@ -1394,24 +1398,31 @@ export async function registerRoutes(
       const contactSection = sections.find((s: any) => s.sectionKey === 'contact');
       if (contactSection?.settings) {
         const cs = contactSection.settings as Record<string, any>;
-        const enTitle = cs.sectionTitle?.en || '';
-        const enSubtitle = cs.sectionSubtitle?.en || '';
-        const items: Array<{ icon: string; label: Record<string, string>; value: string }> = cs.items || [];
+        // Support both {en:'...'} objects and legacy plain strings
+        const enTitle = (typeof cs.sectionTitle === 'object' ? cs.sectionTitle?.en : cs.sectionTitle) || '';
+        const enSubtitle = (typeof cs.sectionSubtitle === 'object' ? cs.sectionSubtitle?.en : cs.sectionSubtitle) || '';
+        const items: Array<{ icon: string; label: any; value: string }> = cs.items || [];
         const sourceContact: Record<string, string> = {};
         if (enTitle.trim()) sourceContact.sectionTitle = enTitle;
         if (enSubtitle.trim()) sourceContact.sectionSubtitle = enSubtitle;
         for (let i = 0; i < items.length; i++) {
-          const enLabel = items[i]?.label?.en || '';
+          const rawLabel = items[i]?.label;
+          const enLabel = (typeof rawLabel === 'object' ? rawLabel?.en : rawLabel) || '';
           if (enLabel.trim()) sourceContact[`item_${i}_label`] = enLabel;
         }
         if (Object.keys(sourceContact).length > 0) {
           const translated = await translateContentByLang(sourceContact, 'en', TARGET_LANGS, tenantId);
           const newSettings = { ...cs };
-          const newItems = [...items].map(it => ({ ...it, label: { ...it.label } }));
+          const existingTitle = typeof cs.sectionTitle === 'object' ? cs.sectionTitle : { en: enTitle };
+          const existingSubtitle = typeof cs.sectionSubtitle === 'object' ? cs.sectionSubtitle : { en: enSubtitle };
+          const newItems = [...items].map(it => ({
+            ...it,
+            label: typeof it.label === 'object' ? { ...it.label } : { en: it.label || '' },
+          }));
           for (const [lang, content] of Object.entries(translated)) {
             const c = content as Record<string, string>;
-            if (c.sectionTitle) newSettings.sectionTitle = { ...newSettings.sectionTitle, [lang]: c.sectionTitle };
-            if (c.sectionSubtitle) newSettings.sectionSubtitle = { ...newSettings.sectionSubtitle, [lang]: c.sectionSubtitle };
+            if (c.sectionTitle) newSettings.sectionTitle = { ...existingTitle, [lang]: c.sectionTitle };
+            if (c.sectionSubtitle) newSettings.sectionSubtitle = { ...existingSubtitle, [lang]: c.sectionSubtitle };
             for (let i = 0; i < newItems.length; i++) {
               if (c[`item_${i}_label`]) {
                 newItems[i].label = { ...newItems[i].label, [lang]: c[`item_${i}_label`] };

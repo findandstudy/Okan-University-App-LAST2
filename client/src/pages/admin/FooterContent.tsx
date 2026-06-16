@@ -79,7 +79,7 @@ const defaultSettings: FooterSettings = {
   },
 };
 
-export default function FooterContent({ embedded }: { embedded?: boolean } = {}) {
+export default function FooterContent({ embedded, saveTriggerRef }: { embedded?: boolean; saveTriggerRef?: React.MutableRefObject<(() => void) | null> } = {}) {
   const { toast } = useToast();
   const { apiSuffix, tenantId } = useSiteContext();
   const [, navigate] = useLocation();
@@ -161,6 +161,10 @@ export default function FooterContent({ embedded }: { embedded?: boolean } = {})
     saveMutation.mutate(settings);
   };
 
+  useEffect(() => {
+    if (saveTriggerRef) saveTriggerRef.current = handleSave;
+  });
+
   if (isLoading) {
     return (
       <EmbeddableLayout embedded={embedded}>
@@ -189,10 +193,12 @@ export default function FooterContent({ embedded }: { embedded?: boolean } = {})
               {translateMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Globe className="h-4 w-4 mr-2" />}
               Auto Translate
             </Button>
-            <Button onClick={handleSave} disabled={saveMutation.isPending} data-testid="button-save-footer">
-              {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
-              Save Changes
-            </Button>
+            {!embedded && (
+              <Button onClick={handleSave} disabled={saveMutation.isPending} data-testid="button-save-footer">
+                {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+                Save Changes
+              </Button>
+            )}
           </div>
         </div>
 

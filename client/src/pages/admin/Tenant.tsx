@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useLocation } from 'wouter';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -231,8 +231,13 @@ export default function TenantPage({ embedded }: { embedded?: boolean } = {}) {
     },
   });
 
+  const footerSaveRef = useRef<(() => void) | null>(null);
+  const contactSaveRef = useRef<(() => void) | null>(null);
+
   const handleSave = () => {
     updateMutation.mutate({ ...settings, nameByLang });
+    footerSaveRef.current?.();
+    contactSaveRef.current?.();
   };
 
   if (isLoading) {
@@ -490,9 +495,9 @@ export default function TenantPage({ embedded }: { embedded?: boolean } = {}) {
           </CardContent>
         </Card>
 
-        <FooterContent embedded />
+        <FooterContent embedded saveTriggerRef={footerSaveRef} />
 
-        <ContactInfo embedded />
+        <ContactInfo embedded saveTriggerRef={contactSaveRef} />
 
         <div className="flex justify-end">
           <Button 

@@ -81,7 +81,7 @@ const defaultItems: ContactItem[] = [
   },
 ];
 
-export default function ContactInfo({ embedded }: { embedded?: boolean } = {}) {
+export default function ContactInfo({ embedded, saveTriggerRef }: { embedded?: boolean; saveTriggerRef?: React.MutableRefObject<(() => void) | null> } = {}) {
   const { toast } = useToast();
   const { apiSuffix, tenantId } = useSiteContext();
   const [, navigate] = useLocation();
@@ -133,6 +133,10 @@ export default function ContactInfo({ embedded }: { embedded?: boolean } = {}) {
     saveMutation.mutate(settings);
   };
 
+  useEffect(() => {
+    if (saveTriggerRef) saveTriggerRef.current = handleSave;
+  });
+
   const updateItem = (index: number, field: 'value', value: string) => {
     const newItems = [...settings.items];
     newItems[index] = { ...newItems[index], [field]: value };
@@ -171,10 +175,12 @@ export default function ContactInfo({ embedded }: { embedded?: boolean } = {}) {
             <h1 className="text-2xl font-bold">Contact Info</h1>
             <p className="text-muted-foreground">Manage contact information displayed on the landing page</p>
           </div>
-          <Button onClick={handleSave} disabled={saveMutation.isPending} data-testid="button-save-contact">
-            {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
-            Save Changes
-          </Button>
+          {!embedded && (
+            <Button onClick={handleSave} disabled={saveMutation.isPending} data-testid="button-save-contact">
+              {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+              Save Changes
+            </Button>
+          )}
         </div>
 
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as SupportedLanguage)}>
