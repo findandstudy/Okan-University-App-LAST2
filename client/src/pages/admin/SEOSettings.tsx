@@ -158,7 +158,7 @@ export default function SEOSettings({ embedded }: { embedded?: boolean } = {}) {
   });
 
   useEffect(() => {
-    if (seoSettings && !form.formState.isDirty) {
+    if (seoSettings) {
       const newValues: SeoFormData = {
         metaTitleByLang: { ...EMPTY_LANG_MAP, ...(seoSettings.metaTitleByLang as Record<SupportedLanguage, string> || {}) },
         metaDescriptionByLang: { ...EMPTY_LANG_MAP, ...(seoSettings.metaDescriptionByLang as Record<SupportedLanguage, string> || {}) },
@@ -174,7 +174,7 @@ export default function SEOSettings({ embedded }: { embedded?: boolean } = {}) {
       };
       reset(newValues);
     }
-  }, [seoSettings, reset, form.formState.isDirty]);
+  }, [seoSettings, reset]);
 
   return (
     <EmbeddableLayout embedded={embedded}>
