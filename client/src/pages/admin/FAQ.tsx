@@ -136,24 +136,20 @@ export default function FAQ({ embedded }: { embedded?: boolean } = {}) {
 
   const handleOpenEdit = (faq: FaqItem) => {
     setEditingFaq(faq);
+    const q = (faq.questionByLang as Record<string, string>) || {};
+    const a = (faq.answerByLang as Record<string, string>) || {};
     setFormData({
       displayOrder: faq.displayOrder || 0,
       isEnabled: faq.isEnabled ?? true,
       questionByLang: {
-        en: (faq.questionByLang as Record<string, string>)?.en || '',
-        ar: (faq.questionByLang as Record<string, string>)?.ar || '',
-        tr: (faq.questionByLang as Record<string, string>)?.tr || '',
-        fr: (faq.questionByLang as Record<string, string>)?.fr || '',
-        ru: (faq.questionByLang as Record<string, string>)?.ru || '',
-        fa: (faq.questionByLang as Record<string, string>)?.fa || '',
+        en: q.en || '', ar: q.ar || '', tr: q.tr || '', fr: q.fr || '',
+        ru: q.ru || '', fa: q.fa || '', zh: q.zh || '', hi: q.hi || '',
+        es: q.es || '', id: q.id || '',
       },
       answerByLang: {
-        en: (faq.answerByLang as Record<string, string>)?.en || '',
-        ar: (faq.answerByLang as Record<string, string>)?.ar || '',
-        tr: (faq.answerByLang as Record<string, string>)?.tr || '',
-        fr: (faq.answerByLang as Record<string, string>)?.fr || '',
-        ru: (faq.answerByLang as Record<string, string>)?.ru || '',
-        fa: (faq.answerByLang as Record<string, string>)?.fa || '',
+        en: a.en || '', ar: a.ar || '', tr: a.tr || '', fr: a.fr || '',
+        ru: a.ru || '', fa: a.fa || '', zh: a.zh || '', hi: a.hi || '',
+        es: a.es || '', id: a.id || '',
       },
     });
     setIsDialogOpen(true);

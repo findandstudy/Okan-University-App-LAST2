@@ -58,16 +58,14 @@ export async function translateContentByLang(
   targetLangs: string[],
   tenantId: string,
 ): Promise<Record<string, Record<string, any>>> {
-  const fields = ['title', 'subtitle', 'body', 'ctaLabel'] as const;
   const results: Record<string, Record<string, any>> = {};
-
   for (const lang of targetLangs) {
-    results[lang] = { ...sourceContent };
+    results[lang] = {};
   }
 
-  for (const field of fields) {
-    const value = sourceContent[field];
-    if (!value || typeof value !== 'string') continue;
+  // Translate ALL string fields — not just a hardcoded subset
+  for (const [field, value] of Object.entries(sourceContent)) {
+    if (!value || typeof value !== 'string' || !value.trim()) continue;
 
     const translations = await translateText(value, sourceLang, targetLangs, tenantId);
     for (const lang of targetLangs) {
