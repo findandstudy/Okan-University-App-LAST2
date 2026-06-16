@@ -36,14 +36,20 @@ export interface AIConfig {
 }
 
 export async function getAIConfig(tenantId: string): Promise<AIConfig | null> {
-  const [row] = await db
-    .select()
-    .from(integrationSettings)
-    .where(and(eq(integrationSettings.tenantId, tenantId), eq(integrationSettings.integrationType, 'ai')));
-  if (!row || !row.settings) return null;
-  const s = row.settings as any;
-  if (!s.provider || !s.encryptedApiKey) return null;
-  return { provider: s.provider, model: s.model || defaultModel(s.provider), encryptedApiKey: s.encryptedApiKey };
+  // Try the requested tenant first, then fall back to 'default' so that
+  // sub-tenants can use the global admin AI key without reconfiguring.
+  const tenantsToTry = tenantId === 'default' ? ['default'] : [tenantId, 'default'];
+  for (const tid of tenantsToTry) {
+    const [row] = await db
+      .select()
+      .from(integrationSettings)
+      .where(and(eq(integrationSettings.tenantId, tid), eq(integrationSettings.integrationType, 'ai')));
+    if (!row || !row.settings) continue;
+    const s = row.settings as any;
+    if (!s.provider || !s.encryptedApiKey) continue;
+    return { provider: s.provider, model: s.model || defaultModel(s.provider), encryptedApiKey: s.encryptedApiKey };
+  }
+  return null;
 }
 
 export function defaultModel(provider: string): string {
