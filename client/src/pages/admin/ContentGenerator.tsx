@@ -251,28 +251,20 @@ export default function ContentGenerator({ embedded }: { embedded?: boolean } = 
               </CardContent>
             </Card>
 
-            {/* About */}
+            {/* Footer description (mapped from about.body) */}
             <Card>
               <CardHeader>
-                <CardTitle>About Section</CardTitle>
-                <CardDescription>A short description shown in the about/intro block.</CardDescription>
+                <CardTitle>Footer Description</CardTitle>
+                <CardDescription>Shown in the footer of the landing page as the site's tagline/intro paragraph.</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-3">
+              <CardContent>
                 <div className="space-y-1">
-                  <Label>Title</Label>
-                  <Input
-                    value={generatedContent.about.title}
-                    onChange={e => setGeneratedContent(c => c && { ...c, about: { ...c.about, title: e.target.value } })}
-                    data-testid="input-about-title"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label>Body</Label>
+                  <Label>Description</Label>
                   <Textarea
                     value={generatedContent.about.body}
                     onChange={e => setGeneratedContent(c => c && { ...c, about: { ...c.about, body: e.target.value } })}
                     className="min-h-[100px]"
-                    data-testid="textarea-about-body"
+                    data-testid="textarea-footer-description"
                   />
                 </div>
               </CardContent>

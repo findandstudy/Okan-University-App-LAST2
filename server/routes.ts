@@ -1817,26 +1817,26 @@ export async function registerRoutes(
         });
       }
 
-      // ── About section: merge-safe write ──────────────────────────────────────
-      let aboutSectionId: string | null = null;
-      if (about?.title || about?.body) {
-        const aboutSection = existingSections.find(s => s.sectionKey === 'about');
-        const aboutEnContent = { title: about?.title || '', body: about?.body || '' };
-        const aboutExisting = (aboutSection?.contentByLang as Record<string, any>) || {};
-        const aboutMerged: Record<string, any> = { ...aboutExisting, en: aboutEnContent };
-        if (aboutSection) {
-          await storage.updateSection(aboutSection.id, req.tenantId, { contentByLang: aboutMerged });
-          aboutSectionId = aboutSection.id;
+      // ── Footer section: write about.body → footer description ───────────────
+      // 'about' sectionKey has no renderer in Landing.tsx; footer.settings.description IS displayed.
+      if (about?.body) {
+        const footerSection = existingSections.find(s => s.sectionKey === 'footer');
+        const footerExistingSettings = (footerSection?.settings as Record<string, any>) || {};
+        const footerNewSettings = {
+          ...footerExistingSettings,
+          description: { ...(footerExistingSettings.description || {}), en: about.body },
+        };
+        if (footerSection) {
+          await storage.updateSection(footerSection.id, req.tenantId, { settings: footerNewSettings });
         } else {
-          const created = await storage.createSection({
+          await storage.createSection({
             tenantId: req.tenantId,
-            sectionKey: 'about',
-            displayOrder: 1,
+            sectionKey: 'footer',
+            displayOrder: 999,
             isEnabled: true,
-            contentByLang: aboutMerged,
-            settings: null,
+            contentByLang: {},
+            settings: footerNewSettings,
           });
-          aboutSectionId = created.id;
         }
       }
 
@@ -1874,6 +1874,9 @@ export async function registerRoutes(
           }
         }
       }
+
+      // Clear bootstrap cache so landing page gets fresh data immediately
+      bootstrapCache.delete(req.tenantId);
 
       res.json({ success: true });
     } catch (err: any) {
