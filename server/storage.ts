@@ -480,18 +480,19 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getBlogPostTranslationBySlug(
-    tenantId: string, lang: string, slug: string
+    tenantId: string, lang: string, slug: string, includeUnpublished = false
   ): Promise<{ post: BlogPost; translation: BlogPostTranslation } | undefined> {
+    const conditions = [
+      eq(blogPosts.tenantId, tenantId),
+      eq(blogPostTranslations.lang, lang),
+      eq(blogPostTranslations.slug, slug),
+    ];
+    if (!includeUnpublished) conditions.push(eq(blogPosts.status, 'yayinda'));
     const rows = await db
       .select({ post: blogPosts, translation: blogPostTranslations })
       .from(blogPostTranslations)
       .innerJoin(blogPosts, eq(blogPostTranslations.postId, blogPosts.id))
-      .where(and(
-        eq(blogPosts.tenantId, tenantId),
-        eq(blogPosts.status, 'yayinda'),
-        eq(blogPostTranslations.lang, lang),
-        eq(blogPostTranslations.slug, slug),
-      ))
+      .where(and(...conditions))
       .limit(1);
     return rows[0];
   }

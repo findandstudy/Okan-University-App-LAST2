@@ -2014,7 +2014,8 @@ Rules:
     try {
       const slug = req.params.slug as string;
       const lang = (req.query.lang as string) || 'en';
-      const result = await storage.getBlogPostTranslationBySlug(req.tenantId, lang, slug);
+      const isAdmin = !!req.session?.adminId;
+      const result = await storage.getBlogPostTranslationBySlug(req.tenantId, lang, slug, isAdmin);
       if (!result) return res.status(404).json({ error: 'Post not found' });
 
       // Collect alternates (all available translations for this post)
