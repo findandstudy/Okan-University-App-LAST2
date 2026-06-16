@@ -1323,7 +1323,6 @@ export async function registerRoutes(
       try {
         const TARGET_LANGS = ['ar','tr','fr','ru','fa','zh','hi','es','id'];
         const { translateText, translateContentByLang } = await import('./aiTranslation');
-        const { callAI } = await import('./aiService');
 
         // 1. University name
         if (enName) {
@@ -1398,7 +1397,7 @@ export async function registerRoutes(
         }
         job.steps.push(`testimonials:${testimonialCount}`);
 
-        // 5. SEO meta tags
+        // 5. SEO meta tags — use translateContentByLang (same reliable path as other content)
         job.step = 'Translating SEO metadata…';
         const seoSettings = await storage.getSeoSettings(tenantId);
         if (seoSettings) {
@@ -1408,23 +1407,23 @@ export async function registerRoutes(
           const enTitle = metaTitleByLang.en || '';
           const enDesc = metaDescByLang.en || '';
           const enKw = metaKwByLang.en || '';
-          if (enTitle) {
-            const prompt = `Given this English SEO metadata for a university landing page:\nTitle: ${enTitle}\nDescription: ${enDesc || ''}\nKeywords: ${enKw || ''}\n\nCreate localized (culturally adapted, SEO-effective) versions for: ${TARGET_LANGS.join(', ')}\n\nReturn ONLY valid JSON:\n{"ar":{"metaTitle":"...","metaDescription":"...","keywords":"..."},"tr":{...},"fr":{...},"ru":{...},"fa":{...},"zh":{...},"hi":{...},"es":{...},"id":{...}}\n\nRules: titles <60 chars, descriptions <160 chars, keywords comma-separated in target language`;
-            const raw = await callAI(prompt, tenantId, 'You are an expert SEO consultant and multilingual copywriter. Return only valid JSON.');
-            const match = raw.match(/\{[\s\S]*\}/);
-            if (match) {
-              const localized = JSON.parse(match[0]) as Record<string, { metaTitle: string; metaDescription: string; keywords: string }>;
-              const newTitle = { ...metaTitleByLang };
-              const newDesc = { ...metaDescByLang };
-              const newKw = { ...metaKwByLang };
-              for (const [lang, v] of Object.entries(localized)) {
-                if (v.metaTitle) newTitle[lang] = v.metaTitle;
-                if (v.metaDescription) newDesc[lang] = v.metaDescription;
-                if (v.keywords) newKw[lang] = v.keywords;
-              }
-              await storage.updateSeoSettings(tenantId, { metaTitleByLang: newTitle, metaDescriptionByLang: newDesc, metaKeywordsByLang: newKw } as any);
-              job.steps.push('seo');
+          const seoSource: Record<string, string> = {};
+          if (enTitle.trim()) seoSource.metaTitle = enTitle;
+          if (enDesc.trim()) seoSource.metaDescription = enDesc;
+          if (enKw.trim()) seoSource.keywords = enKw;
+          if (Object.keys(seoSource).length > 0) {
+            const translated = await translateContentByLang(seoSource, 'en', TARGET_LANGS, tenantId);
+            const newTitle = { ...metaTitleByLang };
+            const newDesc = { ...metaDescByLang };
+            const newKw = { ...metaKwByLang };
+            for (const [lang, content] of Object.entries(translated)) {
+              const c = content as Record<string, string>;
+              if (c.metaTitle) newTitle[lang] = c.metaTitle;
+              if (c.metaDescription) newDesc[lang] = c.metaDescription;
+              if (c.keywords) newKw[lang] = c.keywords;
             }
+            await storage.updateSeoSettings(tenantId, { metaTitleByLang: newTitle, metaDescriptionByLang: newDesc, metaKeywordsByLang: newKw } as any);
+            job.steps.push('seo');
           }
         }
 
