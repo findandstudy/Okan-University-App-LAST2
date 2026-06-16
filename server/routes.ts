@@ -1295,8 +1295,15 @@ export async function registerRoutes(
 
       // 1. University name
       if (enName) {
+        const existingTenant = await storage.getTenant(tenantId);
+        const existingNameByLang = (existingTenant?.nameByLang as Record<string, string>) || {};
         const nameTranslations = await translateText(enName, 'en', TARGET_LANGS, tenantId);
-        await storage.updateTenant(tenantId, { nameByLang: { en: enName, ...nameTranslations } });
+        // Merge: keep existing translations for langs where AI returned nothing
+        const mergedNameByLang: Record<string, string> = { ...existingNameByLang, en: enName };
+        for (const lang of TARGET_LANGS) {
+          if (nameTranslations[lang]) mergedNameByLang[lang] = nameTranslations[lang];
+        }
+        await storage.updateTenant(tenantId, { universityName: enName, nameByLang: mergedNameByLang });
         steps.push('university_name');
       }
 
