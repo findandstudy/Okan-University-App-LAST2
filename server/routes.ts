@@ -1741,26 +1741,35 @@ export async function registerRoutes(
     try {
       const { url, text } = req.body;
       const file = req.file;
-      let sourceText = '';
+      const parts: string[] = [];
 
       const { extractTextFromUrl, extractTextFromPdf, extractTextFromDocx, generateContent } = await import('./contentGenerator');
 
+      // Collect text from every provided source (any combination is valid)
       if (url) {
-        sourceText = await extractTextFromUrl(url);
-      } else if (file) {
+        const urlText = await extractTextFromUrl(url);
+        if (urlText.trim()) parts.push(`[Source: URL]\n${urlText}`);
+      }
+      if (file) {
         const ext = file.originalname?.toLowerCase();
         if (ext?.endsWith('.pdf')) {
-          sourceText = await extractTextFromPdf(file.buffer);
+          const pdfText = await extractTextFromPdf(file.buffer);
+          if (pdfText.trim()) parts.push(`[Source: PDF]\n${pdfText}`);
         } else if (ext?.endsWith('.docx')) {
-          sourceText = await extractTextFromDocx(file.buffer);
+          const docxText = await extractTextFromDocx(file.buffer);
+          if (docxText.trim()) parts.push(`[Source: Document]\n${docxText}`);
         } else {
           return res.status(400).json({ error: "Unsupported file type. Use PDF or DOCX." });
         }
-      } else if (text) {
-        sourceText = text;
-      } else {
-        return res.status(400).json({ error: "Provide url, file, or text" });
       }
+      if (text) {
+        parts.push(`[Source: Text]\n${text}`);
+      }
+      if (parts.length === 0) {
+        return res.status(400).json({ error: "Provide at least one source: url, file, or text" });
+      }
+      // Cap combined text at 10 000 chars
+      const sourceText = parts.join('\n\n---\n\n').substring(0, 10000);
 
       if (!sourceText.trim()) return res.status(400).json({ error: "No text content found in source" });
 
@@ -1786,27 +1795,25 @@ export async function registerRoutes(
       const TARGET_LANGS = ['ar','tr','fr','ru','fa','zh','hi','es','id'];
       const emptyLangMap = Object.fromEntries(ALL_LANGS.map(l => [l, ''])) as Record<typeof ALL_LANGS[number], string>;
 
-      // ── Hero section: merge-safe write (preserve existing non-EN fields) ──────
-      const heroEnContent = {
-        title: hero?.title || '',
-        subtitle: hero?.subtitle || '',
-        body: hero?.body || '',
-        ctaLabel: hero?.ctaLabel || '',
+      // ── Hero section: write to settings.title/subtitle (what Hero component reads) ──
+      // Hero component reads heroSection.settings.title[lang] / .subtitle[lang]
+      const heroExistingSettings = (heroSection?.settings as Record<string, any>) || {};
+      const heroNewSettings = {
+        ...heroExistingSettings,
+        title: { ...(heroExistingSettings.title || {}), en: hero?.title || '' },
+        subtitle: { ...(heroExistingSettings.subtitle || {}), en: hero?.subtitle || '' },
       };
-      const heroExisting = (heroSection?.contentByLang as Record<string, any>) || {};
-      // Merge: keep existing per-lang translations, overwrite only EN
-      const heroMerged: Record<string, any> = { ...heroExisting, en: heroEnContent };
 
       if (heroSection) {
-        await storage.updateSection(heroSection.id, req.tenantId, { contentByLang: heroMerged });
+        await storage.updateSection(heroSection.id, req.tenantId, { settings: heroNewSettings });
       } else {
         await storage.createSection({
           tenantId: req.tenantId,
           sectionKey: 'hero',
           displayOrder: 0,
           isEnabled: true,
-          contentByLang: heroMerged,
-          settings: null,
+          contentByLang: {},
+          settings: heroNewSettings,
         });
       }
 

@@ -103,11 +103,17 @@ export async function extractTextFromDocx(buffer: Buffer): Promise<string> {
   return result.value.substring(0, 8000);
 }
 
+function stripVerificationMarker(text: string): { text: string; flagged: boolean } {
+  const marker = /\[DOĞRULANMALI\]/gi;
+  const flagged = marker.test(text);
+  return { text: text.replace(/\[DOĞRULANMALI\]/gi, '').replace(/\s{2,}/g, ' ').trim(), flagged };
+}
+
 export async function generateContent(text: string, tenantId: string): Promise<GeneratedContent> {
   const systemPrompt = `You are a university marketing expert. Generate landing page content from the provided source material.
 Rules:
 - Use only verified facts from the source material
-- If information about fees, dates, or statistics is missing or unclear, mark it with [DOĞRULANMALI] ("needs verification")  
+- If a FAQ answer contains unverifiable claims (fees, exact dates, statistics not in the source), set "needsVerification": true for that item — do NOT embed any marker text in the answer itself
 - Write in a compelling but factual marketing tone
 - Generate 8-12 FAQ items covering common student questions
 - Return ONLY valid JSON, no explanations`;
@@ -138,14 +144,41 @@ Return a JSON object with this exact structure:
     "metaDescription": "Meta description (under 160 chars)",
     "keywords": "comma, separated, keywords"
   }
-}
-
-Mark any unverified claims about fees, dates, or statistics with [DOĞRULANMALI].`;
+}`;
 
   const raw = await callAI(prompt, tenantId, systemPrompt);
   const match = raw.match(/\{[\s\S]*\}/);
   if (!match) throw new Error('Invalid content generation response from AI');
-  return JSON.parse(match[0]) as GeneratedContent;
+  const parsed = JSON.parse(match[0]) as GeneratedContent;
+
+  // Strip any stray [DOĞRULANMALI] markers the model may have embedded in text
+  const cleanField = (s: string) => stripVerificationMarker(s).text;
+  return {
+    hero: {
+      title: cleanField(parsed.hero?.title || ''),
+      subtitle: cleanField(parsed.hero?.subtitle || ''),
+      body: cleanField(parsed.hero?.body || ''),
+      ctaLabel: cleanField(parsed.hero?.ctaLabel || ''),
+    },
+    about: {
+      title: cleanField(parsed.about?.title || ''),
+      body: cleanField(parsed.about?.body || ''),
+    },
+    faq: (parsed.faq || []).map(item => {
+      const q = stripVerificationMarker(item.question || '');
+      const a = stripVerificationMarker(item.answer || '');
+      return {
+        question: q.text,
+        answer: a.text,
+        needsVerification: item.needsVerification || q.flagged || a.flagged,
+      };
+    }),
+    seo: {
+      metaTitle: cleanField(parsed.seo?.metaTitle || ''),
+      metaDescription: cleanField(parsed.seo?.metaDescription || ''),
+      keywords: cleanField(parsed.seo?.keywords || ''),
+    },
+  };
 }
 
 export interface BlogContent {

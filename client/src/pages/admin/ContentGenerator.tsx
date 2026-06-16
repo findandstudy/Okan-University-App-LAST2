@@ -4,7 +4,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, Upload, Globe, FileText, AlignLeft, Sparkles, CheckCircle2, AlertTriangle, Plus, Trash2 } from 'lucide-react';
@@ -29,7 +28,6 @@ export default function ContentGenerator({ embedded }: { embedded?: boolean } = 
   const { toast } = useToast();
   const { apiSuffix, tenantId } = useSiteContext();
 
-  const [sourceTab, setSourceTab] = useState('url');
   const [url, setUrl] = useState('');
   const [plainText, setPlainText] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -40,13 +38,9 @@ export default function ContentGenerator({ embedded }: { embedded?: boolean } = 
   const generateMutation = useMutation({
     mutationFn: async () => {
       const formData = new FormData();
-      if (sourceTab === 'url') {
-        formData.append('url', url);
-      } else if (sourceTab === 'text') {
-        formData.append('text', plainText);
-      } else if (selectedFile) {
-        formData.append('file', selectedFile);
-      }
+      if (url.trim()) formData.append('url', url.trim());
+      if (plainText.trim()) formData.append('text', plainText.trim());
+      if (selectedFile) formData.append('file', selectedFile);
       if (tenantId) formData.append('_tid', tenantId);
       const res = await fetch('/api/admin/ai/generate-content' + apiSuffix, {
         method: 'POST',
@@ -80,8 +74,9 @@ export default function ContentGenerator({ embedded }: { embedded?: boolean } = 
     onError: () => toast({ title: 'Failed to apply content', variant: 'destructive' }),
   });
 
-  const hasInput = sourceTab === 'url' ? !!url : sourceTab === 'text' ? !!plainText : !!selectedFile;
+  const hasInput = !!url.trim() || !!plainText.trim() || !!selectedFile;
   const needsVerificationCount = generatedContent?.faq?.filter(f => f.needsVerification).length ?? 0;
+  const sourceCount = [url.trim(), plainText.trim(), selectedFile].filter(Boolean).length;
 
   if (step === 'done') {
     return (
@@ -101,98 +96,105 @@ export default function ContentGenerator({ embedded }: { embedded?: boolean } = 
       <div className="p-6 space-y-6" data-testid="page-content-generator">
         <div>
           <h1 className="text-2xl font-bold">Content Generator</h1>
-          <p className="text-muted-foreground">Upload a document or URL to auto-generate landing page content with AI.</p>
+          <p className="text-muted-foreground">Provide one or more sources — the AI will combine them to generate your landing page content.</p>
         </div>
 
         {step === 'input' && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Choose Source</CardTitle>
-              <CardDescription>Select how to provide content for the AI to analyze.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <Tabs value={sourceTab} onValueChange={setSourceTab}>
-                <TabsList className="grid grid-cols-4 w-full">
-                  <TabsTrigger value="url" className="gap-1.5"><Globe className="h-3.5 w-3.5" />URL</TabsTrigger>
-                  <TabsTrigger value="pdf" className="gap-1.5"><FileText className="h-3.5 w-3.5" />PDF</TabsTrigger>
-                  <TabsTrigger value="docx" className="gap-1.5"><FileText className="h-3.5 w-3.5" />Word</TabsTrigger>
-                  <TabsTrigger value="text" className="gap-1.5"><AlignLeft className="h-3.5 w-3.5" />Text</TabsTrigger>
-                </TabsList>
+          <div className="space-y-4">
+            {/* URL source */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Globe className="h-4 w-4 text-primary" /> Website URL
+                </CardTitle>
+                <CardDescription>Paste a public university or program page — we'll scrape its content.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Input
+                  value={url}
+                  onChange={e => setUrl(e.target.value)}
+                  placeholder="https://university.edu/about"
+                  data-testid="input-url"
+                />
+              </CardContent>
+            </Card>
 
-                <TabsContent value="url" className="space-y-3 mt-4">
-                  <Label>Website URL</Label>
-                  <Input value={url} onChange={e => setUrl(e.target.value)} placeholder="https://university.edu/about" data-testid="input-url" />
-                  <p className="text-xs text-muted-foreground">We'll scrape the public content from this page.</p>
-                </TabsContent>
-
-                <TabsContent value="pdf" className="space-y-3 mt-4">
-                  <Label>PDF Document</Label>
-                  <div
-                    className="border-2 border-dashed rounded-lg p-8 text-center cursor-pointer hover:border-primary transition-colors"
-                    onClick={() => { fileRef.current?.setAttribute('accept', '.pdf'); fileRef.current?.click(); }}
-                    data-testid="dropzone-pdf"
-                  >
-                    {selectedFile ? (
-                      <p className="text-sm font-medium">{selectedFile.name}</p>
-                    ) : (
-                      <>
-                        <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-                        <p className="text-sm text-muted-foreground">Click to upload a PDF file</p>
-                      </>
-                    )}
-                  </div>
-                </TabsContent>
-
-                <TabsContent value="docx" className="space-y-3 mt-4">
-                  <Label>Word Document (.docx)</Label>
-                  <div
-                    className="border-2 border-dashed rounded-lg p-8 text-center cursor-pointer hover:border-primary transition-colors"
-                    onClick={() => { fileRef.current?.setAttribute('accept', '.docx'); fileRef.current?.click(); }}
-                    data-testid="dropzone-docx"
-                  >
-                    {selectedFile ? (
-                      <p className="text-sm font-medium">{selectedFile.name}</p>
-                    ) : (
-                      <>
-                        <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-                        <p className="text-sm text-muted-foreground">Click to upload a Word document</p>
-                      </>
-                    )}
-                  </div>
-                </TabsContent>
-
-                <TabsContent value="text" className="space-y-3 mt-4">
-                  <Label>Paste Text</Label>
-                  <Textarea
-                    value={plainText}
-                    onChange={e => setPlainText(e.target.value)}
-                    placeholder="Paste information about the university, programs, campus life..."
-                    className="min-h-[200px]"
-                    data-testid="textarea-plain-text"
-                  />
-                </TabsContent>
-              </Tabs>
-
-              <input
-                ref={fileRef}
-                type="file"
-                className="hidden"
-                onChange={e => setSelectedFile(e.target.files?.[0] ?? null)}
-              />
-
-              <div className="flex justify-end pt-2">
-                <Button
-                  onClick={() => generateMutation.mutate()}
-                  disabled={generateMutation.isPending || !hasInput}
-                  data-testid="button-generate-content"
-                  className="gap-2"
+            {/* File source */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-primary" /> PDF or Word document
+                </CardTitle>
+                <CardDescription>Upload a brochure, program guide, or any document (.pdf / .docx).</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div
+                  className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:border-primary transition-colors"
+                  onClick={() => { fileRef.current?.setAttribute('accept', '.pdf,.docx'); fileRef.current?.click(); }}
+                  data-testid="dropzone-file"
                 >
-                  {generateMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                  {generateMutation.isPending ? 'Generating...' : 'Generate Content'}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+                  {selectedFile ? (
+                    <div className="flex items-center justify-center gap-2">
+                      <FileText className="h-4 w-4 text-primary" />
+                      <span className="text-sm font-medium">{selectedFile.name}</span>
+                      <button
+                        className="ml-2 text-muted-foreground hover:text-destructive"
+                        onClick={e => { e.stopPropagation(); setSelectedFile(null); }}
+                        data-testid="button-clear-file"
+                      >✕</button>
+                    </div>
+                  ) : (
+                    <>
+                      <Upload className="h-7 w-7 mx-auto text-muted-foreground mb-2" />
+                      <p className="text-sm text-muted-foreground">Click to upload PDF or Word</p>
+                    </>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Text source */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <AlignLeft className="h-4 w-4 text-primary" /> Paste text
+                </CardTitle>
+                <CardDescription>Copy-paste any text — program descriptions, bullet points, notes.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Textarea
+                  value={plainText}
+                  onChange={e => setPlainText(e.target.value)}
+                  placeholder="Paste information about the university, programs, campus life..."
+                  className="min-h-[160px]"
+                  data-testid="textarea-plain-text"
+                />
+              </CardContent>
+            </Card>
+
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".pdf,.docx"
+              className="hidden"
+              onChange={e => setSelectedFile(e.target.files?.[0] ?? null)}
+            />
+
+            <div className="flex items-center justify-between">
+              {sourceCount > 1 ? (
+                <p className="text-xs text-primary font-medium">{sourceCount} sources will be combined</p>
+              ) : <span />}
+              <Button
+                onClick={() => generateMutation.mutate()}
+                disabled={generateMutation.isPending || !hasInput}
+                data-testid="button-generate-content"
+                className="gap-2"
+              >
+                {generateMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                {generateMutation.isPending ? 'Generating...' : 'Generate Content'}
+              </Button>
+            </div>
+          </div>
         )}
 
         {step === 'preview' && generatedContent && (
