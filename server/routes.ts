@@ -481,9 +481,33 @@ export async function registerRoutes(
 
   app.patch("/api/tenant", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
     try {
-      const updated = await storage.updateTenant(req.tenantId, req.body);
-      // Invalidate bootstrap cache for this tenant
-      bootstrapCache.delete(req.tenantId);
+      const tenantId = req.tenantId;
+      const newDomain: string | undefined = req.body.domain?.trim();
+
+      // Domain uniqueness check — skip if domain unchanged or not provided
+      if (newDomain) {
+        const existing = await storage.getTenantByDomain(newDomain);
+        if (existing && existing.id !== tenantId) {
+          return res.status(409).json({ error: `Domain "${newDomain}" is already in use by another site.` });
+        }
+      }
+
+      const updated = await storage.updateTenant(tenantId, req.body);
+      if (!updated) return res.status(404).json({ error: "Tenant not found" });
+
+      // Sync primary domain record when domain changes
+      if (newDomain) {
+        const domains = await storage.getTenantDomains(tenantId);
+        const primaryDomain = domains.find(d => d.isPrimary);
+        if (!primaryDomain) {
+          await storage.createTenantDomain({ tenantId, domain: newDomain, isPrimary: true });
+        } else if (primaryDomain.domain !== newDomain) {
+          await storage.deleteTenantDomain(primaryDomain.id);
+          await storage.createTenantDomain({ tenantId, domain: newDomain, isPrimary: true });
+        }
+      }
+
+      bootstrapCache.delete(tenantId);
       res.json(updated);
     } catch (error) {
       console.error("Error updating tenant:", error);

@@ -199,8 +199,13 @@ export default function TenantPage({ embedded }: { embedded?: boolean } = {}) {
       queryClient.invalidateQueries({ queryKey: ['/api/tenant' + apiSuffix] });
       toast({ title: 'Settings saved', description: 'Tenant settings have been updated.' });
     },
-    onError: () => {
-      toast({ title: 'Failed to save settings', variant: 'destructive' });
+    onError: async (err: any) => {
+      let message = 'Failed to save settings.';
+      try {
+        const body = await err?.response?.json?.();
+        if (body?.error) message = body.error;
+      } catch {}
+      toast({ title: 'Save failed', description: message, variant: 'destructive' });
     },
   });
 
