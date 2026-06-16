@@ -94,9 +94,11 @@ export async function extractTextFromUrl(url: string): Promise<string> {
 }
 
 export async function extractTextFromPdf(buffer: Buffer): Promise<string> {
-  const pdfParse = _require('pdf-parse');
-  const data = await pdfParse(buffer);
-  return data.text.substring(0, 8000);
+  const { PDFParse } = _require('pdf-parse');
+  const parser = new PDFParse({ data: buffer });
+  const result = await parser.getText();
+  const text = (result.pages as Array<{ text: string }>).map((p) => p.text).join('\n');
+  return text.substring(0, 8000);
 }
 
 export async function extractTextFromDocx(buffer: Buffer): Promise<string> {
