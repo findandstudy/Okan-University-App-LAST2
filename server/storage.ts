@@ -520,25 +520,47 @@ export class DatabaseStorage implements IStorage {
         eq(blogPostTranslations.postId, data.postId),
         eq(blogPostTranslations.lang, data.lang),
       ));
+
+    // Resolve slug conflicts: check if the target slug belongs to a DIFFERENT post
+    // (same postId is fine — that's an update of the same row)
+    const ensureUniqueSlug = async (baseSlug: string, currentRowId?: string): Promise<string> => {
+      let candidate = baseSlug;
+      let attempt = 0;
+      while (true) {
+        const [conflict] = await db.select({ id: blogPostTranslations.id, postId: blogPostTranslations.postId })
+          .from(blogPostTranslations)
+          .where(and(
+            eq(blogPostTranslations.tenantId, data.tenantId),
+            eq(blogPostTranslations.lang, data.lang),
+            eq(blogPostTranslations.slug, candidate),
+          ))
+          .limit(1);
+        // No conflict, or conflict is the same row we're updating → slug is safe
+        if (!conflict || conflict.postId === data.postId || conflict.id === currentRowId) {
+          return candidate;
+        }
+        attempt++;
+        candidate = `${baseSlug}-${attempt}`;
+      }
+    };
+
     if (existing) {
+      // On update: only re-check slug if it actually changed
+      const safeSlug = existing.slug === data.slug
+        ? data.slug
+        : await ensureUniqueSlug(data.slug, existing.id);
       const [updated] = await db.update(blogPostTranslations)
-        .set(data)
+        .set({ ...data, slug: safeSlug })
         .where(eq(blogPostTranslations.id, existing.id))
         .returning();
       return updated;
     }
-    // Ensure slug uniqueness within tenant+lang — append suffix if conflict
-    const slugConflict = await db.select().from(blogPostTranslations).where(
-      and(
-        eq(blogPostTranslations.tenantId, data.tenantId),
-        eq(blogPostTranslations.lang, data.lang),
-        eq(blogPostTranslations.slug, data.slug),
-      )
-    ).limit(1);
-    if (slugConflict.length > 0) {
-      data = { ...data, slug: `${data.slug}-${Date.now().toString(36)}` };
-    }
-    const [created] = await db.insert(blogPostTranslations).values(data).returning();
+
+    // Insert path: ensure slug uniqueness before insert
+    const safeSlug = await ensureUniqueSlug(data.slug);
+    const [created] = await db.insert(blogPostTranslations)
+      .values({ ...data, slug: safeSlug })
+      .returning();
     return created;
   }
 

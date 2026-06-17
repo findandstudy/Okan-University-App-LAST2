@@ -32,6 +32,16 @@ function trunc(s: string, len: number): string {
   return s.length <= len ? s : s.slice(0, len - 1) + '\u2026';
 }
 
+/** Converts a possibly-relative URL to an absolute one using baseUrl.
+ *  Already-absolute URLs (http:// or https://) are returned unchanged.
+ *  Empty / null returns undefined so callers can use || chaining safely. */
+function toAbsoluteUrl(url: string | null | undefined, baseUrl: string): string | undefined {
+  if (!url) return undefined;
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  // Relative path — prepend baseUrl (strip any trailing slash from base)
+  return `${baseUrl.replace(/\/$/, '')}${url.startsWith('/') ? '' : '/'}${url}`;
+}
+
 const LANG_CODES = ['en', 'ar', 'tr', 'fr', 'ru', 'fa', 'zh', 'hi', 'es', 'id'];
 
 // Matches  /blog/:slug  or  /:lang/blog/:slug
@@ -139,13 +149,15 @@ async function buildTenantMeta(
     [tenant.facebookUrl, tenant.instagramUrl, tenant.linkedinUrl, tenant.youtubeUrl] as (string | null | undefined)[]
   ).filter((u): u is string => Boolean(u));
 
+  const absoluteLogoUrl = toAbsoluteUrl(seo?.ogImage || tenant.logoUrl, baseUrl);
+
   const jsonLd: object[] = [
     {
       '@context': 'https://schema.org',
       '@type': 'Organization',
       name: tenant.universityName,
       url: baseUrl,
-      ...(tenant.logoUrl ? { logo: tenant.logoUrl } : {}),
+      ...(absoluteLogoUrl ? { logo: { '@type': 'ImageObject', url: absoluteLogoUrl } } : {}),
       description: trunc(rawDesc, 200),
       ...(sameAs.length ? { sameAs } : {}),
     },
@@ -174,7 +186,7 @@ async function buildTenantMeta(
     title,
     description,
     ogType: 'website',
-    ogImage: seo?.ogImage || tenant.logoUrl || undefined,
+    ogImage: absoluteLogoUrl,
     ogUrl: seo?.canonicalUrl || baseUrl,
     siteName: tenant.universityName,
     twitterCard: seo?.twitterCard || 'summary_large_image',
@@ -282,10 +294,11 @@ export async function injectSeoMeta(html: string, req: Request): Promise<string>
           storage.getBlogPostImages(post.id),
         ]);
 
-        const heroImage =
+        const heroImageRaw =
           post.featuredImageUrl ||
           images.sort((a, b) => (a.position ?? 0) - (b.position ?? 0))[0]?.url ||
           undefined;
+        const heroImage = toAbsoluteUrl(heroImageRaw, baseUrl);
 
         const rawDesc = translation.metaDesc || stripHtml(translation.content);
         const description = trunc(rawDesc, 160);
@@ -300,14 +313,20 @@ export async function injectSeoMeta(html: string, req: Request): Promise<string>
           }));
 
         const canonicalUrl = `${baseUrl}/${actualLang}/blog/${translation.slug}`;
+        const absolutePublisherLogo = toAbsoluteUrl(tenant.logoUrl, baseUrl);
+
+        // Use publishAt as the canonical date; fallback to createdAt
+        const publishDate = post.publishAt
+          ? new Date(post.publishAt).toISOString()
+          : post.createdAt ? new Date(post.createdAt as Date).toISOString() : undefined;
 
         const jsonLd = {
           '@context': 'https://schema.org',
           '@type': 'BlogPosting',
           headline: translation.title,
           description: trunc(rawDesc, 220),
-          ...(heroImage ? { image: heroImage } : {}),
-          ...(post.createdAt ? { datePublished: (post.createdAt as Date).toISOString() } : {}),
+          ...(heroImage ? { image: { '@type': 'ImageObject', url: heroImage } } : {}),
+          ...(publishDate ? { datePublished: publishDate, dateModified: publishDate } : {}),
           url: canonicalUrl,
           inLanguage: actualLang,
           author: {
@@ -317,7 +336,7 @@ export async function injectSeoMeta(html: string, req: Request): Promise<string>
           publisher: {
             '@type': 'Organization',
             name: tenant.universityName,
-            ...(tenant.logoUrl ? { logo: { '@type': 'ImageObject', url: tenant.logoUrl } } : {}),
+            ...(absolutePublisherLogo ? { logo: { '@type': 'ImageObject', url: absolutePublisherLogo } } : {}),
           },
           isPartOf: {
             '@type': 'Blog',
