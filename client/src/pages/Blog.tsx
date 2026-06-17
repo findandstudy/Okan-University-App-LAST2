@@ -26,6 +26,8 @@ export default function Blog() {
   const { data: posts = [], isLoading } = useQuery<BlogListItem[]>({
     queryKey: ['/api/blog', language],
     queryFn: () => fetch(`/api/blog?lang=${language}`).then(r => r.json()),
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: true,
   });
 
   const langPrefix = language === 'en' ? '' : `/${language}`;

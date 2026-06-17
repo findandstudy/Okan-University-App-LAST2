@@ -2004,6 +2004,7 @@ Rules:
     try {
       const lang = (req.query.lang as string) || 'en';
       const posts = await storage.getPublishedBlogPosts(req.tenantId, lang);
+      res.set('Cache-Control', 'no-store');
       res.json(posts);
     } catch (err: any) {
       res.status(500).json({ error: err?.message || 'Failed to fetch blog posts' });
@@ -2017,6 +2018,7 @@ Rules:
       const isAdmin = !!req.session?.adminId;
       const result = await storage.getBlogPostTranslationBySlug(req.tenantId, lang, slug, isAdmin);
       if (!result) return res.status(404).json({ error: 'Post not found' });
+      res.set('Cache-Control', 'no-store');
 
       // Collect alternates (all available translations for this post)
       const translations = await storage.getBlogPostTranslations(result.post.id);

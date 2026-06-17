@@ -1,7 +1,7 @@
 import cron from 'node-cron';
 import { db } from './db';
 import { blogPosts, blogSchedule } from '@shared/schema';
-import { eq, and, lte, sql } from 'drizzle-orm';
+import { eq, and, lte, gte, sql } from 'drizzle-orm';
 
 let schedulerStarted = false;
 
@@ -56,7 +56,22 @@ async function runSchedulerTick() {
 
       if (schedule.mode === 'otomatik') {
         // Auto mode: publish posts where publishAt <= now, status=zamanli
-        // Respect daily limit
+        // Respect daily limit — count posts already auto-published today
+        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+        const publishedTodayResult = await db.execute(
+          sql`SELECT COUNT(*)::int AS cnt FROM blog_posts
+              WHERE tenant_id = ${tenantId}
+                AND status = 'yayinda'
+                AND publish_at >= ${todayStart}
+                AND publish_at <= ${now}`
+        );
+        const publishedToday = (publishedTodayResult.rows?.[0] as { cnt: number } | undefined)?.cnt ?? 0;
+        const remaining = dailyLimit - publishedToday;
+        if (remaining <= 0) {
+          console.log(`[BlogScheduler] Daily limit reached (${publishedToday}/${dailyLimit}) for tenant ${tenantId}`);
+          continue;
+        }
+
         const candidates = await db.select()
           .from(blogPosts)
           .where(and(
@@ -64,7 +79,7 @@ async function runSchedulerTick() {
             eq(blogPosts.status, 'zamanli'),
             lte(blogPosts.publishAt, now),
           ))
-          .limit(dailyLimit);
+          .limit(remaining);
 
         for (const post of candidates) {
           await db.update(blogPosts)
@@ -88,9 +103,9 @@ export function startBlogScheduler() {
   }
 
   schedulerStarted = true;
-  // Run daily at midnight
-  cron.schedule('0 0 * * *', () => {
+  // Run every hour so daytime-scheduled posts go live within ~1 hour
+  cron.schedule('0 * * * *', () => {
     runSchedulerTick().catch(err => console.error('[BlogScheduler] Tick error:', err));
   });
-  console.log('[BlogScheduler] Started (daily midnight cron)');
+  console.log('[BlogScheduler] Started (hourly cron)');
 }

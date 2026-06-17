@@ -51,6 +51,33 @@ function parseFaqFromMarkdown(md: string): FaqPair[] {
 function safeMarkdownToHtml(md: string): string {
   const lines = md.split('\n');
   const out: string[] = [];
+  let listType: 'ul' | 'ol' | null = null;
+  let listItems: string[] = [];
+
+  const flushList = () => {
+    if (!listType || listItems.length === 0) return;
+    const tag = listType;
+    const cls = tag === 'ul'
+      ? 'list-disc pl-6 mb-4 space-y-1'
+      : 'list-decimal pl-6 mb-4 space-y-1';
+    out.push(`<${tag} class="${cls}">`);
+    for (const item of listItems) {
+      out.push(`  <li>${item}</li>`);
+    }
+    out.push(`</${tag}>`);
+    listType = null;
+    listItems = [];
+  };
+
+  const applyInline = (text: string): string => {
+    text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    text = text.replace(/\*(.+?)\*/g, '<em>$1</em>');
+    text = text.replace(
+      /\[([^\]<>]+)\]\((https?:\/\/[^\s)<>"]+)\)/g,
+      '<a href="$2" class="text-primary underline" target="_blank" rel="noopener noreferrer">$1</a>',
+    );
+    return text;
+  };
 
   for (let i = 0; i < lines.length; i++) {
     let line = lines[i];
@@ -62,34 +89,56 @@ function safeMarkdownToHtml(md: string): string {
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;');
 
-    // Headings
+    // Headings — flush any open list first
     if (line.startsWith('### ')) {
+      flushList();
       out.push(`<h3 class="text-xl font-semibold mt-6 mb-2">${line.slice(4)}</h3>`);
       continue;
     }
     if (line.startsWith('## ')) {
+      flushList();
       out.push(`<h2 class="text-2xl font-bold mt-8 mb-3">${line.slice(3)}</h2>`);
       continue;
     }
     if (line.startsWith('# ')) {
+      flushList();
       out.push(`<h1 class="text-3xl font-bold mt-8 mb-4">${line.slice(2)}</h1>`);
       continue;
     }
 
-    // Empty line = paragraph break
+    // Unordered list items: - item  or  * item
+    const ulMatch = line.match(/^[-*]\s+(.+)/);
+    if (ulMatch) {
+      if (listType === 'ol') flushList();
+      listType = 'ul';
+      listItems.push(applyInline(ulMatch[1]));
+      continue;
+    }
+
+    // Ordered list items: 1. item  2. item  etc.
+    const olMatch = line.match(/^\d+\.\s+(.+)/);
+    if (olMatch) {
+      if (listType === 'ul') flushList();
+      listType = 'ol';
+      listItems.push(applyInline(olMatch[1]));
+      continue;
+    }
+
+    // Empty line = paragraph break — flush list if open
     if (line.trim() === '') {
+      flushList();
       out.push('');
       continue;
     }
 
-    // Inline: bold, italic, links (only http/https)
-    line = line.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-    line = line.replace(/\*(.+?)\*/g, '<em>$1</em>');
-    line = line.replace(/\[([^\]<>]+)\]\((https?:\/\/[^\s)<>"]+)\)/g,
-      '<a href="$2" class="text-primary underline" target="_blank" rel="noopener noreferrer">$1</a>');
-
+    // Non-list line — flush any open list, then emit paragraph
+    flushList();
+    line = applyInline(line);
     out.push(`<p class="mb-4">${line}</p>`);
   }
+
+  // Flush any list still open at end of content
+  flushList();
 
   return out.join('\n');
 }
@@ -109,6 +158,8 @@ export default function BlogPost() {
     }),
     enabled: !!slug,
     retry: false,
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: true,
   });
 
   const langPrefix = lang === 'en' ? '' : `/${lang}`;
