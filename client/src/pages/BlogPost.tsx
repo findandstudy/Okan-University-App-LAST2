@@ -27,25 +27,6 @@ interface BlogPostDetail {
   alternates?: Record<string, string>;
 }
 
-// ── FAQ parser: extracts Q&A pairs from the "## Frequently Asked Questions" section ──
-interface FaqPair { q: string; a: string; }
-
-function parseFaqFromMarkdown(md: string): FaqPair[] {
-  const faqHeaderMatch = md.match(/##\s*Frequently Asked Questions[\s\S]*/i);
-  if (!faqHeaderMatch) return [];
-  const faqSection = faqHeaderMatch[0];
-  const pairs: FaqPair[] = [];
-  // Match pattern: **Q: ...** (newline) A: ...
-  const regex = /\*\*Q:\s*(.+?)\*\*\s*\n+A:\s*([\s\S]+?)(?=\n\s*\n\*\*Q:|$)/gi;
-  let match;
-  while ((match = regex.exec(faqSection)) !== null) {
-    const q = match[1].trim().replace(/\?$/, '') + '?';
-    const a = match[2].trim().replace(/\n+/g, ' ');
-    if (q && a) pairs.push({ q, a });
-  }
-  return pairs;
-}
-
 // Safe, no-external-dep markdown → HTML converter
 // Only produces a strict allowlist of tags; no raw HTML pass-through
 function safeMarkdownToHtml(md: string): string {
@@ -145,9 +126,12 @@ function safeMarkdownToHtml(md: string): string {
 
 export default function BlogPost() {
   const { language } = useI18n();
-  const params = useParams<{ slug: string }>();
+  const params = useParams<{ lang?: string; slug: string }>();
   const slug = params.slug;
-  const lang = language;
+  // Prefer the lang embedded in the URL (/:lang/blog/:slug) so cross-language
+  // slugs like /ar/blog/arapca-slug are fetched with the correct lang even when
+  // the user's localStorage language differs.
+  const lang = params.lang || language;
 
   const { data: tenant } = useQuery<Tenant>({ queryKey: ['/api/tenant'] });
   const { data, isLoading, isError } = useQuery<BlogPostDetail>({
@@ -230,29 +214,46 @@ export default function BlogPost() {
 
   const { post, translation, alternates } = data;
   const safeHtml = safeMarkdownToHtml(translation.content);
-  const faqPairs = parseFaqFromMarkdown(translation.content);
 
   const featuredAlt = post.featuredImageAltByLang?.[lang]
     || post.featuredImageAltByLang?.['en']
     || translation.title;
 
-  const absoluteFeaturedImg = post.featuredImageUrl
-    ? (post.featuredImageUrl.startsWith('http')
-      ? post.featuredImageUrl
-      : `${window.location.origin}${post.featuredImageUrl}`)
-    : undefined;
-
   const universityName = tenant?.universityName || 'University';
   const logoUrl = tenant?.logoUrl || '';
 
+  // Inject hreflang <link> elements into <head> (not body) for valid HTML + bots
+  useEffect(() => {
+    if (!alternates) return;
+    const inserted: HTMLLinkElement[] = [];
+    for (const [l, s] of Object.entries(alternates)) {
+      const href = `${window.location.origin}${l === 'en' ? '' : `/${l}`}/blog/${s}`;
+      const link = document.createElement('link');
+      link.rel = 'alternate';
+      link.hreflang = l;
+      link.href = href;
+      document.head.appendChild(link);
+      inserted.push(link);
+    }
+    // x-default → English or first available
+    const xHref = alternates['en']
+      ? `${window.location.origin}/blog/${alternates['en']}`
+      : Object.entries(alternates)[0]
+        ? `${window.location.origin}/${Object.entries(alternates)[0][0]}/blog/${Object.entries(alternates)[0][1]}`
+        : null;
+    if (xHref) {
+      const xLink = document.createElement('link');
+      xLink.rel = 'alternate';
+      xLink.hreflang = 'x-default';
+      xLink.href = xHref;
+      document.head.appendChild(xLink);
+      inserted.push(xLink);
+    }
+    return () => { inserted.forEach(el => el.parentNode?.removeChild(el)); };
+  }, [alternates]);
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      {/* hreflang for blog post alternates */}
-      {alternates && Object.entries(alternates).map(([l, s]) => {
-        const href = `${window.location.origin}${l === 'en' ? '' : `/${l}`}/blog/${s}`;
-        return <link key={l} rel="alternate" hrefLang={l} href={href} />;
-      })}
-
       <Header universityName={universityName} logoUrl={logoUrl} />
 
       <main className="flex-1 max-w-3xl mx-auto w-full px-4 py-12">
@@ -290,108 +291,6 @@ export default function BlogPost() {
           />
         </article>
 
-        {/* ── JSON-LD: BlogPosting (Article) ── */}
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{
-            __html: JSON.stringify({
-              '@context': 'https://schema.org',
-              '@type': 'BlogPosting',
-              '@id': `${window.location.origin}${window.location.pathname}#article`,
-              mainEntityOfPage: {
-                '@type': 'WebPage',
-                '@id': window.location.href,
-              },
-              url: window.location.href,
-              headline: translation.title,
-              description: translation.metaDesc || undefined,
-              articleSection: post.keyword || 'University',
-              keywords: post.keyword || undefined,
-              wordCount: translation.content.split(/\s+/).filter(Boolean).length,
-              inLanguage: lang,
-              ...(absoluteFeaturedImg ? {
-                image: {
-                  '@type': 'ImageObject',
-                  url: absoluteFeaturedImg,
-                  width: 1200,
-                  height: 630,
-                  caption: featuredAlt,
-                },
-              } : {}),
-              datePublished: post.publishAt || post.createdAt,
-              dateModified: post.publishAt || post.createdAt,
-              author: {
-                '@type': 'Organization',
-                name: tenant?.universityName || 'University',
-                ...(tenant?.logoUrl ? { logo: `${window.location.origin}${tenant.logoUrl}` } : {}),
-              },
-              publisher: {
-                '@type': 'Organization',
-                name: tenant?.universityName || 'University',
-                ...(tenant?.logoUrl ? {
-                  logo: {
-                    '@type': 'ImageObject',
-                    url: `${window.location.origin}${tenant.logoUrl}`,
-                    width: 200,
-                    height: 60,
-                  },
-                } : {}),
-              },
-            }),
-          }}
-        />
-
-        {/* ── JSON-LD: BreadcrumbList ── */}
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{
-            __html: JSON.stringify({
-              '@context': 'https://schema.org',
-              '@type': 'BreadcrumbList',
-              itemListElement: [
-                {
-                  '@type': 'ListItem',
-                  position: 1,
-                  name: tenant?.universityName || 'Home',
-                  item: `${window.location.origin}${lang === 'en' ? '' : `/${lang}`}/`,
-                },
-                {
-                  '@type': 'ListItem',
-                  position: 2,
-                  name: 'Blog',
-                  item: `${window.location.origin}${lang === 'en' ? '' : `/${lang}`}/blog`,
-                },
-                {
-                  '@type': 'ListItem',
-                  position: 3,
-                  name: translation.title,
-                  item: window.location.href,
-                },
-              ],
-            }),
-          }}
-        />
-
-        {/* ── JSON-LD: FAQPage (only when FAQ pairs are parsed from content) ── */}
-        {faqPairs.length > 0 && (
-          <script
-            type="application/ld+json"
-            dangerouslySetInnerHTML={{
-              __html: JSON.stringify({
-                '@context': 'https://schema.org',
-                '@type': 'FAQPage',
-                mainEntity: faqPairs.map(({ q, a }) => ({
-                  '@type': 'Question',
-                  name: q,
-                  acceptedAnswer: {
-                    '@type': 'Answer',
-                    text: a,
-                  },
-                })),
-              }),
-            }}
-          />
-        )}
       </main>
 
       <Footer

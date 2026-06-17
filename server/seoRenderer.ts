@@ -197,6 +197,23 @@ async function buildTenantMeta(
   };
 }
 
+// ── Server-side FAQ parser (mirrors client parseFaqFromMarkdown) ───────────────
+
+function parseFaqPairs(content: string): Array<{ q: string; a: string }> {
+  const faqHeaderMatch = content.match(/##\s*Frequently Asked Questions[\s\S]*/i);
+  if (!faqHeaderMatch) return [];
+  const faqSection = faqHeaderMatch[0];
+  const pairs: Array<{ q: string; a: string }> = [];
+  const regex = /\*\*Q:\s*(.+?)\*\*\s*\n+A:\s*([\s\S]+?)(?=\n\s*\n\*\*Q:|$)/gi;
+  let m;
+  while ((m = regex.exec(faqSection)) !== null) {
+    const q = m[1].trim().replace(/\?$/, '') + '?';
+    const a = m[2].trim().replace(/\n+/g, ' ');
+    if (q && a) pairs.push({ q, a });
+  }
+  return pairs;
+}
+
 /**
  * When a blog URL is hit but the slug+lang combo isn't in the DB,
  * search across ALL languages for this tenant. This handles:
@@ -320,30 +337,54 @@ export async function injectSeoMeta(html: string, req: Request): Promise<string>
           ? new Date(post.publishAt).toISOString()
           : post.createdAt ? new Date(post.createdAt as Date).toISOString() : undefined;
 
-        const jsonLd = {
-          '@context': 'https://schema.org',
-          '@type': 'BlogPosting',
-          headline: translation.title,
-          description: trunc(rawDesc, 220),
-          ...(heroImage ? { image: { '@type': 'ImageObject', url: heroImage } } : {}),
-          ...(publishDate ? { datePublished: publishDate, dateModified: publishDate } : {}),
-          url: canonicalUrl,
-          inLanguage: actualLang,
-          author: {
-            '@type': 'Organization',
-            name: tenant.universityName,
+        const jsonLdSchemas: object[] = [
+          {
+            '@context': 'https://schema.org',
+            '@type': 'BlogPosting',
+            headline: translation.title,
+            description: trunc(rawDesc, 220),
+            ...(heroImage ? { image: { '@type': 'ImageObject', url: heroImage } } : {}),
+            ...(publishDate ? { datePublished: publishDate, dateModified: publishDate } : {}),
+            url: canonicalUrl,
+            inLanguage: actualLang,
+            author: {
+              '@type': 'Organization',
+              name: tenant.universityName,
+            },
+            publisher: {
+              '@type': 'Organization',
+              name: tenant.universityName,
+              ...(absolutePublisherLogo ? { logo: { '@type': 'ImageObject', url: absolutePublisherLogo } } : {}),
+            },
+            isPartOf: {
+              '@type': 'Blog',
+              name: `${tenant.universityName} Blog`,
+              url: `${baseUrl}/blog`,
+            },
           },
-          publisher: {
-            '@type': 'Organization',
-            name: tenant.universityName,
-            ...(absolutePublisherLogo ? { logo: { '@type': 'ImageObject', url: absolutePublisherLogo } } : {}),
+          {
+            '@context': 'https://schema.org',
+            '@type': 'BreadcrumbList',
+            itemListElement: [
+              { '@type': 'ListItem', position: 1, name: tenant.universityName, item: baseUrl },
+              { '@type': 'ListItem', position: 2, name: 'Blog', item: `${baseUrl}/blog` },
+              { '@type': 'ListItem', position: 3, name: translation.title, item: canonicalUrl },
+            ],
           },
-          isPartOf: {
-            '@type': 'Blog',
-            name: `${tenant.universityName} Blog`,
-            url: `${baseUrl}/blog`,
-          },
-        };
+        ];
+
+        const faqPairs = parseFaqPairs(translation.content);
+        if (faqPairs.length > 0) {
+          jsonLdSchemas.push({
+            '@context': 'https://schema.org',
+            '@type': 'FAQPage',
+            mainEntity: faqPairs.map(({ q, a }) => ({
+              '@type': 'Question',
+              name: q,
+              acceptedAnswer: { '@type': 'Answer', text: a },
+            })),
+          });
+        }
 
         meta = {
           title,
@@ -355,7 +396,7 @@ export async function injectSeoMeta(html: string, req: Request): Promise<string>
           twitterCard: 'summary_large_image',
           canonical: canonicalUrl,
           hreflang: hreflang.length > 1 ? hreflang : undefined,
-          jsonLd,
+          jsonLd: jsonLdSchemas,
         };
       } else {
         // Slug not found anywhere — still set og:type=article with tenant fallback
