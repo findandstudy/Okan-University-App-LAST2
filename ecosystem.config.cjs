@@ -28,10 +28,10 @@ module.exports = {
       // variables manually in your shell or use a .env loader wrapper instead.
       node_args: '--env-file=.env',
 
-      // Cluster mode: one worker per logical CPU core.
-      // Change to 'fork' and instances to 1 for single-core VPS to save RAM.
-      exec_mode: 'cluster',
-      instances: 'max',
+      // Fork mode: single process — keeps in-memory caches (bootstrap, image,
+      // ZIP export jobs) consistent across all requests.
+      exec_mode: 'fork',
+      instances: 1,
 
       // Restart automatically on crash
       autorestart: true,
