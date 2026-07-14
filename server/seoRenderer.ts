@@ -134,13 +134,13 @@ async function buildTenantMeta(
   const seo = await storage.getSeoSettings(tenant.id);
 
   const title =
-    seo?.ogTitle ||
     (seo?.metaTitleByLang as Record<string, string> | null)?.[lang] ||
+    seo?.ogTitle ||
     tenant.universityName;
 
   const rawDesc =
-    seo?.ogDescription ||
     (seo?.metaDescriptionByLang as Record<string, string> | null)?.[lang] ||
+    seo?.ogDescription ||
     `Apply to ${tenant.universityName}`;
 
   const description = trunc(rawDesc, 160);
