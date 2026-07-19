@@ -59,7 +59,7 @@ const translateJobs = new Map<string, TranslateJob>();
 // Cleanup old jobs after 10 minutes
 setInterval(() => {
   const cutoff = Date.now() - 10 * 60 * 1000;
-  for (const [id] of translateJobs) {
+  for (const id of Array.from(translateJobs.keys())) {
     const ts = parseInt(id.split('-')[0] || '0', 10);
     if (ts < cutoff) translateJobs.delete(id);
   }
@@ -1310,7 +1310,7 @@ export async function registerRoutes(
   // ─── Master: Translate Everything ────────────────────────────────────────────
   // ─── Translate-everything job status polling ──────────────────────────────
   app.get("/api/admin/ai/translate-job/:id", requireAdmin, (req, res) => {
-    const job = translateJobs.get(req.params.id);
+    const job = translateJobs.get(req.params.id as string);
     if (!job) return res.status(404).json({ error: 'Job not found' });
     res.json(job);
   });
