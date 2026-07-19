@@ -133,13 +133,24 @@ async function buildTenantMeta(
 ): Promise<MetaData> {
   const seo = await storage.getSeoSettings(tenant.id);
 
+  // Helper: read a byLang jsonb field with fallback to English value
+  const bl = (field: unknown): string =>
+    (field as Record<string, string> | null | undefined)?.[lang] ||
+    (field as Record<string, string> | null | undefined)?.['en'] ||
+    '';
+
+  // IMPORTANT: metaTitleByLang MUST take priority over ogTitleByLang / ogTitle — do not change this order
   const title =
     (seo?.metaTitleByLang as Record<string, string> | null)?.[lang] ||
+    (seo?.metaTitleByLang as Record<string, string> | null)?.['en'] ||
+    bl(seo?.ogTitleByLang) ||
     seo?.ogTitle ||
     tenant.universityName;
 
   const rawDesc =
     (seo?.metaDescriptionByLang as Record<string, string> | null)?.[lang] ||
+    (seo?.metaDescriptionByLang as Record<string, string> | null)?.['en'] ||
+    bl(seo?.ogDescriptionByLang) ||
     seo?.ogDescription ||
     `Apply to ${tenant.universityName}`;
 
@@ -149,7 +160,9 @@ async function buildTenantMeta(
     [tenant.facebookUrl, tenant.instagramUrl, tenant.linkedinUrl, tenant.youtubeUrl] as (string | null | undefined)[]
   ).filter((u): u is string => Boolean(u));
 
-  const absoluteLogoUrl = toAbsoluteUrl(seo?.ogImage || tenant.logoUrl, baseUrl);
+  // ogImage: lang-specific byLang → English byLang → old single column → logo
+  const ogImageRaw = bl(seo?.ogImageByLang) || seo?.ogImage || tenant.logoUrl;
+  const absoluteLogoUrl = toAbsoluteUrl(ogImageRaw, baseUrl);
 
   const jsonLd: object[] = [
     {
@@ -174,24 +187,38 @@ async function buildTenantMeta(
     },
   ];
 
-  // hreflang: generate for every language the app supports
-  // (tenant.supportedLanguages may only list defaults; the site renders all LANG_CODES)
-  const canonicalBase = seo?.canonicalUrl || baseUrl;
-  const hreflang = LANG_CODES.map(l => ({
-    lang: l,
-    href: `${canonicalBase}/${l}/`,
-  }));
+  // canonicalUrl: lang-specific byLang → old single column → auto-generate from baseUrl + lang
+  const canonicalForLang =
+    (seo?.canonicalUrlByLang as Record<string, string> | null)?.[lang] ||
+    seo?.canonicalUrl ||
+    `${baseUrl}${lang !== 'en' ? `/${lang}` : ''}`;
+
+  // hreflang: generate per-lang using their respective canonical values
+  const hreflang = LANG_CODES.map(l => {
+    const href =
+      (seo?.canonicalUrlByLang as Record<string, string> | null)?.[l] ||
+      seo?.canonicalUrl ||
+      `${baseUrl}${l !== 'en' ? `/${l}` : ''}`;
+    return { lang: l, href };
+  });
+
+  // robots: lang-specific → English fallback → old single column → undefined
+  const robots =
+    (seo?.robotsDirectiveByLang as Record<string, string> | null)?.[lang] ||
+    (seo?.robotsDirectiveByLang as Record<string, string> | null)?.['en'] ||
+    seo?.robotsDirective ||
+    undefined;
 
   return {
     title,
     description,
     ogType: 'website',
     ogImage: absoluteLogoUrl,
-    ogUrl: seo?.canonicalUrl || baseUrl,
+    ogUrl: canonicalForLang,
     siteName: tenant.universityName,
     twitterCard: seo?.twitterCard || 'summary_large_image',
-    canonical: seo?.canonicalUrl || baseUrl,
-    robots: seo?.robotsDirective || undefined,
+    canonical: canonicalForLang,
+    robots,
     hreflang,
     jsonLd,
   };

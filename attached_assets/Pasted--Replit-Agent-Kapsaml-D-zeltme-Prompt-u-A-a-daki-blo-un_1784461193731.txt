@@ -1,0 +1,232 @@
+# Replit Agent — Kapsamlı Düzeltme Prompt'u
+
+> Aşağıdaki bloğun **tamamını** Replit Agent'a yapıştır.
+> Not: Replit'te mesaj **Enter** ile gönderiliyor.
+
+---
+
+```
+ROL: Sen bu projede çalışan kıdemli bir full-stack yazılım mühendisisin. Aşağıdaki işleri
+üretim (production) kalitesinde, mevcut çalışan hiçbir özelliği bozmadan yapacaksın.
+Bu proje ŞU AN CANLIDA çalışıyor (studysearch.org). Dikkatsiz bir değişiklik gerçek
+kullanıcıları etkiler.
+
+════════════════════════════════════════════════════════════
+PROJE BAĞLAMI (oku, varsayım yapma)
+════════════════════════════════════════════════════════════
+- Çok kiracılı (multi-tenant) üniversite landing page platformu.
+- Stack: React 18 + Vite + Wouter + TanStack Query + shadcn/ui (client),
+  Node + Express 5 + TypeScript (server), PostgreSQL + Drizzle ORM.
+- Diller: en, ar, tr, fr, ru, fa, zh, hi, es, id (ar ve fa RTL).
+- Tenant, Host header'ından çözülüyor (resolveTenant). Public rotalar
+  requirePublished gate'inden geçiyor.
+- Public site içeriği /api/bootstrap üzerinden geliyor ve server/routes.ts içindeki
+  bootstrapCache adlı bellek-içi Map ile 60 saniye önbellekleniyor.
+
+SON ZAMANLARDA YAPILAN VE BOZULMAMASI GEREKEN DÜZELTMELER:
+1. ecosystem.config.cjs: exec_mode 'fork', instances 1. BUNA DOKUNMA.
+2. server/seoRenderer.ts: buildTenantMeta içinde dil-özel metaTitleByLang[lang] artık
+   ogTitle'dan ÖNCE geliyor. Bu öncelik sırasını BOZMA.
+3. export_jobs tablosu + DB tabanlı ZIP export job'ı. /objects/exports/* admin auth
+   arkasında. BUNA DOKUNMA.
+4. translate_jobs tablosu + DB tabanlı çeviri job'ı. BUNA DOKUNMA.
+5. client/src/components/LanguageSwitcher.tsx: dil seçilince URL /:lang öneki ile
+   güncelleniyor, /admin rotaları hariç tutuluyor. BUNA DOKUNMA.
+
+════════════════════════════════════════════════════════════
+GENEL KURALLAR (hepsi zorunlu)
+════════════════════════════════════════════════════════════
+K1. Mevcut hiçbir API endpoint yolunu, HTTP metodunu veya dönen JSON alan adını
+    DEĞİŞTİRME. Sadece ekleme yapabilirsin. Frontend'i kırma.
+K2. Veritabanı değişiklikleri SADECE EKLEMELİ olacak: yeni tablo veya yeni kolon.
+    Hiçbir tabloyu/kolonu SİLME, YENİDEN ADLANDIRMA veya tip değiştirme.
+    drizzle-kit push sana "create table mı yoksa rename mı?" diye sorarsa
+    HER ZAMAN "create table" seç. Yanlışlıkla rename seçersen veri kaybolur.
+K3. Yeni eklediğin her admin endpoint'i mutlaka şu middleware zinciriyle koru:
+    requireAdmin, resolveTenant, requireAdminTenantAccess.
+    Tüm tenant'lara dokunan işlemler için ayrıca admin.role === 'super_admin' kontrolü ekle.
+K4. Uzun süren hiçbir işi bellek-içi Map ile tutma. Uzun iş gerekiyorsa
+    export_jobs / translate_jobs tablolarındaki mevcut DB tabanlı job desenini birebir kopyala.
+K5. Yeni bir dosya servis eden public route ekleme. Dosya servisi gerekiyorsa auth arkasında olacak.
+K6. Her fazın sonunda MUTLAKA çalıştır: `npx tsc --noEmit` (sıfır hata) ve
+    `npm run build` (başarılı). Biri bile başarısızsa DUR, sonraki faza GEÇME,
+    bana neyin başarısız olduğunu raporla.
+K7. Fazları SIRAYLA yap. Faz atlama, birleştirme yapma.
+K8. Bir şeyden emin değilsen tahmin etme; ilgili dosyayı oku. Gerekirse dur ve sor.
+K9. Türkçe karakter içeren kullanıcı arayüzü metinlerini bozma.
+
+════════════════════════════════════════════════════════════
+FAZ 1 — Çeviri sonrası önbellek temizliği (KRİTİK, EN ÖNCELİKLİ)
+════════════════════════════════════════════════════════════
+SORUN: server/routes.ts içindeki AI çeviri/içerik endpoint'leri veritabanına yazıyor
+ama bootstrapCache'i temizlemiyor. Diğer tüm yazma noktaları
+`bootstrapCache.delete(req.tenantId)` çağırıyor, çeviri tarafı çağırmıyor.
+Sonuç: "tüm dillere çevir" çalıştıktan sonra yayınlanan site 60 saniyeye kadar
+ESKİ içeriği göstermeye devam ediyor. Kullanıcı "çevirim yansımadı" diyor.
+
+YAPILACAK: Aşağıdaki endpoint'lerin HER BİRİNDE, veritabanına yazma işlemi
+TAMAMLANDIKTAN SONRA ilgili tenant için bootstrapCache temizlensin:
+  - POST /api/admin/ai/translate-everything
+  - POST /api/admin/ai/translate-all-sections
+  - POST /api/admin/ai/translate-all-faq
+  - POST /api/admin/ai/translate-all-testimonials
+  - POST /api/admin/ai/translate-university-name
+  - POST /api/admin/ai/apply-content
+  - POST /api/admin/ai/generate-seo
+  - POST /api/admin/ai/localize-seo
+  - Ayrıca içerik yazan başka bir AI endpoint'i varsa onu da bul ve ekle.
+
+ÇOK ÖNEMLİ DETAY: translate-everything artık arka plan job'ı olarak çalışıyor,
+yani HTTP yanıtı işten ÖNCE dönüyor. Bu yüzden bootstrapCache.delete çağrısı
+req nesnesine değil, job'ın başında yakalanan tenantId değişkenine dayanmalı ve
+job'ın İÇİNDE, işlem bittiğinde çağrılmalı. Sadece endpoint'in başına koyman İŞE YARAMAZ.
+Ek olarak: job her varlık grubunu (sections, faq, testimonials, seo, footer...)
+bitirdikçe de cache'i temizle ki uzun işlerde kullanıcı ilerlemeyi canlı görebilsin.
+
+DOĞRULAMA: Kod içinde bu endpoint'lerin her birinde bootstrapCache temizliğinin
+bulunduğunu grep ile göster. tsc + build çalıştır.
+
+════════════════════════════════════════════════════════════
+FAZ 2 — Dil bazlı SEO alanlarını tamamla
+════════════════════════════════════════════════════════════
+SORUN: shared/schema.ts içindeki seoSettings tablosunda sadece 3 alan dil bazlı:
+metaTitleByLang, metaDescriptionByLang, metaKeywordsByLang.
+Şu alanlar TEK DEĞER, yani tüm dillerde aynı kalıyor:
+ogImage, canonicalUrl, robotsDirective, twitterCard, ogType, ogTitle, ogDescription.
+İstenen: her dil için bağımsız yönetilebilmesi.
+
+2A. ŞEMA (EKLEMELİ — eski kolonları SİLME):
+seoSettings tablosuna şu jsonb kolonları ekle (tipi Record<SupportedLanguage, string>):
+  ogTitleByLang, ogDescriptionByLang, ogImageByLang,
+  canonicalUrlByLang, robotsDirectiveByLang
+Eski tekil kolonlar (ogTitle, ogDescription, ogImage, canonicalUrl, robotsDirective)
+KALACAK ve geriye dönük uyumluluk için fallback olarak kullanılacak.
+
+2B. OKUMA MANTIĞI (server/seoRenderer.ts):
+Her alan için okuma sırası tam olarak şu olacak:
+  1) <alan>ByLang[lang]   (o dile özel değer varsa)
+  2) <alan>ByLang['en']   (yoksa İngilizce)
+  3) eski tekil kolon      (yoksa eski değer — geriye dönük uyumluluk)
+  4) mevcut varsayılan
+DİKKAT: buildTenantMeta içinde metaTitleByLang'ın ogTitle'dan önce gelme kuralı
+KORUNACAK. Bu sırayı bozarsan daha önce düzelttiğimiz hata geri gelir.
+
+2C. LANDING SAYFASI CANONICAL + HREFLANG:
+Şu an hreflang ve canonical düzgün şekilde sadece blog sayfalarında üretiliyor.
+Landing sayfası (/ ve /:lang) için de üret:
+  - canonical: canonicalUrlByLang[lang] varsa onu kullan; yoksa
+    baseUrl + (lang === varsayılan dil ? '' : '/' + lang) şeklinde otomatik üret.
+  - hreflang: tenant.supportedLanguages içindeki HER dil için
+    <link rel="alternate" hreflang="<lang>" href="<baseUrl>/<lang>"> üret,
+    ayrıca x-default olarak İngilizce (yoksa ilk dil) varyantını ekle.
+  - og:url da aynı dil-özel URL olsun.
+
+2D. ADMIN ARAYÜZÜ (client/src/pages/admin/SEOSettings.tsx):
+Yeni alanları da mevcut dil sekmeli düzenleme arayüzüne ekle. Mevcut arayüz deseni
+neyse onu takip et, yeni bir tasarım dili icat etme. Kullanıcı her dil için ayrı
+og başlığı/açıklaması/görseli, canonical ve robots değeri girebilmeli.
+Alan boş bırakılırsa fallback devreye gireceği için bunu arayüzde belirt
+(örn. placeholder: "Boş bırakılırsa İngilizce değeri kullanılır").
+
+DOĞRULAMA: SEO ayarlarında TR ve EN için farklı og görseli/canonical gir,
+kaydet, /tr ve /en sayfalarının HTML kaynağında og:image ve canonical'ın
+farklı olduğunu göster. tsc + build çalıştır.
+
+════════════════════════════════════════════════════════════
+FAZ 3 — Yayınlama / DNS teşhis ve sağlamlaştırma
+════════════════════════════════════════════════════════════
+SORUN: Yeni site oluşturulup DNS yönlendirmesi yapıldığında site bazen açılmıyor
+ve NEDENİNİ görmenin bir yolu yok. Mimari şu şekilde çalışıyor:
+Caddy on-demand TLS, sertifika vermeden önce GET /api/internal/verify-domain?domain=...
+çağırıyor; bu endpoint SADECE tenant_domains tablosunda kayıtlı domainler için 200
+dönüyor, aksi halde 403. Ayrıca tenant.status 'yayinda' değilse requirePublished
+public isteklere 404 döndürüyor.
+
+3A. BULK PUBLISH HATASI (gerçek bug):
+POST /api/admin/tenants/:id (PATCH) içinde, publish sırasında tenant_domains kaydı
+upsert ediliyor. AMA POST /api/admin/tenants/bulk-status içinde bu senkronizasyon YOK.
+Yani bir tenant bulk işlemle 'yayinda' yapılırsa domain kaydı oluşmuyor ve
+Caddy sertifika veremiyor → site açılmıyor.
+DÜZELTME: bulk-status'ta da, status 'yayinda' yapılan her tenant için primary
+tenant_domains kaydını aynı mantıkla upsert et. Mevcut PATCH içindeki mantığı
+ortak bir yardımcı fonksiyona çıkar ve iki yerden de çağır (kod tekrarı yapma).
+
+3B. TEŞHİS ENDPOINT'İ (yeni):
+GET /api/admin/tenants/:id/domain-health ekle (requireAdmin + super_admin).
+Verilen tenant için şunları JSON olarak dönsün:
+  - tenant.status ve 'yayinda' olup olmadığı
+  - tenants.domain değeri
+  - tenant_domains tablosundaki tüm kayıtlar (hangisi primary)
+  - tenants.domain ile tenant_domains arasında tutarsızlık var mı (boolean + açıklama)
+  - verify-domain mantığının bu domain için 200 mü 403 mü döneceği (fonksiyonu
+    yeniden kullan, HTTP çağrısı yapma)
+  - insan tarafından okunabilir bir teşhis listesi, örn:
+    "Domain tenant_domains'te kayıtlı değil — Caddy sertifika veremez"
+    "Tenant durumu 'taslak' — site yayında olsa bile 404 döner"
+Bu endpoint'te DNS sorgusu veya dış ağ çağrısı YAPMA, sadece veritabanı durumunu raporla.
+
+3C. ADMIN ARAYÜZÜ:
+Site listesinde/düzenleme ekranında her site için bir "Yayın durumu kontrolü" butonu
+ekle; domain-health çıktısını okunabilir şekilde göstersin (yeşil/kırmızı maddeler).
+
+3D. LOGLAMA:
+/api/internal/verify-domain 403 döndüğünde, reddedilen domain adını
+console.warn ile logla ki sunucu loglarından görülebilsin.
+
+DOĞRULAMA: Taslak durumda bir test tenant'ı ile domain-health'i çağır ve
+teşhis mesajlarının doğru çıktığını göster. tsc + build çalıştır.
+
+════════════════════════════════════════════════════════════
+FAZ 4 — Merkezi blok envanteri (SADECE OKUMA — yazma YOK)
+════════════════════════════════════════════════════════════
+İHTİYAÇ: Şu an her sitenin blokları ayrı ayrı yönetiliyor; hangi bloğun hangi sitede
+kullanıldığını görmenin merkezi bir yolu yok.
+BU FAZDA SADECE GÖRÜNTÜLEME YAPILACAK. Toplu düzenleme/yayma İLERİDE gelecek,
+şimdi YAPMA. Yeni tablo da ekleme — mevcut sections tablosunu okuyarak üret.
+
+4A. BACKEND:
+GET /api/admin/blocks/inventory ekle (requireAdmin + super_admin).
+Tüm tenant'lardaki sections kayıtlarını okuyup şunu dönsün:
+  - sectionKey bazında gruplanmış liste
+  - her sectionKey için: kaç tenant'ta var, kaçında aktif (isEnabled), kaçında pasif
+  - her sectionKey için tenant listesi: tenantId, universityName, domain, status,
+    isEnabled, displayOrder, o blokta dolu olan dillerin listesi
+    (contentByLang içinde en az bir alanı dolu olan diller)
+Performans: tenant sayısı artabileceği için N+1 sorgu YAPMA; sections ve tenants'ı
+tek seferde çekip bellekte grupla.
+
+4B. FRONTEND:
+/admin/blocks/inventory sayfası ekle ve admin menüsüne bağla.
+  - Üstte sectionKey kartları: blok adı, kaç sitede kullanılıyor, kaçında aktif
+  - Bir karta tıklayınca o bloğu kullanan sitelerin tablosu açılsın
+  - Tabloda her satırdan ilgili sitenin düzenleme sayfasına link olsun
+  - "Hangi dillerde içerik var" sütunu, eksik dilleri görsel olarak belli etsin
+    (örn. dolu diller yeşil rozet, boş diller gri)
+  - Arama/filtre: site adına ve sectionKey'e göre
+Mevcut admin sayfalarının tasarım dilini ve bileşenlerini kullan, yeni tasarım icat etme.
+
+DOĞRULAMA: Sayfayı aç, en az bir bloğun birden fazla sitede listelendiğini ve
+dil rozetlerinin doğru göründüğünü göster. tsc + build çalıştır.
+
+════════════════════════════════════════════════════════════
+BİTİRİRKEN
+════════════════════════════════════════════════════════════
+S1. Tüm fazlar bittikten sonra son bir kez `npx tsc --noEmit` ve `npm run build` çalıştır.
+S2. Uygulamayı yeniden başlat ve hatasız açıldığını doğrula.
+S3. Bana şunları raporla:
+    - Her faz için: ne değiştirdin, hangi dosyalar
+    - Eklenen yeni DB kolonları/tabloları listesi (deploy'da db:push gerekecek mi?)
+    - Değiştirdiğin ama dokunmamam denilen bir yer varsa açıkça belirt
+    - Çalıştıramadığın veya emin olmadığın bir şey varsa dürüstçe söyle
+S4. HİÇBİR ŞEYİ "yaptım" diye raporlama; her iddianı ya kod alıntısıyla ya da
+    komut çıktısıyla kanıtla.
+```
+
+---
+
+## Kullanım notları
+
+- Prompt'u yapıştırdıktan sonra Agent'ın **her faz sonunda** `tsc` ve `build` çıktısını göstermesini bekle. Göstermeden ilerliyorsa durdur.
+- **Faz 2 ve Faz 4 yeni DB kolonu/tablo gerektirir** → deploy'da `npm run db:push` gerekecek. Soru sorarsa **her zaman "create table"** seç, asla rename.
+- Prompt uzun; Agent yorulup faz atlarsa "Faz 3'ten devam et" diye tek satır yazman yeterli.
+- Faz 1 tek başına en yüksek değerli iş. İstersen sadece onu verip önce canlıya alabilirsin.

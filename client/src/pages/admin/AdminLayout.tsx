@@ -39,6 +39,7 @@ import {
   Sparkles,
   BookOpen,
   ImageIcon,
+  Layers,
   type LucideIcon,
 } from 'lucide-react';
 import type { Tenant } from '@shared/schema';
@@ -65,6 +66,7 @@ const menuGroups: NavGroup[] = [
     icon: LayoutGrid,
     items: [
       { title: 'Sites Hub', url: '/admin/sites', icon: LayoutGrid },
+      { title: 'Block Inventory', url: '/admin/blocks/inventory', icon: Layers },
     ],
   },
   {

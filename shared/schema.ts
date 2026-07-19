@@ -184,6 +184,12 @@ export const seoSettings = pgTable("seo_settings", {
   twitterSite: text("twitter_site"),
   canonicalUrl: text("canonical_url"),
   robotsDirective: text("robots_directive").default("index, follow"),
+  // Per-language overrides (additive — old single-value columns kept for backward compat)
+  ogTitleByLang: jsonb("og_title_by_lang").$type<Record<string, string>>(),
+  ogDescriptionByLang: jsonb("og_description_by_lang").$type<Record<string, string>>(),
+  ogImageByLang: jsonb("og_image_by_lang").$type<Record<string, string>>(),
+  canonicalUrlByLang: jsonb("canonical_url_by_lang").$type<Record<string, string>>(),
+  robotsDirectiveByLang: jsonb("robots_directive_by_lang").$type<Record<string, string>>(),
 });
 
 // Insert schemas

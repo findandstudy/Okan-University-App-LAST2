@@ -50,6 +50,11 @@ interface SeoFormData {
   twitterSite: string;
   canonicalUrl: string;
   robotsDirective: string;
+  ogTitleByLang: Record<SupportedLanguage, string>;
+  ogDescriptionByLang: Record<SupportedLanguage, string>;
+  ogImageByLang: Record<SupportedLanguage, string>;
+  canonicalUrlByLang: Record<SupportedLanguage, string>;
+  robotsDirectiveByLang: Record<SupportedLanguage, string>;
 }
 
 export default function SEOSettings({ embedded }: { embedded?: boolean } = {}) {
@@ -107,6 +112,11 @@ export default function SEOSettings({ embedded }: { embedded?: boolean } = {}) {
       twitterSite: '',
       canonicalUrl: '',
       robotsDirective: 'index, follow',
+      ogTitleByLang: { ...EMPTY_LANG_MAP },
+      ogDescriptionByLang: { ...EMPTY_LANG_MAP },
+      ogImageByLang: { ...EMPTY_LANG_MAP },
+      canonicalUrlByLang: { ...EMPTY_LANG_MAP },
+      robotsDirectiveByLang: { ...EMPTY_LANG_MAP },
     },
   });
 
@@ -171,6 +181,11 @@ export default function SEOSettings({ embedded }: { embedded?: boolean } = {}) {
         twitterSite: seoSettings.twitterSite || '',
         canonicalUrl: seoSettings.canonicalUrl || '',
         robotsDirective: seoSettings.robotsDirective || 'index, follow',
+        ogTitleByLang: { ...EMPTY_LANG_MAP, ...((seoSettings as any).ogTitleByLang as Record<SupportedLanguage, string> || {}) },
+        ogDescriptionByLang: { ...EMPTY_LANG_MAP, ...((seoSettings as any).ogDescriptionByLang as Record<SupportedLanguage, string> || {}) },
+        ogImageByLang: { ...EMPTY_LANG_MAP, ...((seoSettings as any).ogImageByLang as Record<SupportedLanguage, string> || {}) },
+        canonicalUrlByLang: { ...EMPTY_LANG_MAP, ...((seoSettings as any).canonicalUrlByLang as Record<SupportedLanguage, string> || {}) },
+        robotsDirectiveByLang: { ...EMPTY_LANG_MAP, ...((seoSettings as any).robotsDirectiveByLang as Record<SupportedLanguage, string> || {}) },
       };
       reset(newValues);
     }
@@ -394,14 +409,145 @@ export default function SEOSettings({ embedded }: { embedded?: boolean } = {}) {
               </TabsContent>
 
               <TabsContent value="social" className="space-y-6 mt-6">
+                {/* Per-language OG fields */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Globe className="h-5 w-5" />
+                      Per-Language Social Media Settings
+                    </CardTitle>
+                    <CardDescription>
+                      Override OG title, description, image, canonical URL and robots directive per language.
+                      Leave empty to fall back to the English value or the global setting below.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    <Tabs value={activeLang} onValueChange={(v) => setActiveLang(v as SupportedLanguage)}>
+                      <TabsList className="mb-4">
+                        {LANGUAGES.map((lang) => (
+                          <TabsTrigger key={lang.code} value={lang.code}>
+                            {lang.label}
+                          </TabsTrigger>
+                        ))}
+                      </TabsList>
+
+                      {LANGUAGES.map((lang) => (
+                        <TabsContent key={lang.code} value={lang.code} className="space-y-4">
+                          <FormField
+                            control={form.control}
+                            name={`ogTitleByLang.${lang.code}`}
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>OG Title ({lang.label})</FormLabel>
+                                <FormControl>
+                                  <Input
+                                    {...field}
+                                    placeholder={lang.code === 'en' ? 'Title for social media sharing' : 'Leave empty to use English value'}
+                                    data-testid={`input-og-title-lang-${lang.code}`}
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          <FormField
+                            control={form.control}
+                            name={`ogDescriptionByLang.${lang.code}`}
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>OG Description ({lang.label})</FormLabel>
+                                <FormControl>
+                                  <Textarea
+                                    {...field}
+                                    placeholder={lang.code === 'en' ? 'Description for social media sharing' : 'Leave empty to use English value'}
+                                    rows={3}
+                                    data-testid={`input-og-description-lang-${lang.code}`}
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          <FormField
+                            control={form.control}
+                            name={`ogImageByLang.${lang.code}`}
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>OG Image URL ({lang.label})</FormLabel>
+                                <FormControl>
+                                  <Input
+                                    {...field}
+                                    placeholder={lang.code === 'en' ? 'https://example.com/image.jpg (1200×630px)' : 'Leave empty to use English value'}
+                                    data-testid={`input-og-image-lang-${lang.code}`}
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          <FormField
+                            control={form.control}
+                            name={`canonicalUrlByLang.${lang.code}`}
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Canonical URL ({lang.label})</FormLabel>
+                                <FormControl>
+                                  <Input
+                                    {...field}
+                                    placeholder={lang.code === 'en' ? 'https://example.com' : `Leave empty — auto-generated as /…/${lang.code}`}
+                                    data-testid={`input-canonical-lang-${lang.code}`}
+                                  />
+                                </FormControl>
+                                <FormDescription>
+                                  {lang.code === 'en' ? 'Preferred URL for this page (prevents duplicate content)' : 'Leave empty to fall back to English canonical or auto-generated URL'}
+                                </FormDescription>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          <FormField
+                            control={form.control}
+                            name={`robotsDirectiveByLang.${lang.code}`}
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Robots Directive ({lang.label})</FormLabel>
+                                <Select onValueChange={field.onChange} value={field.value}>
+                                  <FormControl>
+                                    <SelectTrigger data-testid={`select-robots-lang-${lang.code}`}>
+                                      <SelectValue placeholder={lang.code === 'en' ? 'Select directive' : 'Leave empty to use English value'} />
+                                    </SelectTrigger>
+                                  </FormControl>
+                                  <SelectContent>
+                                    <SelectItem value="">— Use fallback —</SelectItem>
+                                    <SelectItem value="index, follow">index, follow (Recommended)</SelectItem>
+                                    <SelectItem value="index, nofollow">index, nofollow</SelectItem>
+                                    <SelectItem value="noindex, follow">noindex, follow</SelectItem>
+                                    <SelectItem value="noindex, nofollow">noindex, nofollow</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </TabsContent>
+                      ))}
+                    </Tabs>
+                  </CardContent>
+                </Card>
+
+                {/* Global / fallback OG fields */}
                 <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                       <Share2 className="h-5 w-5" />
-                      Open Graph (Facebook, WhatsApp, LinkedIn)
+                      Global Open Graph (Fallback)
                     </CardTitle>
                     <CardDescription>
-                      Configure how your site appears when shared on social media
+                      Used when no per-language value is set above. Applies to all languages.
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
@@ -410,7 +556,7 @@ export default function SEOSettings({ embedded }: { embedded?: boolean } = {}) {
                       name="ogTitle"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>OG Title</FormLabel>
+                          <FormLabel>OG Title (Global Fallback)</FormLabel>
                           <FormControl>
                             <Input
                               {...field}
@@ -428,7 +574,7 @@ export default function SEOSettings({ embedded }: { embedded?: boolean } = {}) {
                       name="ogDescription"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>OG Description</FormLabel>
+                          <FormLabel>OG Description (Global Fallback)</FormLabel>
                           <FormControl>
                             <Textarea
                               {...field}
@@ -447,7 +593,7 @@ export default function SEOSettings({ embedded }: { embedded?: boolean } = {}) {
                       name="ogImage"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>OG Image URL</FormLabel>
+                          <FormLabel>OG Image URL (Global Fallback)</FormLabel>
                           <FormControl>
                             <Input
                               {...field}

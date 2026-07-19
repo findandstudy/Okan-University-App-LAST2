@@ -26,7 +26,7 @@ import {
   Plus, Settings2, Copy, Trash2, Globe, Loader2,
   Eye, Power, PowerOff, RefreshCw, ExternalLink,
   LayoutGrid, List, Search, ArrowUpDown, X,
-  CheckCircle,
+  CheckCircle, HeartPulse, CircleCheck, CircleX,
 } from 'lucide-react';
 import type { Tenant } from '@shared/schema';
 import { SUPPORTED_LANGUAGES } from '@shared/schema';
@@ -221,6 +221,9 @@ export default function Sites() {
   const [sortBy, setSortBy] = useState<'name_asc' | 'name_desc' | 'date_desc' | 'date_asc' | 'status'>('date_desc');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
+  const [healthDialogTenantId, setHealthDialogTenantId] = useState<string | null>(null);
+  const [healthData, setHealthData] = useState<any | null>(null);
+  const [healthLoading, setHealthLoading] = useState(false);
 
   const bumpRefresh = (id: string) =>
     setRefreshKeys(prev => ({ ...prev, [id]: (prev[id] ?? 0) + 1 }));
@@ -368,6 +371,25 @@ export default function Sites() {
             </Button>
           </a>
         )}
+        <Button
+          variant="ghost" size="sm" className="gap-1.5 h-8"
+          data-testid={`button-domain-health-${tenant.id}`}
+          onClick={async () => {
+            setHealthDialogTenantId(tenant.id);
+            setHealthData(null);
+            setHealthLoading(true);
+            try {
+              const res = await apiRequest('GET', `/api/admin/tenants/${tenant.id}/domain-health`);
+              setHealthData(await res.json());
+            } catch (e: any) {
+              setHealthData({ error: e?.message || 'Failed to load' });
+            } finally {
+              setHealthLoading(false);
+            }
+          }}
+        >
+          <HeartPulse className="h-3.5 w-3.5" />Health
+        </Button>
         <Dialog open={cloneDialogOpen === tenant.id}
           onOpenChange={open => {
             setCloneDialogOpen(open ? tenant.id : null);
@@ -661,6 +683,50 @@ export default function Sites() {
 
       {/* New site dialog */}
       <NewSiteDialog open={newDialogOpen} onOpenChange={setNewDialogOpen} />
+
+      {/* Domain Health Dialog */}
+      <Dialog open={!!healthDialogTenantId} onOpenChange={open => { if (!open) { setHealthDialogTenantId(null); setHealthData(null); } }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <HeartPulse className="h-5 w-5" />
+              Publish Status Check
+            </DialogTitle>
+          </DialogHeader>
+          {healthLoading && (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin mr-2" />
+              Checking…
+            </div>
+          )}
+          {!healthLoading && healthData && !healthData.error && (
+            <div className="space-y-4">
+              <div className="text-sm text-muted-foreground">
+                <span className="font-medium text-foreground">{healthData.universityName}</span>
+                {' · '}{healthData.domain || '(no domain)'}
+              </div>
+              <div className="space-y-2">
+                {(healthData.diagnostics as Array<{ ok: boolean; message: string }>).map((d, i) => (
+                  <div key={i} className={`flex items-start gap-2 text-sm p-2 rounded-md ${d.ok ? 'bg-green-50 dark:bg-green-950' : 'bg-red-50 dark:bg-red-950'}`} data-testid={`health-item-${i}`}>
+                    {d.ok
+                      ? <CircleCheck className="h-4 w-4 text-green-600 dark:text-green-400 shrink-0 mt-0.5" />
+                      : <CircleX className="h-4 w-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />}
+                    <span className={d.ok ? 'text-green-800 dark:text-green-200' : 'text-red-800 dark:text-red-200'}>{d.message}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="text-xs text-muted-foreground border-t pt-3">
+                verify-domain simulation: <code className={`px-1 py-0.5 rounded ${healthData.verifyDomainSimulation?.caddyWillAccept ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'}`}>
+                  {healthData.verifyDomainSimulation?.expectedStatus ?? '?'} {healthData.verifyDomainSimulation?.caddyWillAccept ? '— Caddy will accept' : '— Caddy will reject'}
+                </code>
+              </div>
+            </div>
+          )}
+          {!healthLoading && healthData?.error && (
+            <p className="text-sm text-destructive py-4">{healthData.error}</p>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Single delete confirmation */}
       <AlertDialog open={!!deleteConfirmId} onOpenChange={open => { if (!open) setDeleteConfirmId(null); }}>

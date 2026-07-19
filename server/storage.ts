@@ -50,6 +50,7 @@ export interface IStorage {
   updateAdminPassword(id: string, passwordHash: string, mustChangePassword: boolean): Promise<void>;
 
   // Sections
+  getAllSections(): Promise<Section[]>;
   getSections(tenantId: string): Promise<Section[]>;
   getSection(id: string): Promise<Section | undefined>;
   createSection(section: InsertSection): Promise<Section>;
@@ -254,6 +255,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Sections
+  async getAllSections(): Promise<Section[]> {
+    return db.select().from(sections).orderBy(sections.tenantId, sections.displayOrder);
+  }
+
   async getSections(tenantId: string): Promise<Section[]> {
     return db.select().from(sections).where(eq(sections.tenantId, tenantId)).orderBy(sections.displayOrder);
   }

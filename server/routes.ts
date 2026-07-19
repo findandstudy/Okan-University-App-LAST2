@@ -1031,6 +1031,18 @@ export async function registerRoutes(
     }
   });
 
+  // ── Shared helper: upsert the primary domain record for a tenant ──────────────
+  const syncPrimaryDomain = async (tenantId: string, domain: string): Promise<void> => {
+    const domains = await storage.getTenantDomains(tenantId);
+    const primaryDomain = domains.find(d => d.isPrimary);
+    if (!primaryDomain) {
+      await storage.createTenantDomain({ tenantId, domain, isPrimary: true });
+    } else if (primaryDomain.domain !== domain) {
+      await storage.deleteTenantDomain(primaryDomain.id);
+      await storage.createTenantDomain({ tenantId, domain, isPrimary: true });
+    }
+  };
+
   app.post("/api/admin/tenants/bulk-status", requireAdmin, async (req, res) => {
     try {
       const admin = await storage.getAdminById(req.session.adminId!);
@@ -1039,6 +1051,13 @@ export async function registerRoutes(
       if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'ids array required' });
       if (!status) return res.status(400).json({ error: 'status required' });
       await Promise.all(ids.map(id => storage.updateTenant(id, { status })));
+      // When publishing, ensure every tenant has its primary domain record (required for Caddy TLS)
+      if (status === 'yayinda') {
+        await Promise.all(ids.map(async (id) => {
+          const t = await storage.getTenant(id);
+          if (t?.domain) await syncPrimaryDomain(id, t.domain);
+        }));
+      }
       res.json({ updated: ids.length });
     } catch {
       res.status(500).json({ error: 'Bulk status update failed' });
@@ -1055,18 +1074,82 @@ export async function registerRoutes(
       if (!tenant) return res.status(404).json({ error: "Tenant not found" });
       // Sync primary domain: on publish, or whenever domain changes, upsert primary domain record
       if (tenant.domain && (body.status === 'yayinda' || body.domain)) {
-        const domains = await storage.getTenantDomains(id);
-        const primaryDomain = domains.find(d => d.isPrimary);
-        if (!primaryDomain) {
-          await storage.createTenantDomain({ tenantId: id, domain: tenant.domain, isPrimary: true });
-        } else if (primaryDomain.domain !== tenant.domain) {
-          await storage.deleteTenantDomain(primaryDomain.id);
-          await storage.createTenantDomain({ tenantId: id, domain: tenant.domain, isPrimary: true });
-        }
+        await syncPrimaryDomain(id, tenant.domain);
       }
       res.json(tenant);
     } catch {
       res.status(500).json({ error: "Failed to update tenant" });
+    }
+  });
+
+  // FAZ 3B: Domain health diagnostic endpoint (super_admin only, no DNS queries — DB state only)
+  app.get("/api/admin/tenants/:id/domain-health", requireAdmin, async (req, res) => {
+    try {
+      const admin = await storage.getAdminById(req.session.adminId!);
+      if (!admin || admin.role !== 'super_admin') return res.status(403).json({ error: "Forbidden" });
+      const id = req.params.id as string;
+      const tenant = await storage.getTenant(id);
+      if (!tenant) return res.status(404).json({ error: "Tenant not found" });
+
+      const domains = await storage.getTenantDomains(id);
+      const primaryDomain = domains.find(d => d.isPrimary);
+      const domainInTable = domains.find(d => d.domain === tenant.domain);
+      const isPublished = tenant.status === 'yayinda';
+
+      const diagnostics: Array<{ ok: boolean; message: string }> = [];
+
+      if (!isPublished) {
+        diagnostics.push({ ok: false, message: `Tenant durumu '${tenant.status}' — yayında değilse public istekler 404 döner` });
+      } else {
+        diagnostics.push({ ok: true, message: `Tenant yayında (status: ${tenant.status})` });
+      }
+
+      if (!tenant.domain) {
+        diagnostics.push({ ok: false, message: 'tenant.domain boş — domain atanmamış' });
+      } else if (!domainInTable) {
+        diagnostics.push({ ok: false, message: `Domain '${tenant.domain}' tenant_domains tablosunda kayıtlı değil — Caddy sertifika veremez` });
+      } else {
+        diagnostics.push({ ok: true, message: `Domain '${tenant.domain}' tenant_domains tablosunda mevcut` });
+      }
+
+      if (!primaryDomain) {
+        diagnostics.push({ ok: false, message: 'Birincil (primary) domain kaydı yok — Caddy hangi domain için TLS alacağını bilemez' });
+      } else if (primaryDomain.domain !== tenant.domain) {
+        diagnostics.push({ ok: false, message: `Birincil domain '${primaryDomain.domain}' ile tenant.domain '${tenant.domain}' uyuşmuyor` });
+      } else {
+        diagnostics.push({ ok: true, message: `Birincil domain kaydı doğru: '${primaryDomain.domain}'` });
+      }
+
+      // Simulate verify-domain logic (same logic as the actual endpoint, no HTTP call)
+      const verifyDomainStatus = domainInTable ? 200 : 403;
+      if (verifyDomainStatus === 403) {
+        diagnostics.push({ ok: false, message: `verify-domain '${tenant.domain}' için 403 döndürür — Caddy on-demand TLS sertifika almayı reddeder` });
+      } else {
+        diagnostics.push({ ok: true, message: `verify-domain '${tenant.domain}' için 200 döndürür — Caddy sertifika alabilir` });
+      }
+
+      res.json({
+        tenantId: id,
+        universityName: tenant.universityName,
+        status: tenant.status,
+        isPublished,
+        domain: tenant.domain,
+        domainRecords: domains,
+        primaryDomain: primaryDomain || null,
+        domainInTenantDomains: !!domainInTable,
+        domainConsistency: {
+          isConsistent: !!primaryDomain && primaryDomain.domain === tenant.domain && !!domainInTable,
+          description: primaryDomain
+            ? primaryDomain.domain === tenant.domain
+              ? `Eşleşiyor: tenant.domain = primaryDomain.domain = '${tenant.domain}'`
+              : `Uyuşmazlık: tenant.domain='${tenant.domain}', primaryDomain.domain='${primaryDomain.domain}'`
+            : 'Birincil domain kaydı yok',
+        },
+        verifyDomainSimulation: { domain: tenant.domain, expectedStatus: verifyDomainStatus, caddyWillAccept: verifyDomainStatus === 200 },
+        diagnostics,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || 'Failed to get domain health' });
     }
   });
 
@@ -1081,6 +1164,71 @@ export async function registerRoutes(
       res.json({ success: true });
     } catch {
       res.status(500).json({ error: "Failed to delete tenant" });
+    }
+  });
+
+  // FAZ 4A: Block inventory — cross-tenant section usage (super_admin only, read-only)
+  app.get("/api/admin/blocks/inventory", requireAdmin, async (req, res) => {
+    try {
+      const admin = await storage.getAdminById(req.session.adminId!);
+      if (!admin || admin.role !== 'super_admin') return res.status(403).json({ error: "Forbidden" });
+
+      // Fetch all tenants and all sections in two queries (no N+1)
+      const [allTenants, allSections] = await Promise.all([
+        storage.getAllTenants(),
+        storage.getAllSections(),
+      ]);
+
+      const tenantMap = new Map(allTenants.map(t => [t.id, t]));
+
+      const byKey: Record<string, {
+        sectionKey: string;
+        totalTenants: number;
+        activeCount: number;
+        inactiveCount: number;
+        tenants: Array<{
+          tenantId: string;
+          universityName: string;
+          domain: string;
+          status: string;
+          isEnabled: boolean;
+          displayOrder: number;
+          langsWithContent: string[];
+        }>;
+      }> = {};
+
+      for (const section of allSections) {
+        const tenant = tenantMap.get(section.tenantId);
+        if (!tenant) continue;
+        if (!byKey[section.sectionKey]) {
+          byKey[section.sectionKey] = { sectionKey: section.sectionKey, totalTenants: 0, activeCount: 0, inactiveCount: 0, tenants: [] };
+        }
+        const entry = byKey[section.sectionKey];
+        entry.totalTenants++;
+        if (section.isEnabled) entry.activeCount++;
+        else entry.inactiveCount++;
+
+        // Detect languages that have at least one non-empty string field in contentByLang
+        const cbl = (section.contentByLang as Record<string, Record<string, string>>) || {};
+        const langsWithContent = Object.entries(cbl)
+          .filter(([, content]) => content && typeof content === 'object' && Object.values(content).some(v => typeof v === 'string' && v.trim()))
+          .map(([lang]) => lang);
+
+        entry.tenants.push({
+          tenantId: tenant.id,
+          universityName: tenant.universityName,
+          domain: tenant.domain,
+          status: tenant.status,
+          isEnabled: section.isEnabled ?? false,
+          displayOrder: section.displayOrder ?? 0,
+          langsWithContent,
+        });
+      }
+
+      const inventory = Object.values(byKey).sort((a, b) => b.totalTenants - a.totalTenants);
+      res.json({ inventory });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || 'Failed to get block inventory' });
     }
   });
 
@@ -1322,9 +1470,10 @@ export async function registerRoutes(
     const steps: string[] = [];
     const failedFields: string[] = [];
 
-    // Persist current state to DB
+    // Persist current state to DB and clear bootstrap cache so landing page reflects changes immediately
     const save = async (overrides: { status?: string; error?: string; completedAt?: Date } = {}) => {
       await storage.updateTranslateJob(jobId, { step, steps, failedFields, ...overrides });
+      bootstrapCache.delete(tenantId);
     };
 
     // Respond immediately so the HTTP connection is freed
@@ -1725,6 +1874,7 @@ export async function registerRoutes(
         results.push({ id: section.id, sectionKey: section.sectionKey, translated });
       }
 
+      bootstrapCache.delete(req.tenantId);
       res.json({ ok: true, sectionsTranslated: results.length, results });
     } catch (err: any) {
       res.status(500).json({ error: err?.message || "Translation failed" });
@@ -1772,6 +1922,7 @@ export async function registerRoutes(
         await storage.updateFaqItem(item.id, { questionByLang: newQ as any, answerByLang: newA as any });
         translated++;
       }
+      bootstrapCache.delete(req.tenantId);
       res.json({ ok: true, itemsTranslated: translated });
     } catch (err: any) {
       res.status(500).json({ error: err?.message || "Translation failed" });
@@ -1796,6 +1947,7 @@ export async function registerRoutes(
         await storage.updateTestimonial(t.id, { contentByLang: newCBL as any });
         translated++;
       }
+      bootstrapCache.delete(req.tenantId);
       res.json({ ok: true, itemsTranslated: translated });
     } catch (err: any) {
       res.status(500).json({ error: err?.message || "Translation failed" });
@@ -3029,6 +3181,7 @@ Return ONLY this JSON:
       if (rows.length > 0) {
         return res.status(200).send('OK');
       }
+      console.warn(`[verify-domain] 403 Forbidden — domain not registered in tenant_domains: "${domain}"`);
       return res.status(403).send('Forbidden');
     } catch (err) {
       console.error('verify-domain error:', err);
