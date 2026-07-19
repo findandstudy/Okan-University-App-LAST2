@@ -2166,6 +2166,7 @@ Rules:
       const match = raw.match(/\{[\s\S]*?\}/);
       if (!match) throw new Error('Invalid AI response');
       const result = JSON.parse(match[0]) as { metaTitle: string; metaDescription: string; keywords: string };
+      bootstrapCache.delete(tenantId);
       res.json({ ok: true, ...result });
     } catch (err: any) {
       res.status(500).json({ error: err?.message || 'Failed to generate SEO' });
@@ -2210,6 +2211,7 @@ Rules:
       const match = raw.match(/\{[\s\S]*\}/);
       if (!match) throw new Error('Invalid AI response format');
       const localized = JSON.parse(match[0]);
+      bootstrapCache.delete(req.tenantId);
       res.json({ localized });
     } catch (err: any) {
       res.status(500).json({ error: err?.message || 'Failed to localize SEO content' });
