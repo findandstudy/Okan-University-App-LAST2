@@ -1740,10 +1740,13 @@ export async function registerRoutes(
             if (hs.badge?.en?.trim()) sourceHero.badge = hs.badge.en;
             if (hs.title?.en?.trim()) sourceHero.title = hs.title.en;
             if (hs.subtitle?.en?.trim()) sourceHero.subtitle = hs.subtitle.en;
-            if (hs.stats?.stat1Label?.en?.trim()) sourceHero.stat1Label = hs.stats.stat1Label.en;
-            if (hs.stats?.stat1Sublabel?.en?.trim()) sourceHero.stat1Sublabel = hs.stats.stat1Sublabel.en;
-            if (hs.stats?.stat2Label?.en?.trim()) sourceHero.stat2Label = hs.stats.stat2Label.en;
-            if (hs.stats?.stat2Sublabel?.en?.trim()) sourceHero.stat2Sublabel = hs.stats.stat2Sublabel.en;
+            // stats fields may be plain strings (older data) or {en,ar,…} maps — handle both
+            const statEn = (key: string): string =>
+              typeof hs.stats?.[key] === 'object' ? (hs.stats[key]?.en || '') : (hs.stats?.[key] || '');
+            if (statEn('stat1Label').trim()) sourceHero.stat1Label = statEn('stat1Label');
+            if (statEn('stat1Sublabel').trim()) sourceHero.stat1Sublabel = statEn('stat1Sublabel');
+            if (statEn('stat2Label').trim()) sourceHero.stat2Label = statEn('stat2Label');
+            if (statEn('stat2Sublabel').trim()) sourceHero.stat2Sublabel = statEn('stat2Sublabel');
             const enFeatures: string[] = hs.features?.en || [];
             for (let i = 0; i < enFeatures.length; i++) {
               if (enFeatures[i]?.trim()) sourceHero[`feature_${i}`] = enFeatures[i];
@@ -1755,12 +1758,17 @@ export async function registerRoutes(
               newSettings.badge = { ...hs.badge };
               newSettings.title = { ...hs.title };
               newSettings.subtitle = { ...hs.subtitle };
+              // For stat maps: plain-string originals become {en: value}, object originals are spread safely
+              const statMap = (key: string): Record<string, string> =>
+                typeof hs.stats?.[key] === 'object' && hs.stats[key] !== null
+                  ? { ...(hs.stats[key] as Record<string, string>) }
+                  : { en: statEn(key) };
               newSettings.stats = {
                 ...hs.stats,
-                stat1Label: { ...(hs.stats?.stat1Label || {}) },
-                stat1Sublabel: { ...(hs.stats?.stat1Sublabel || {}) },
-                stat2Label: { ...(hs.stats?.stat2Label || {}) },
-                stat2Sublabel: { ...(hs.stats?.stat2Sublabel || {}) },
+                stat1Label:    statMap('stat1Label'),
+                stat1Sublabel: statMap('stat1Sublabel'),
+                stat2Label:    statMap('stat2Label'),
+                stat2Sublabel: statMap('stat2Sublabel'),
               };
               const newFeatures: Record<string, string[]> = { ...(hs.features || {}) };
               for (const [lang, content] of Object.entries(translated)) {
