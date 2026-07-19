@@ -14,6 +14,7 @@ import {
   type FaqItem, type InsertFaqItem,
   type Testimonial, type InsertTestimonial,
   type TrustBadge, type InsertTrustBadge,
+  type MenuItem, type InsertMenuItem,
   type MediaAsset, type InsertMediaAsset,
   type SeoSettings, type InsertSeoSettings,
   type Widget, type InsertWidget,
@@ -125,6 +126,14 @@ export interface IStorage {
   createSiteVersion(version: InsertSiteVersion): Promise<SiteVersion>;
   deleteSiteVersion(id: string): Promise<boolean>;
   pruneOldVersions(tenantId: string, keep?: number): Promise<void>;
+
+  // Trust Badges (standalone table)
+  getTrustBadgesByTenant(tenantId: string): Promise<TrustBadge[]>;
+  updateTrustBadge(id: string, data: Partial<InsertTrustBadge>): Promise<TrustBadge | undefined>;
+
+  // Menu Items (standalone table)
+  getMenuItemsByTenant(tenantId: string): Promise<MenuItem[]>;
+  updateMenuItem(id: string, data: Partial<InsertMenuItem>): Promise<MenuItem | undefined>;
 
   // Export Jobs
   createExportJob(tenantId: string): Promise<ExportJob>;
@@ -652,6 +661,26 @@ export class DatabaseStorage implements IStorage {
     for (const v of toDelete) {
       await db.delete(siteVersions).where(eq(siteVersions.id, v.id));
     }
+  }
+
+  // Trust Badges (standalone table)
+  async getTrustBadgesByTenant(tenantId: string): Promise<TrustBadge[]> {
+    return db.select().from(trustBadges).where(eq(trustBadges.tenantId, tenantId)).orderBy(trustBadges.displayOrder);
+  }
+
+  async updateTrustBadge(id: string, data: Partial<InsertTrustBadge>): Promise<TrustBadge | undefined> {
+    const [updated] = await db.update(trustBadges).set(data as any).where(eq(trustBadges.id, id)).returning();
+    return updated;
+  }
+
+  // Menu Items (standalone table)
+  async getMenuItemsByTenant(tenantId: string): Promise<MenuItem[]> {
+    return db.select().from(menuItems).where(eq(menuItems.tenantId, tenantId)).orderBy(menuItems.displayOrder);
+  }
+
+  async updateMenuItem(id: string, data: Partial<InsertMenuItem>): Promise<MenuItem | undefined> {
+    const [updated] = await db.update(menuItems).set(data as any).where(eq(menuItems.id, id)).returning();
+    return updated;
   }
 
   // Export Jobs

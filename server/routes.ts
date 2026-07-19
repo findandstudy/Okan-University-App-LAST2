@@ -52,6 +52,7 @@ interface TranslateJob {
   status: 'running' | 'done' | 'error';
   step: string;
   steps: string[];
+  failedFields: string[];
   error?: string;
 }
 const translateJobs = new Map<string, TranslateJob>();
@@ -1318,7 +1319,7 @@ export async function registerRoutes(
     const { enName } = req.body;
     const tenantId = req.tenantId;
     const jobId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const job: TranslateJob = { status: 'running', step: 'Starting…', steps: [] };
+    const job: TranslateJob = { status: 'running', step: 'Starting…', steps: [], failedFields: [] };
     translateJobs.set(jobId, job);
 
     // Respond immediately so the HTTP connection is freed
@@ -1331,6 +1332,16 @@ export async function registerRoutes(
         const { translateText, translateContentByLang } = await import('./aiTranslation');
         const stepErr = (step: string, err: any) => console.error(`[translate-everything] step "${step}" failed:`, err?.message);
 
+        // Helper: push failed field:lang pairs into job.failedFields
+        const pushFailed = (label: string, langs: string[]) => {
+          job.failedFields.push(...langs.map(l => `${label}:${l}`));
+        };
+        // Helper: check translateText result and push missing langs as failures
+        const checkTextFailures = (label: string, result: Record<string, string>) => {
+          const missing = TARGET_LANGS.filter(l => !result[l]);
+          if (missing.length) pushFailed(label, missing);
+        };
+
         // 1. University name
         try {
           if (enName) {
@@ -1338,6 +1349,7 @@ export async function registerRoutes(
             const existingTenant = await storage.getTenant(tenantId);
             const existingNameByLang = (existingTenant?.nameByLang as Record<string, string>) || {};
             const nameTranslations = await translateText(enName, 'en', TARGET_LANGS, tenantId);
+            checkTextFailures('university_name', nameTranslations);
             const mergedNameByLang: Record<string, string> = { ...existingNameByLang, en: enName };
             for (const lang of TARGET_LANGS) {
               if (nameTranslations[lang]) mergedNameByLang[lang] = nameTranslations[lang];
@@ -1362,7 +1374,8 @@ export async function registerRoutes(
                 if (typeof val === 'string' && val.trim()) sourceContent[field] = val;
               }
               if (Object.keys(sourceContent).length === 0) continue;
-              const translated = await translateContentByLang(sourceContent, 'en', TARGET_LANGS, tenantId);
+              const translated = await translateContentByLang(sourceContent, 'en', TARGET_LANGS, tenantId,
+                (field, langs) => pushFailed(`section_${section.sectionKey}_${field}`, langs));
               const existingCBL = (section.contentByLang as Record<string, Record<string, string>>) || {};
               const newCBL: Record<string, Record<string, string>> = { ...existingCBL, en: enContent };
               for (const [lang, content] of Object.entries(translated)) {
@@ -1388,7 +1401,8 @@ export async function registerRoutes(
               if (enQ?.trim()) source.question = enQ;
               if (enA?.trim()) source.answer = enA;
               if (Object.keys(source).length === 0) continue;
-              const result = await translateContentByLang(source, 'en', TARGET_LANGS, tenantId);
+              const result = await translateContentByLang(source, 'en', TARGET_LANGS, tenantId,
+                (field, langs) => pushFailed(`faq_${item.id}_${field}`, langs));
               const newQ: Record<string, string> = { ...((item.questionByLang as any) || {}) };
               const newA: Record<string, string> = { ...((item.answerByLang as any) || {}) };
               for (const [lang, content] of Object.entries(result)) {
@@ -1412,6 +1426,7 @@ export async function registerRoutes(
               const enContent = (t.contentByLang as any)?.en;
               if (!enContent?.trim()) continue;
               const result = await translateText(enContent, 'en', TARGET_LANGS, tenantId);
+              checkTextFailures(`testimonial_${t.id}`, result);
               await storage.updateTestimonial(t.id, { contentByLang: { ...((t.contentByLang as any) || {}), ...result } as any });
               testimonialCount++;
             } catch (e) { stepErr(`testimonial:${t.id}`, e); }
@@ -1422,9 +1437,7 @@ export async function registerRoutes(
         // 5. SEO meta tags
         try {
           job.step = 'Translating SEO metadata…';
-          console.log(`[translate-everything] starting SEO step for tenant ${tenantId}`);
           const seoRow = await storage.getSeoSettings(tenantId);
-          console.log(`[translate-everything] seoRow exists: ${!!seoRow}`);
           if (seoRow) {
             const metaTitleByLang = (seoRow.metaTitleByLang || {}) as Record<string, string>;
             const metaDescByLang = (seoRow.metaDescriptionByLang || {}) as Record<string, string>;
@@ -1432,13 +1445,13 @@ export async function registerRoutes(
             const enTitle = metaTitleByLang.en || '';
             const enDesc = metaDescByLang.en || '';
             const enKw = metaKwByLang.en || '';
-            console.log(`[translate-everything] SEO enTitle="${enTitle.slice(0, 40)}"`);
             const seoSource: Record<string, string> = {};
             if (enTitle.trim()) seoSource.metaTitle = enTitle;
             if (enDesc.trim()) seoSource.metaDescription = enDesc;
             if (enKw.trim()) seoSource.keywords = enKw;
             if (Object.keys(seoSource).length > 0) {
-              const translated = await translateContentByLang(seoSource, 'en', TARGET_LANGS, tenantId);
+              const translated = await translateContentByLang(seoSource, 'en', TARGET_LANGS, tenantId,
+                (field, langs) => pushFailed(`seo_${field}`, langs));
               const newTitle = { ...metaTitleByLang };
               const newDesc = { ...metaDescByLang };
               const newKw = { ...metaKwByLang };
@@ -1450,9 +1463,6 @@ export async function registerRoutes(
               }
               await storage.updateSeoSettings(tenantId, { metaTitleByLang: newTitle, metaDescriptionByLang: newDesc, metaKeywordsByLang: newKw } as any);
               job.steps.push('seo');
-              console.log(`[translate-everything] SEO step done, langs:`, Object.keys(newTitle));
-            } else {
-              console.log(`[translate-everything] SEO skipped: no EN content to translate`);
             }
           }
         } catch (e) { stepErr('seo', e); }
@@ -1471,7 +1481,8 @@ export async function registerRoutes(
             if (enContactTitle.trim()) sourceFooter.contactTitle = enContactTitle;
             if (enContactAddress.trim()) sourceFooter.contactAddress = enContactAddress;
             if (Object.keys(sourceFooter).length > 0) {
-              const translated = await translateContentByLang(sourceFooter, 'en', TARGET_LANGS, tenantId);
+              const translated = await translateContentByLang(sourceFooter, 'en', TARGET_LANGS, tenantId,
+                (field, langs) => pushFailed(`footer_${field}`, langs));
               const newSettings = { ...fs };
               newSettings.description = typeof fs.description === 'object' ? { ...fs.description } : { en: enDesc };
               newSettings.contactTitle = typeof fs.contactTitle === 'object' ? { ...fs.contactTitle } : { en: enContactTitle };
@@ -1506,7 +1517,8 @@ export async function registerRoutes(
               if (enLabel.trim()) sourceContact[`item_${i}_label`] = enLabel;
             }
             if (Object.keys(sourceContact).length > 0) {
-              const translated = await translateContentByLang(sourceContact, 'en', TARGET_LANGS, tenantId);
+              const translated = await translateContentByLang(sourceContact, 'en', TARGET_LANGS, tenantId,
+                (field, langs) => pushFailed(`contact_${field}`, langs));
               const newSettings = { ...cs };
               newSettings.sectionTitle = typeof cs.sectionTitle === 'object' ? { ...cs.sectionTitle } : { en: enTitle };
               newSettings.sectionSubtitle = typeof cs.sectionSubtitle === 'object' ? { ...cs.sectionSubtitle } : { en: enSubtitle };
@@ -1529,9 +1541,9 @@ export async function registerRoutes(
           }
         } catch (e) { stepErr('contact', e); }
 
-        // 8. Trust badges section
+        // 8. Trust badges section (settings.badges array inside section)
         try {
-          job.step = 'Translating trust badges…';
+          job.step = 'Translating trust badges section…';
           const trustSection = sections.find((s: any) => s.sectionKey === 'trust_badges');
           if (trustSection?.settings) {
             const ts = trustSection.settings as Record<string, any>;
@@ -1544,7 +1556,8 @@ export async function registerRoutes(
               if (badges[i]?.description?.en?.trim()) sourceTrust[`badge_${i}_description`] = badges[i].description.en;
             }
             if (Object.keys(sourceTrust).length > 0) {
-              const translated = await translateContentByLang(sourceTrust, 'en', TARGET_LANGS, tenantId);
+              const translated = await translateContentByLang(sourceTrust, 'en', TARGET_LANGS, tenantId,
+                (field, langs) => pushFailed(`trust_section_${field}`, langs));
               const newSettings = { ...ts };
               const newBadges = badges.map(b => ({ ...b, title: { ...b.title }, description: { ...b.description } }));
               for (const [lang, content] of Object.entries(translated)) {
@@ -1558,10 +1571,10 @@ export async function registerRoutes(
               }
               newSettings.badges = newBadges;
               await storage.updateSection(trustSection.id, tenantId, { settings: newSettings });
-              job.steps.push('trust_badges');
+              job.steps.push('trust_badges_section');
             }
           }
-        } catch (e) { stepErr('trust_badges', e); }
+        } catch (e) { stepErr('trust_badges_section', e); }
 
         // 9. Hero section
         try {
@@ -1582,7 +1595,8 @@ export async function registerRoutes(
               if (enFeatures[i]?.trim()) sourceHero[`feature_${i}`] = enFeatures[i];
             }
             if (Object.keys(sourceHero).length > 0) {
-              const translated = await translateContentByLang(sourceHero, 'en', TARGET_LANGS, tenantId);
+              const translated = await translateContentByLang(sourceHero, 'en', TARGET_LANGS, tenantId,
+                (field, langs) => pushFailed(`hero_${field}`, langs));
               const newSettings = { ...hs };
               newSettings.badge = { ...hs.badge };
               newSettings.title = { ...hs.title };
@@ -1619,8 +1633,48 @@ export async function registerRoutes(
           }
         } catch (e) { stepErr('hero', e); }
 
+        // 10. Trust badges TABLE (titleByLang — standalone table rows)
+        try {
+          job.step = 'Translating trust badge records…';
+          const tbItems = await storage.getTrustBadgesByTenant(tenantId);
+          let tbCount = 0;
+          for (const badge of tbItems) {
+            try {
+              const enTitle = (badge.titleByLang as any)?.en;
+              if (!enTitle?.trim()) continue;
+              const result = await translateText(enTitle, 'en', TARGET_LANGS, tenantId);
+              checkTextFailures(`trust_badge_${badge.id}_title`, result);
+              await storage.updateTrustBadge(badge.id, {
+                titleByLang: { ...((badge.titleByLang as any) || {}), en: enTitle, ...result } as any,
+              });
+              tbCount++;
+            } catch (e) { stepErr(`trust_badge:${badge.id}`, e); }
+          }
+          if (tbCount > 0) job.steps.push(`trust_badges_table:${tbCount}`);
+        } catch (e) { stepErr('trust_badges_table', e); }
+
+        // 11. Menu items TABLE (labelByLang — standalone table rows)
+        try {
+          job.step = 'Translating menu items…';
+          const mItems = await storage.getMenuItemsByTenant(tenantId);
+          let miCount = 0;
+          for (const item of mItems) {
+            try {
+              const enLabel = (item.labelByLang as any)?.en;
+              if (!enLabel?.trim()) continue;
+              const result = await translateText(enLabel, 'en', TARGET_LANGS, tenantId);
+              checkTextFailures(`menu_item_${item.id}_label`, result);
+              await storage.updateMenuItem(item.id, {
+                labelByLang: { ...((item.labelByLang as any) || {}), en: enLabel, ...result } as any,
+              });
+              miCount++;
+            } catch (e) { stepErr(`menu_item:${item.id}`, e); }
+          }
+          if (miCount > 0) job.steps.push(`menu_items:${miCount}`);
+        } catch (e) { stepErr('menu_items', e); }
+
         job.status = 'done';
-        job.step = 'Complete';
+        job.step = `Complete — ${job.failedFields.length ? `${job.failedFields.length} field(s) failed` : 'all translations successful'}`;
       } catch (err: any) {
         console.error('[translate-everything] job error:', err?.message);
         job.status = 'error';

@@ -68,7 +68,7 @@ export async function callAI(prompt: string, tenantId: string, systemPrompt?: st
     const client = new Anthropic({ apiKey });
     const msg = await client.messages.create({
       model: config.model,
-      max_tokens: 4096,
+      max_tokens: 8192,
       system: systemPrompt || 'You are a helpful assistant.',
       messages: [{ role: 'user', content: prompt }],
     });
@@ -84,7 +84,7 @@ export async function callAI(prompt: string, tenantId: string, systemPrompt?: st
     const response = await client.chat.completions.create({
       model: config.model,
       messages,
-      max_tokens: 4096,
+      max_tokens: 8192,
     });
     return response.choices[0]?.message?.content || '';
   }
