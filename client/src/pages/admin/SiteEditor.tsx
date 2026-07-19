@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, Link } from 'wouter';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import AdminLayout from './AdminLayout';
@@ -12,7 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, Globe, Power, PowerOff, Plus, Trash2, Pencil, Loader2, Code, Link as LinkIcon, Download, History, RotateCcw, Monitor, Tablet, Smartphone, RefreshCw, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Globe, Power, PowerOff, Plus, Trash2, Pencil, Loader2, Code, Link as LinkIcon, Download, History, RotateCcw, Monitor, Tablet, Smartphone, RefreshCw, ExternalLink, Languages, CheckCircle2, AlertCircle } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -421,6 +421,255 @@ function PlaceholderTab({ title, description }: { title: string; description: st
         <p className="text-xs text-muted-foreground">Coming soon</p>
       </CardContent>
     </Card>
+  );
+}
+
+// ─── Translations Tab ──────────────────────────────────────────────────────────
+const TRANSLATE_CONTENT_ITEMS = [
+  'Section contents (hero, trust badges, contact, footer, why-choose-us…)',
+  'FAQ questions & answers',
+  'Testimonials',
+  'SEO meta tags',
+  'University name & branding',
+];
+
+const TRANSLATE_TARGET_LANGS = [
+  'Arabic (ar)', 'Turkish (tr)', 'French (fr)', 'Russian (ru)',
+  'Farsi (fa)', 'Chinese (zh)', 'Hindi (hi)', 'Spanish (es)', 'Indonesian (id)',
+];
+
+interface TranslateJobState {
+  status: string;
+  step: string;
+  steps: string[];
+  failedFields: string[];
+  error?: string;
+}
+
+function TranslationsTab({ tenantId }: { tenantId: string }) {
+  const { toast } = useToast();
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [starting, setStarting] = useState(false);
+  const [jobId, setJobId] = useState<string | null>(() =>
+    localStorage.getItem(`translate-job-${tenantId}`) ?? null
+  );
+  const [jobState, setJobState] = useState<TranslateJobState | null>(null);
+  const [polling, setPolling] = useState(false);
+  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const stopPolling = useCallback(() => {
+    if (pollTimerRef.current) { clearTimeout(pollTimerRef.current); pollTimerRef.current = null; }
+    setPolling(false);
+  }, []);
+
+  const pollJob = useCallback(async (id: string, attempt = 0) => {
+    try {
+      const res = await fetch(`/api/admin/ai/translate-job/${id}`, { credentials: 'include' });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setJobState(prev => ({ ...(prev ?? { steps: [], failedFields: [] }), status: 'error', step: body.error || `Server error ${res.status}` }));
+        stopPolling();
+        localStorage.removeItem(`translate-job-${tenantId}`);
+        return;
+      }
+      const data: TranslateJobState = await res.json();
+      setJobState(data);
+      if (data.status === 'running') {
+        // Adaptive intervals: 2 s × 5 polls → 5 s × 10 polls → 10 s
+        const delay = attempt < 5 ? 2000 : attempt < 15 ? 5000 : 10000;
+        pollTimerRef.current = setTimeout(() => pollJob(id, attempt + 1), delay);
+      } else {
+        stopPolling();
+        localStorage.removeItem(`translate-job-${tenantId}`);
+      }
+    } catch (e: any) {
+      setJobState(prev => ({ ...(prev ?? { steps: [], failedFields: [] }), status: 'error', step: e?.message || 'Network error' }));
+      stopPolling();
+      localStorage.removeItem(`translate-job-${tenantId}`);
+    }
+  }, [tenantId, stopPolling]);
+
+  // Resume polling for a persisted job on mount
+  useEffect(() => {
+    if (jobId) {
+      setPolling(true);
+      pollJob(jobId);
+    }
+    return () => { if (pollTimerRef.current) clearTimeout(pollTimerRef.current); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const startJob = async () => {
+    setConfirmOpen(false);
+    setStarting(true);
+    setJobState(null);
+    try {
+      const res = await apiRequest('POST', '/api/admin/ai/translate-everything', {});
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        toast({ title: 'Could not start translation', description: body.error || `HTTP ${res.status}`, variant: 'destructive' });
+        return;
+      }
+      const { jobId: id } = await res.json();
+      setJobId(id);
+      localStorage.setItem(`translate-job-${tenantId}`, id);
+      setJobState({ status: 'running', step: 'Starting…', steps: [], failedFields: [] });
+      setPolling(true);
+      pollJob(id);
+    } catch (e: any) {
+      toast({ title: 'Error', description: e?.message || 'Failed to start', variant: 'destructive' });
+    } finally {
+      setStarting(false);
+    }
+  };
+
+  const resetJob = () => {
+    stopPolling();
+    setJobId(null);
+    setJobState(null);
+    localStorage.removeItem(`translate-job-${tenantId}`);
+  };
+
+  const isRunning = jobState?.status === 'running' || polling;
+  const isDone    = jobState?.status === 'done';
+  const isError   = jobState?.status === 'error';
+
+  return (
+    <div className="space-y-4">
+      {/* Description card */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Languages className="h-5 w-5" />
+            Auto-translate all site content
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            AI will translate your <span className="font-medium text-foreground">English</span> source content into 9 languages.
+            Existing translations will be overwritten.
+          </p>
+          <div className="space-y-1">
+            {TRANSLATE_CONTENT_ITEMS.map(item => (
+              <div key={item} className="flex items-start gap-2 text-sm text-muted-foreground">
+                <CheckCircle2 className="h-4 w-4 text-muted-foreground/60 shrink-0 mt-0.5" />
+                {item}
+              </div>
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-1 pt-1">
+            {TRANSLATE_TARGET_LANGS.map(l => (
+              <span key={l} className="inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium">{l}</span>
+            ))}
+          </div>
+
+          {!isRunning && !isDone && !isError && (
+            <Button
+              onClick={() => setConfirmOpen(true)}
+              disabled={starting}
+              className="gap-2 mt-2"
+              data-testid="button-translate-all"
+            >
+              {starting
+                ? <Loader2 className="h-4 w-4 animate-spin" />
+                : <Languages className="h-4 w-4" />}
+              Translate all content
+            </Button>
+          )}
+
+          {(isDone || isError) && (
+            <Button variant="outline" onClick={resetJob} className="gap-2 mt-2" data-testid="button-translate-reset">
+              <RotateCcw className="h-4 w-4" />
+              Run again
+            </Button>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Progress / results card */}
+      {jobState && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              {isRunning && <Loader2 className="h-4 w-4 animate-spin" />}
+              {isDone    && <CheckCircle2 className="h-4 w-4 text-green-500" />}
+              {isError   && <AlertCircle  className="h-4 w-4 text-destructive" />}
+              {isRunning ? 'Translation in progress…' : isDone ? 'Translation complete' : 'Translation stopped'}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {/* Completed steps */}
+            {(jobState.steps ?? []).length > 0 && (
+              <div className="space-y-1">
+                {jobState.steps.map((s, i) => (
+                  <div key={i} className="flex items-center gap-2 text-sm" data-testid={`translate-step-${i}`}>
+                    <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
+                    <span>{s}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Current step (running) */}
+            {isRunning && jobState.step && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+                <span data-testid="translate-current-step">{jobState.step}</span>
+              </div>
+            )}
+
+            {/* Error message */}
+            {isError && (
+              <div className="flex items-start gap-2 text-sm text-destructive">
+                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                <span data-testid="translate-error">{jobState.step || jobState.error || 'Unknown error'}</span>
+              </div>
+            )}
+
+            {/* Done summary */}
+            {isDone && (jobState.failedFields ?? []).length === 0 && (
+              <div className="flex items-center gap-2 text-sm font-medium text-green-600 dark:text-green-400" data-testid="translate-success">
+                <CheckCircle2 className="h-4 w-4 shrink-0" />
+                All fields translated successfully
+              </div>
+            )}
+            {isDone && (jobState.failedFields ?? []).length > 0 && (
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-amber-600 dark:text-amber-400 flex items-center gap-2" data-testid="translate-failed-header">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  Could not translate the following field/language pairs:
+                </p>
+                <ul className="text-xs text-muted-foreground list-disc list-inside space-y-0.5">
+                  {jobState.failedFields.map((f, i) => (
+                    <li key={i} data-testid={`translate-failed-${i}`}>{f}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Confirmation Dialog */}
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Translate all content?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground py-2">
+            This will overwrite existing translations for all 9 languages using AI and will consume AI credits. Do you want to continue?
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setConfirmOpen(false)} data-testid="button-translate-cancel">
+              Cancel
+            </Button>
+            <Button onClick={startJob} data-testid="button-translate-confirm">
+              Yes, translate
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }
 
@@ -1097,7 +1346,7 @@ export default function SiteEditor() {
             </TabsContent>
 
             <TabsContent value="translations" className="mt-4">
-              <PlaceholderTab title="Çeviriler" description="Manage multi-language translations for all site content across supported languages." />
+              <TranslationsTab tenantId={tenantId} />
             </TabsContent>
 
             <TabsContent value="ai" className="mt-4">
