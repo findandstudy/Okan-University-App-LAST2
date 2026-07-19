@@ -187,18 +187,25 @@ async function buildTenantMeta(
     },
   ];
 
-  // canonicalUrl: lang-specific byLang → old single column → auto-generate from baseUrl + lang
-  const canonicalForLang =
-    (seo?.canonicalUrlByLang as Record<string, string> | null)?.[lang] ||
-    seo?.canonicalUrl ||
-    `${baseUrl}${lang !== 'en' ? `/${lang}` : ''}`;
+  /** Ensure a canonical value has an https:// scheme (guards against protocol-less stored values). */
+  const ensureProtocol = (url: string): string =>
+    url.startsWith('http://') || url.startsWith('https://') ? url : `https://${url}`;
 
-  // hreflang: generate per-lang using their respective canonical values
+  // canonicalUrl: lang-specific byLang (if non-empty) → auto-generate from baseUrl + lang.
+  // Never fall back to the global canonicalUrl for lang pages — all langs sharing one canonical
+  // tells Google they are the same page and breaks hreflang.
+  const byLangCanonicals = seo?.canonicalUrlByLang as Record<string, string> | null;
+  const canonicalForLang = ensureProtocol(
+    byLangCanonicals?.[lang] ||
+    `${baseUrl}${lang !== 'en' ? `/${lang}` : ''}`
+  );
+
+  // hreflang: each lang gets its own canonical — byLang if set, otherwise auto-generated.
   const hreflang = LANG_CODES.map(l => {
-    const href =
-      (seo?.canonicalUrlByLang as Record<string, string> | null)?.[l] ||
-      seo?.canonicalUrl ||
-      `${baseUrl}${l !== 'en' ? `/${l}` : ''}`;
+    const href = ensureProtocol(
+      byLangCanonicals?.[l] ||
+      `${baseUrl}${l !== 'en' ? `/${l}` : ''}`
+    );
     return { lang: l, href };
   });
 
