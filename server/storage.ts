@@ -5,6 +5,7 @@ import {
   adminUsers, integrationSettings, mediaAssets, faqItems,
   testimonials, trustBadges, seoSettings, widgets,
   blogPosts, blogPostTranslations, blogSchedule, blogPostImages, siteVersions,
+  exportJobs,
   type Tenant, type InsertTenant,
   type TenantDomain, type InsertTenantDomain,
   type TenantTheme, type InsertTenantTheme,
@@ -21,6 +22,7 @@ import {
   type BlogSchedule, type InsertBlogSchedule,
   type BlogPostImage, type InsertBlogPostImage,
   type SiteVersion, type InsertSiteVersion,
+  type ExportJob,
 } from '@shared/schema';
 
 export interface IStorage {
@@ -123,6 +125,13 @@ export interface IStorage {
   createSiteVersion(version: InsertSiteVersion): Promise<SiteVersion>;
   deleteSiteVersion(id: string): Promise<boolean>;
   pruneOldVersions(tenantId: string, keep?: number): Promise<void>;
+
+  // Export Jobs
+  createExportJob(tenantId: string): Promise<ExportJob>;
+  getExportJob(jobId: string): Promise<ExportJob | undefined>;
+  getExportJobByFilename(filename: string): Promise<ExportJob | undefined>;
+  updateExportJob(jobId: string, data: { status: string; downloadUrl?: string; filename?: string; error?: string; completedAt?: Date }): Promise<void>;
+  listExportJobs(tenantId: string, limit?: number): Promise<ExportJob[]>;
 
   // Image ownership
   doesImageBelongToTenant(imageId: string, tenantId: string): Promise<boolean>;
@@ -643,6 +652,33 @@ export class DatabaseStorage implements IStorage {
     for (const v of toDelete) {
       await db.delete(siteVersions).where(eq(siteVersions.id, v.id));
     }
+  }
+
+  // Export Jobs
+  async createExportJob(tenantId: string): Promise<ExportJob> {
+    const [job] = await db.insert(exportJobs).values({ tenantId, status: 'pending' }).returning();
+    return job;
+  }
+
+  async getExportJob(jobId: string): Promise<ExportJob | undefined> {
+    const [job] = await db.select().from(exportJobs).where(eq(exportJobs.id, jobId));
+    return job;
+  }
+
+  async getExportJobByFilename(filename: string): Promise<ExportJob | undefined> {
+    const [job] = await db.select().from(exportJobs).where(eq(exportJobs.filename, filename));
+    return job;
+  }
+
+  async updateExportJob(jobId: string, data: { status: string; downloadUrl?: string; filename?: string; error?: string; completedAt?: Date }): Promise<void> {
+    await db.update(exportJobs).set(data as any).where(eq(exportJobs.id, jobId));
+  }
+
+  async listExportJobs(tenantId: string, limit = 10): Promise<ExportJob[]> {
+    return db.select().from(exportJobs)
+      .where(eq(exportJobs.tenantId, tenantId))
+      .orderBy(desc(exportJobs.createdAt))
+      .limit(limit);
   }
 
   // Image ownership

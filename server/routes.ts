@@ -230,18 +230,24 @@ export async function registerRoutes(
 
   // ─── Local file serving (replaces Replit GCS sidecar) ─────────────────────
   // Serve local uploads — pathParam is everything after /objects/, e.g. "uploads/<uuid>.png"
-  app.get("/objects/{*objectPath}", (req, res) => {
+  app.get("/objects/{*objectPath}", async (req, res) => {
     const pathParam = Array.isArray(req.params.objectPath)
       ? req.params.objectPath.join('/')
       : req.params.objectPath;
     if (!pathParam) return res.status(400).json({ error: 'Invalid path' });
-    // Export ZIPs stored under uploads/exports/ — serve directly
+    // Export ZIPs stored under uploads/exports/ — admin-only
     if (pathParam.startsWith('exports/')) {
+      if (!(req.session as any)?.adminId) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
       const fs = require('fs') as typeof import('fs');
       const nodePath = require('path') as typeof import('path');
       const { getUploadsDir } = require('./localFileStorage') as typeof import('./localFileStorage');
       const fname = pathParam.slice('exports/'.length);
-      if (!fname || fname.includes('..')) return res.status(400).json({ error: 'Invalid path' });
+      if (!fname || fname.includes('..') || fname.includes('/')) return res.status(400).json({ error: 'Invalid path' });
+      // Verify the file was legitimately created (job must exist in DB)
+      const job = await storage.getExportJobByFilename(fname);
+      if (!job) return res.status(404).json({ error: 'Export not found' });
       const fullPath = nodePath.join(getUploadsDir(), 'exports', fname);
       if (!fs.existsSync(fullPath)) return res.status(404).json({ error: 'File not found' });
       res.set('Content-Type', 'application/zip');
@@ -2883,7 +2889,7 @@ Return ONLY this JSON:
   // Start export job — returns immediately with { jobId }
   app.post("/api/admin/sites/:tenantId/export-zip", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
     try {
-      const job = startExportJob(req.tenantId);
+      const job = await startExportJob(req.tenantId);
       res.json({ jobId: job.id });
     } catch (err: any) {
       console.error('ZIP export start error:', err);
@@ -2894,7 +2900,7 @@ Return ONLY this JSON:
   // Poll export job status
   app.get("/api/admin/sites/:tenantId/export-zip/:jobId", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
     try {
-      const job = getExportJob(req.params.jobId as string);
+      const job = await getExportJob(req.params.jobId as string);
       if (!job || job.tenantId !== req.tenantId) {
         return res.status(404).json({ error: 'Job not found' });
       }
@@ -2907,6 +2913,16 @@ Return ONLY this JSON:
       return res.json({ status: 'pending' });
     } catch (err: any) {
       res.status(500).json({ error: err?.message || 'Failed to get job status' });
+    }
+  });
+
+  // List recent export jobs for a tenant
+  app.get("/api/admin/sites/:tenantId/exports", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
+    try {
+      const jobs = await storage.listExportJobs(req.tenantId, 10);
+      res.json(jobs);
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || 'Failed to list exports' });
     }
   });
 

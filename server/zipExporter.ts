@@ -1,7 +1,6 @@
 import JSZip from 'jszip';
 import path from 'path';
 import fs from 'fs';
-import { randomUUID } from 'crypto';
 import { storage } from './storage';
 import { SUPPORTED_LANGUAGES, type SupportedLanguage } from '@shared/schema';
 import { readUpload, getUploadsDir } from './localFileStorage';
@@ -12,28 +11,11 @@ const LANG_NAMES: Record<string, string> = {
   es: 'Español', id: 'Indonesia',
 };
 
-// ─── Export Job Store ──────────────────────────────────────────────────────────
-export interface ExportJob {
-  id: string;
-  tenantId: string;
-  status: 'pending' | 'ready' | 'error';
-  downloadPath?: string;
-  downloadUrl?: string;
-  error?: string;
-  createdAt: Date;
-}
+// ─── Export Job Store (DB-backed — restart-resistant) ─────────────────────────
+export type { ExportJob } from '@shared/schema';
 
-const exportJobs = new Map<string, ExportJob>();
-
-setInterval(() => {
-  const cutoff = Date.now() - 3600_000;
-  for (const [id, job] of Array.from(exportJobs.entries())) {
-    if (job.createdAt.getTime() < cutoff) exportJobs.delete(id);
-  }
-}, 600_000).unref();
-
-export function getExportJob(jobId: string): ExportJob | undefined {
-  return exportJobs.get(jobId);
+export async function getExportJob(jobId: string) {
+  return storage.getExportJob(jobId);
 }
 
 function getExportsDir(): string {
@@ -483,10 +465,8 @@ async function buildZip(tenantId: string): Promise<{ buffer: Buffer; filename: s
 }
 
 // ─── Async export ──────────────────────────────────────────────────────────────
-export function startExportJob(tenantId: string): ExportJob {
-  const jobId = randomUUID();
-  const job: ExportJob = { id: jobId, tenantId, status: 'pending', createdAt: new Date() };
-  exportJobs.set(jobId, job);
+export async function startExportJob(tenantId: string): Promise<{ id: string }> {
+  const job = await storage.createExportJob(tenantId);
 
   setImmediate(async () => {
     try {
@@ -494,16 +474,22 @@ export function startExportJob(tenantId: string): ExportJob {
       const exportsDir = getExportsDir();
       const filePath = path.join(exportsDir, filename);
       fs.writeFileSync(filePath, buffer);
-      job.status = 'ready';
-      job.downloadPath = filePath;
-      job.downloadUrl = `/objects/exports/${filename}`;
+      await storage.updateExportJob(job.id, {
+        status: 'ready',
+        filename,
+        downloadUrl: `/objects/exports/${filename}`,
+        completedAt: new Date(),
+      });
     } catch (err: any) {
-      job.status = 'error';
-      job.error = err?.message || 'ZIP generation failed';
+      await storage.updateExportJob(job.id, {
+        status: 'error',
+        error: err?.message || 'ZIP generation failed',
+        completedAt: new Date(),
+      });
     }
   });
 
-  return job;
+  return { id: job.id };
 }
 
 // ─── Snapshot helpers ──────────────────────────────────────────────────────────

@@ -310,6 +310,20 @@ export type InsertBlogSchedule = z.infer<typeof insertBlogScheduleSchema>;
 export type BlogPostImage = typeof blogPostImages.$inferSelect;
 export type InsertBlogPostImage = z.infer<typeof insertBlogPostImageSchema>;
 
+// Export Jobs — persistent across process restarts (replaces in-memory Map)
+export const exportJobs = pgTable("export_jobs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  status: varchar("status", { length: 20 }).notNull().default('pending'),
+  filename: varchar("filename"),
+  downloadUrl: varchar("download_url"),
+  error: text("error"),
+  createdAt: timestamp("created_at").defaultNow(),
+  completedAt: timestamp("completed_at"),
+});
+
+export type ExportJob = typeof exportJobs.$inferSelect;
+
 // Site Versions — snapshots of all tenant content (max 10 kept per tenant)
 export const siteVersions = pgTable("site_versions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

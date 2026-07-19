@@ -819,6 +819,22 @@ export default function SiteEditor() {
 
   const [exportingZip, setExportingZip] = useState(false);
 
+  interface RecentExport {
+    id: string;
+    status: string;
+    filename: string | null;
+    downloadUrl: string | null;
+    createdAt: string;
+    completedAt: string | null;
+  }
+  const { data: recentExports = [] } = useQuery<RecentExport[]>({
+    queryKey: ['/api/admin/sites', tenantId, 'exports'],
+    queryFn: () => fetch(`/api/admin/sites/${tenantId}/exports?_tid=${tenantId}`, { credentials: 'include' }).then(r => r.json()),
+    enabled: !!tenantId,
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
+  });
+
   const statusMutation = useMutation({
     mutationFn: async (status: string) => {
       const res = await apiRequest('PATCH', `/api/admin/tenants/${tenantId}`, { status });
@@ -843,32 +859,50 @@ export default function SiteEditor() {
   const handleExportZip = async () => {
     setExportingZip(true);
     try {
-      // Start async export job
       const startRes = await fetch(`/api/admin/sites/${tenantId}/export-zip?_tid=${tenantId}`, {
         method: 'POST', credentials: 'include',
       });
-      if (!startRes.ok) throw new Error('Export failed to start');
+      if (!startRes.ok) {
+        const errData = await startRes.json().catch(() => ({}));
+        throw new Error(errData.error || `Export failed to start (HTTP ${startRes.status})`);
+      }
       const { jobId } = await startRes.json();
 
-      // Poll until ready (max ~60s)
+      // Poll with exponential backoff (2 → 4 → 8 → 16 → 30 s), max 10 min total
       let downloadUrl: string | null = null;
-      for (let i = 0; i < 30; i++) {
-        await new Promise(r => setTimeout(r, 2000));
+      let delayMs = 2000;
+      const maxDelayMs = 30_000;
+      const deadline = Date.now() + 10 * 60 * 1000;
+      let attempt = 0;
+
+      while (Date.now() < deadline) {
+        await new Promise(r => setTimeout(r, delayMs));
+
         const poll = await fetch(`/api/admin/sites/${tenantId}/export-zip/${jobId}?_tid=${tenantId}`, { credentials: 'include' });
+        if (!poll.ok) {
+          const errData = await poll.json().catch(() => ({}));
+          if (poll.status === 404) throw new Error('İş kaydı bulunamadı — sunucu yeniden başlamış olabilir. Lütfen tekrar deneyin.');
+          throw new Error(errData.error || `Polling hatası (HTTP ${poll.status})`);
+        }
+
         const data = await poll.json();
         if (data.status === 'ready') { downloadUrl = data.downloadUrl; break; }
-        if (data.status === 'error') throw new Error(data.error || 'Export failed');
-      }
-      if (!downloadUrl) throw new Error('ZIP generation timed out');
+        if (data.status === 'error') throw new Error(data.error || 'ZIP oluşturma başarısız');
 
-      // Trigger browser download
+        attempt++;
+        if (attempt % 2 === 0) delayMs = Math.min(delayMs * 2, maxDelayMs);
+      }
+
+      if (!downloadUrl) throw new Error('ZIP oluşturma zaman aşımına uğradı (10 dk). Son export listesinden indirmeyi deneyin.');
+
       const a = document.createElement('a');
       a.href = downloadUrl;
       a.download = downloadUrl.split('/').pop() || 'site-export.zip';
       document.body.appendChild(a);
       a.click();
       a.remove();
-      toast({ title: 'ZIP downloaded', description: 'All 10 language pages + assets included.' });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/sites', tenantId, 'exports'] });
+      toast({ title: 'ZIP downloaded', description: 'Tüm dil sayfaları ve varlıklar dahil.' });
     } catch (e: any) {
       toast({ title: 'Export failed', description: e.message, variant: 'destructive' });
     } finally {
@@ -940,6 +974,46 @@ export default function SiteEditor() {
               )}
             </div>
           </div>
+
+          {recentExports.length > 0 && (
+            <Card className="border-dashed">
+              <CardContent className="py-3 px-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <History className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="text-xs font-medium text-muted-foreground">Recent Exports</span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {recentExports.map((exp) => (
+                    <div key={exp.id} className="flex items-center gap-1.5 text-xs" data-testid={`export-job-${exp.id}`}>
+                      {exp.status === 'ready' && exp.downloadUrl ? (
+                        <a
+                          href={exp.downloadUrl}
+                          className="flex items-center gap-1 text-primary hover:underline"
+                          data-testid={`link-download-export-${exp.id}`}
+                        >
+                          <Download className="h-3 w-3" />
+                          {exp.filename || 'export.zip'}
+                        </a>
+                      ) : exp.status === 'error' ? (
+                        <span className="text-destructive flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-destructive inline-block" />
+                          Failed
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground flex items-center gap-1">
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          Building…
+                        </span>
+                      )}
+                      <span className="text-muted-foreground">
+                        {new Date(exp.createdAt).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' })}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           <Tabs defaultValue="preview">
             <TabsList className="flex-wrap h-auto gap-0.5">
