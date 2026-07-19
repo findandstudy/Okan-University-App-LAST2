@@ -515,14 +515,17 @@ export default function SEOSettings({ embedded }: { embedded?: boolean } = {}) {
                             render={({ field }) => (
                               <FormItem>
                                 <FormLabel>Robots Directive ({lang.label})</FormLabel>
-                                <Select onValueChange={field.onChange} value={field.value}>
+                                <Select
+                                  onValueChange={v => field.onChange(v === '__default__' ? '' : v)}
+                                  value={field.value === '' || field.value == null ? '__default__' : field.value}
+                                >
                                   <FormControl>
                                     <SelectTrigger data-testid={`select-robots-lang-${lang.code}`}>
                                       <SelectValue placeholder={lang.code === 'en' ? 'Select directive' : 'Leave empty to use English value'} />
                                     </SelectTrigger>
                                   </FormControl>
                                   <SelectContent>
-                                    <SelectItem value="">— Use fallback —</SelectItem>
+                                    <SelectItem value="__default__">— Use fallback —</SelectItem>
                                     <SelectItem value="index, follow">index, follow (Recommended)</SelectItem>
                                     <SelectItem value="index, nofollow">index, nofollow</SelectItem>
                                     <SelectItem value="noindex, follow">noindex, follow</SelectItem>
