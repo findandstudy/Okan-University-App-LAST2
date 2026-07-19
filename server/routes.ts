@@ -47,23 +47,11 @@ const MAX_CACHE_SIZE = 100;
 // ─── Bootstrap cache — keyed by tenantId ──────────────────────────────────────
 const bootstrapCache = new Map<string, { data: any; timestamp: number }>();
 
-// ─── Background translate-everything job store ───────────────────────────────
-interface TranslateJob {
-  status: 'running' | 'done' | 'error';
-  step: string;
-  steps: string[];
-  failedFields: string[];
-  error?: string;
-}
-const translateJobs = new Map<string, TranslateJob>();
-// Cleanup old jobs after 10 minutes
-setInterval(() => {
-  const cutoff = Date.now() - 10 * 60 * 1000;
-  for (const id of Array.from(translateJobs.keys())) {
-    const ts = parseInt(id.split('-')[0] || '0', 10);
-    if (ts < cutoff) translateJobs.delete(id);
-  }
-}, 5 * 60 * 1000);
+// ─── Translate-everything job store (DB-backed, survives restarts) ───────────
+// Jobs are persisted in the translate_jobs table via storage.createTranslateJob /
+// storage.updateTranslateJob / storage.getTranslateJob.
+// Prune old rows once per hour.
+setInterval(() => { storage.pruneOldTranslateJobs().catch(() => {}); }, 60 * 60 * 1000);
 const BOOTSTRAP_CACHE_TTL = 60000; // 60 seconds
 
 // ─── Admin middleware ─────────────────────────────────────────────────────────
@@ -1309,18 +1297,35 @@ export async function registerRoutes(
 
   // ─── Master: Translate Everything ────────────────────────────────────────────
   // ─── Translate-everything job status polling ──────────────────────────────
-  app.get("/api/admin/ai/translate-job/:id", requireAdmin, (req, res) => {
-    const job = translateJobs.get(req.params.id as string);
+  app.get("/api/admin/ai/translate-job/:id", requireAdmin, async (req, res) => {
+    const job = await storage.getTranslateJob(req.params.id as string);
     if (!job) return res.status(404).json({ error: 'Job not found' });
-    res.json(job);
+    res.json({
+      status: job.status,
+      step: job.step,
+      steps: job.steps,
+      failedFields: job.failedFields,
+      error: job.error,
+    });
   });
 
   app.post("/api/admin/ai/translate-everything", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
     const { enName } = req.body;
     const tenantId = req.tenantId;
-    const jobId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const job: TranslateJob = { status: 'running', step: 'Starting…', steps: [], failedFields: [] };
-    translateJobs.set(jobId, job);
+
+    // Create persistent DB record — survives process restarts
+    const jobRow = await storage.createTranslateJob(tenantId);
+    const jobId = jobRow.id;
+
+    // Local state tracked during the background run
+    let step = 'Starting…';
+    const steps: string[] = [];
+    const failedFields: string[] = [];
+
+    // Persist current state to DB
+    const save = async (overrides: { status?: string; error?: string; completedAt?: Date } = {}) => {
+      await storage.updateTranslateJob(jobId, { step, steps, failedFields, ...overrides });
+    };
 
     // Respond immediately so the HTTP connection is freed
     res.json({ jobId });
@@ -1330,11 +1335,11 @@ export async function registerRoutes(
       try {
         const TARGET_LANGS = ['ar','tr','fr','ru','fa','zh','hi','es','id'];
         const { translateText, translateContentByLang } = await import('./aiTranslation');
-        const stepErr = (step: string, err: any) => console.error(`[translate-everything] step "${step}" failed:`, err?.message);
+        const stepErr = (label: string, err: any) => console.error(`[translate-everything] step "${label}" failed:`, err?.message);
 
-        // Helper: push failed field:lang pairs into job.failedFields
+        // Helper: push failed field:lang pairs into failedFields
         const pushFailed = (label: string, langs: string[]) => {
-          job.failedFields.push(...langs.map(l => `${label}:${l}`));
+          failedFields.push(...langs.map(l => `${label}:${l}`));
         };
         // Helper: check translateText result and push missing langs as failures
         const checkTextFailures = (label: string, result: Record<string, string>) => {
@@ -1345,7 +1350,7 @@ export async function registerRoutes(
         // 1. University name
         try {
           if (enName) {
-            job.step = 'Translating university name…';
+            step = 'Translating university name…'; await save();
             const existingTenant = await storage.getTenant(tenantId);
             const existingNameByLang = (existingTenant?.nameByLang as Record<string, string>) || {};
             const nameTranslations = await translateText(enName, 'en', TARGET_LANGS, tenantId);
@@ -1355,14 +1360,14 @@ export async function registerRoutes(
               if (nameTranslations[lang]) mergedNameByLang[lang] = nameTranslations[lang];
             }
             await storage.updateTenant(tenantId, { universityName: enName, nameByLang: mergedNameByLang });
-            job.steps.push('university_name');
+            steps.push('university_name'); await save();
           }
         } catch (e) { stepErr('university_name', e); }
 
         // 2. Sections (contentByLang)
         let sections: any[] = [];
         try {
-          job.step = 'Translating sections…';
+          step = 'Translating sections…'; await save();
           sections = await storage.getSections(tenantId);
           let sectionsCount = 0;
           for (const section of sections) {
@@ -1385,12 +1390,12 @@ export async function registerRoutes(
               sectionsCount++;
             } catch (e) { stepErr(`section:${section.id}`, e); }
           }
-          job.steps.push(`sections:${sectionsCount}`);
+          steps.push(`sections:${sectionsCount}`); await save();
         } catch (e) { stepErr('sections', e); }
 
         // 3. FAQ
         try {
-          job.step = 'Translating FAQ…';
+          step = 'Translating FAQ…'; await save();
           const faqItems = await storage.getFaqItems(tenantId);
           let faqCount = 0;
           for (const item of faqItems) {
@@ -1413,12 +1418,12 @@ export async function registerRoutes(
               faqCount++;
             } catch (e) { stepErr(`faq:${item.id}`, e); }
           }
-          job.steps.push(`faq:${faqCount}`);
+          steps.push(`faq:${faqCount}`); await save();
         } catch (e) { stepErr('faq', e); }
 
         // 4. Testimonials
         try {
-          job.step = 'Translating testimonials…';
+          step = 'Translating testimonials…'; await save();
           const testimonials = await storage.getTestimonials(tenantId);
           let testimonialCount = 0;
           for (const t of testimonials) {
@@ -1431,12 +1436,12 @@ export async function registerRoutes(
               testimonialCount++;
             } catch (e) { stepErr(`testimonial:${t.id}`, e); }
           }
-          job.steps.push(`testimonials:${testimonialCount}`);
+          steps.push(`testimonials:${testimonialCount}`); await save();
         } catch (e) { stepErr('testimonials', e); }
 
         // 5. SEO meta tags
         try {
-          job.step = 'Translating SEO metadata…';
+          step = 'Translating SEO metadata…'; await save();
           const seoRow = await storage.getSeoSettings(tenantId);
           if (seoRow) {
             const metaTitleByLang = (seoRow.metaTitleByLang || {}) as Record<string, string>;
@@ -1462,14 +1467,14 @@ export async function registerRoutes(
                 if (c.keywords) newKw[lang] = c.keywords;
               }
               await storage.updateSeoSettings(tenantId, { metaTitleByLang: newTitle, metaDescriptionByLang: newDesc, metaKeywordsByLang: newKw } as any);
-              job.steps.push('seo');
+              steps.push('seo'); await save();
             }
           }
         } catch (e) { stepErr('seo', e); }
 
         // 6. Footer section
         try {
-          job.step = 'Translating footer…';
+          step = 'Translating footer…'; await save();
           const footerSection = sections.find((s: any) => s.sectionKey === 'footer');
           if (footerSection?.settings) {
             const fs = footerSection.settings as Record<string, any>;
@@ -1494,14 +1499,14 @@ export async function registerRoutes(
                 if (c.contactAddress) newSettings.contactAddress[lang] = c.contactAddress;
               }
               await storage.updateSection(footerSection.id, tenantId, { settings: newSettings });
-              job.steps.push('footer');
+              steps.push('footer'); await save();
             }
           }
         } catch (e) { stepErr('footer', e); }
 
         // 7. Contact section
         try {
-          job.step = 'Translating contact section…';
+          step = 'Translating contact section…'; await save();
           const contactSection = sections.find((s: any) => s.sectionKey === 'contact');
           if (contactSection?.settings) {
             const cs = contactSection.settings as Record<string, any>;
@@ -1536,14 +1541,14 @@ export async function registerRoutes(
               }
               newSettings.items = newItems;
               await storage.updateSection(contactSection.id, tenantId, { settings: newSettings });
-              job.steps.push('contact');
+              steps.push('contact'); await save();
             }
           }
         } catch (e) { stepErr('contact', e); }
 
         // 8. Trust badges section (settings.badges array inside section)
         try {
-          job.step = 'Translating trust badges section…';
+          step = 'Translating trust badges section…'; await save();
           const trustSection = sections.find((s: any) => s.sectionKey === 'trust_badges');
           if (trustSection?.settings) {
             const ts = trustSection.settings as Record<string, any>;
@@ -1571,14 +1576,14 @@ export async function registerRoutes(
               }
               newSettings.badges = newBadges;
               await storage.updateSection(trustSection.id, tenantId, { settings: newSettings });
-              job.steps.push('trust_badges_section');
+              steps.push('trust_badges_section'); await save();
             }
           }
         } catch (e) { stepErr('trust_badges_section', e); }
 
         // 9. Hero section
         try {
-          job.step = 'Translating hero section…';
+          step = 'Translating hero section…'; await save();
           const heroSection = sections.find((s: any) => s.sectionKey === 'hero');
           if (heroSection?.settings) {
             const hs = heroSection.settings as Record<string, any>;
@@ -1628,14 +1633,14 @@ export async function registerRoutes(
               }
               newSettings.features = newFeatures;
               await storage.updateSection(heroSection.id, tenantId, { settings: newSettings });
-              job.steps.push('hero');
+              steps.push('hero'); await save();
             }
           }
         } catch (e) { stepErr('hero', e); }
 
         // 10. Trust badges TABLE (titleByLang — standalone table rows)
         try {
-          job.step = 'Translating trust badge records…';
+          step = 'Translating trust badge records…'; await save();
           const tbItems = await storage.getTrustBadgesByTenant(tenantId);
           let tbCount = 0;
           for (const badge of tbItems) {
@@ -1650,12 +1655,12 @@ export async function registerRoutes(
               tbCount++;
             } catch (e) { stepErr(`trust_badge:${badge.id}`, e); }
           }
-          if (tbCount > 0) job.steps.push(`trust_badges_table:${tbCount}`);
+          if (tbCount > 0) { steps.push(`trust_badges_table:${tbCount}`); await save(); }
         } catch (e) { stepErr('trust_badges_table', e); }
 
         // 11. Menu items TABLE (labelByLang — standalone table rows)
         try {
-          job.step = 'Translating menu items…';
+          step = 'Translating menu items…'; await save();
           const mItems = await storage.getMenuItemsByTenant(tenantId);
           let miCount = 0;
           for (const item of mItems) {
@@ -1670,15 +1675,15 @@ export async function registerRoutes(
               miCount++;
             } catch (e) { stepErr(`menu_item:${item.id}`, e); }
           }
-          if (miCount > 0) job.steps.push(`menu_items:${miCount}`);
+          if (miCount > 0) { steps.push(`menu_items:${miCount}`); await save(); }
         } catch (e) { stepErr('menu_items', e); }
 
-        job.status = 'done';
-        job.step = `Complete — ${job.failedFields.length ? `${job.failedFields.length} field(s) failed` : 'all translations successful'}`;
+        step = `Complete — ${failedFields.length ? `${failedFields.length} field(s) failed` : 'all translations successful'}`;
+        await save({ status: 'done', completedAt: new Date() });
       } catch (err: any) {
         console.error('[translate-everything] job error:', err?.message);
-        job.status = 'error';
-        job.error = err?.message || 'Translation failed';
+        step = 'Error';
+        await save({ status: 'error', error: err?.message || 'Translation failed', completedAt: new Date() });
       }
     })();
   });

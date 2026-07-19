@@ -1,11 +1,13 @@
 import { db } from './db';
-import { eq, desc, and, asc, ilike } from 'drizzle-orm';
+import { eq, desc, and, asc, ilike, lt } from 'drizzle-orm';
 import {
   tenants, tenantDomains, tenantThemes, sections, menuItems,
   adminUsers, integrationSettings, mediaAssets, faqItems,
   testimonials, trustBadges, seoSettings, widgets,
   blogPosts, blogPostTranslations, blogSchedule, blogPostImages, siteVersions,
   exportJobs,
+  translateJobsTable,
+  type TranslateJobRow,
   type Tenant, type InsertTenant,
   type TenantDomain, type InsertTenantDomain,
   type TenantTheme, type InsertTenantTheme,
@@ -141,6 +143,12 @@ export interface IStorage {
   getExportJobByFilename(filename: string): Promise<ExportJob | undefined>;
   updateExportJob(jobId: string, data: { status: string; downloadUrl?: string; filename?: string; error?: string; completedAt?: Date }): Promise<void>;
   listExportJobs(tenantId: string, limit?: number): Promise<ExportJob[]>;
+
+  // Translate Jobs
+  createTranslateJob(tenantId: string): Promise<TranslateJobRow>;
+  getTranslateJob(jobId: string): Promise<TranslateJobRow | undefined>;
+  updateTranslateJob(jobId: string, data: { status?: string; step?: string; steps?: string[]; failedFields?: string[]; error?: string; completedAt?: Date }): Promise<void>;
+  pruneOldTranslateJobs(): Promise<void>;
 
   // Image ownership
   doesImageBelongToTenant(imageId: string, tenantId: string): Promise<boolean>;
@@ -428,7 +436,7 @@ export class DatabaseStorage implements IStorage {
     const s = row.settings as any;
     return {
       provider: s.provider || 'anthropic',
-      model: s.model || 'claude-3-5-haiku-20241022',
+      model: s.model || 'claude-haiku-4-5-20251001',
       hasApiKey: !!s.encryptedApiKey,
       encryptedApiKey: s.encryptedApiKey,
     };
@@ -681,6 +689,26 @@ export class DatabaseStorage implements IStorage {
   async updateMenuItem(id: string, data: Partial<InsertMenuItem>): Promise<MenuItem | undefined> {
     const [updated] = await db.update(menuItems).set(data as any).where(eq(menuItems.id, id)).returning();
     return updated;
+  }
+
+  // Translate Jobs
+  async createTranslateJob(tenantId: string): Promise<TranslateJobRow> {
+    const [job] = await db.insert(translateJobsTable).values({ tenantId }).returning();
+    return job;
+  }
+
+  async getTranslateJob(jobId: string): Promise<TranslateJobRow | undefined> {
+    const [job] = await db.select().from(translateJobsTable).where(eq(translateJobsTable.id, jobId));
+    return job;
+  }
+
+  async updateTranslateJob(jobId: string, data: { status?: string; step?: string; steps?: string[]; failedFields?: string[]; error?: string; completedAt?: Date }): Promise<void> {
+    await db.update(translateJobsTable).set(data as any).where(eq(translateJobsTable.id, jobId));
+  }
+
+  async pruneOldTranslateJobs(): Promise<void> {
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    await db.delete(translateJobsTable).where(lt(translateJobsTable.createdAt, cutoff));
   }
 
   // Export Jobs

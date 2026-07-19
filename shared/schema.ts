@@ -324,6 +324,21 @@ export const exportJobs = pgTable("export_jobs", {
 
 export type ExportJob = typeof exportJobs.$inferSelect;
 
+// Translate Jobs — persistent across process restarts (replaces in-memory Map)
+export const translateJobsTable = pgTable("translate_jobs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  status: varchar("status", { length: 20 }).notNull().default('running'),
+  step: text("step").notNull().default('Starting…'),
+  steps: jsonb("steps").$type<string[]>().notNull().default([]),
+  failedFields: jsonb("failed_fields").$type<string[]>().notNull().default([]),
+  error: text("error"),
+  createdAt: timestamp("created_at").defaultNow(),
+  completedAt: timestamp("completed_at"),
+});
+
+export type TranslateJobRow = typeof translateJobsTable.$inferSelect;
+
 // Site Versions — snapshots of all tenant content (max 10 kept per tenant)
 export const siteVersions = pgTable("site_versions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
