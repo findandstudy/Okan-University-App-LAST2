@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'wouter';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { queryClient, apiRequest } from '@/lib/queryClient';
@@ -122,12 +122,17 @@ export default function FooterContent({ embedded, saveTriggerRef }: { embedded?:
     },
   });
 
+  // Always-fresh ref so translateMutation sees the latest settings even when
+  // the user types and immediately clicks "Auto Translate" before React re-renders.
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
+
   const translateMutation = useMutation({
     mutationFn: async () => {
       const sourceContent = {
-        description: settings.description.en || '',
-        contactTitle: settings.contactTitle.en || '',
-        contactAddress: settings.contactAddress.en || '',
+        description: settingsRef.current.description.en || '',
+        contactTitle: settingsRef.current.contactTitle.en || '',
+        contactAddress: settingsRef.current.contactAddress.en || '',
       };
       const targetLangs = SUPPORTED_LANGUAGES.filter(l => l !== 'en');
       const res = await apiRequest('POST', `/api/admin/ai/translate${apiSuffix}`, {

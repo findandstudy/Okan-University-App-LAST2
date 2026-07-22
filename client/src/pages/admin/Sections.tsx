@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'wouter';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -176,9 +176,14 @@ export default function Sections({ embedded }: { embedded?: boolean } = {}) {
     },
   });
 
+  // Always-fresh ref so translateMutation sees the latest contentForms even when
+  // the user types and immediately clicks "Auto Translate" before React re-renders.
+  const contentFormsRef = useRef(contentForms);
+  contentFormsRef.current = contentForms;
+
   const translateMutation = useMutation({
     mutationFn: async () => {
-      const enContent = contentForms['en'];
+      const enContent = contentFormsRef.current['en'];
       const response = await apiRequest('POST', `/api/admin/ai/translate${apiSuffix}`, {
         sourceContent: enContent,
         sourceLang: 'en',

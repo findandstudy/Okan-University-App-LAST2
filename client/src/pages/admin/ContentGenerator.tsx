@@ -68,7 +68,10 @@ export default function ContentGenerator({ embedded }: { embedded?: boolean } = 
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/sections' + apiSuffix] });
       queryClient.invalidateQueries({ queryKey: ['/api/faq' + apiSuffix] });
-      toast({ title: 'Content applied!', description: 'Sections updated. Translation starting in background.' });
+      // Trigger translate-everything in the background so all languages (including
+      // non-English target langs) are filled from the English content we just saved.
+      apiRequest('POST', `/api/admin/ai/translate-everything${apiSuffix}`, {}).catch(() => {});
+      toast({ title: 'Content applied!', description: 'Sections updated. Translating to all languages in background…' });
       setStep('done');
     },
     onError: () => toast({ title: 'Failed to apply content', variant: 'destructive' }),

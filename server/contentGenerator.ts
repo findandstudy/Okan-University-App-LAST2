@@ -116,6 +116,7 @@ function stripVerificationMarker(text: string): { text: string; flagged: boolean
 export async function generateContent(text: string, tenantId: string): Promise<GeneratedContent> {
   const systemPrompt = `You are a university marketing expert. Generate landing page content from the provided source material.
 Rules:
+- Write ALL content in English, regardless of the language of the source material
 - Use only verified facts from the source material
 - If a FAQ answer contains unverifiable claims (fees, exact dates, statistics not in the source), set "needsVerification": true for that item — do NOT embed any marker text in the answer itself
 - Write in a compelling but factual marketing tone
