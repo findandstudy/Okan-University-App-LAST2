@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Link } from 'wouter';
 import AdminLayout from './AdminLayout';
+import AdminErrorState from '@/components/admin/AdminErrorState';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
@@ -228,13 +229,8 @@ export default function Sites() {
   const bumpRefresh = (id: string) =>
     setRefreshKeys(prev => ({ ...prev, [id]: (prev[id] ?? 0) + 1 }));
 
-  const { data: tenants = [], isLoading } = useQuery<Tenant[]>({
+  const { data: tenants = [], isLoading, isError, error } = useQuery<Tenant[]>({
     queryKey: ['/api/admin/tenants'],
-    queryFn: async () => {
-      const res = await fetch('/api/admin/tenants', { credentials: 'include' });
-      if (!res.ok) throw new Error('Failed to fetch tenants');
-      return res.json();
-    },
   });
 
   const cloneMutation = useMutation({
@@ -554,6 +550,8 @@ export default function Sites() {
         {/* ── Content ─────────────────────────────────────────────────── */}
         {isLoading ? (
           <div className="py-12 text-center text-muted-foreground">Loading...</div>
+        ) : isError ? (
+          <AdminErrorState error={error} queryKey={['/api/admin/tenants']} />
         ) : filteredTenants.length === 0 ? (
           <div className="py-12 text-center text-muted-foreground">
             {tenants.length === 0 ? 'No sites yet. Create your first site.' : 'No sites match your filter.'}

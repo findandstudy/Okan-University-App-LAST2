@@ -43,6 +43,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { UserPlus, Pencil, Trash2, ShieldCheck, User, Building2, ToggleLeft, ToggleRight } from 'lucide-react';
+import AdminErrorState from '@/components/admin/AdminErrorState';
 import type { Tenant } from '@shared/schema';
 
 interface AdminUser {
@@ -83,7 +84,7 @@ export default function AdminUsers() {
   const [editTarget, setEditTarget] = useState<AdminUser | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<AdminUser | null>(null);
 
-  const { data: users = [], isLoading } = useQuery<AdminUser[]>({
+  const { data: users = [], isLoading, isError, error } = useQuery<AdminUser[]>({
     queryKey: ['/api/admin/users'],
   });
 
@@ -202,6 +203,8 @@ export default function AdminUsers() {
           <CardContent className="p-0">
             {isLoading ? (
               <div className="p-8 text-center text-muted-foreground">Loading…</div>
+            ) : isError ? (
+              <AdminErrorState error={error} queryKey={['/api/admin/users']} className="rounded-b-lg" />
             ) : users.length === 0 ? (
               <div className="p-8 text-center text-muted-foreground">No admin users found.</div>
             ) : (

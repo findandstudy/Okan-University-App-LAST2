@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LayoutList, Image, MessageSquareQuote, HelpCircle, Globe, ChevronRight, Palette } from 'lucide-react';
 import AdminLayout from './AdminLayout';
+import AdminErrorState from '@/components/admin/AdminErrorState';
 
 interface Stats {
   sections: number;
@@ -14,7 +15,7 @@ interface Stats {
 }
 
 export default function Dashboard() {
-  const { data: stats, isLoading } = useQuery<Stats>({
+  const { data: stats, isLoading, isError, error } = useQuery<Stats>({
     queryKey: ['/api/admin/stats'],
   });
 
@@ -84,6 +85,9 @@ export default function Dashboard() {
           <p className="text-muted-foreground">Welcome back to your admin panel</p>
         </div>
 
+        {isError ? (
+          <AdminErrorState error={error} queryKey={['/api/admin/stats']} />
+        ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {statCards.map((stat, index) => (
             <Card key={index}>
@@ -105,6 +109,7 @@ export default function Dashboard() {
             </Card>
           ))}
         </div>
+        )}
 
         <Card>
           <CardHeader>

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'wouter';
 import AdminLayout from './AdminLayout';
+import AdminErrorState from '@/components/admin/AdminErrorState';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -36,7 +37,7 @@ export default function BlockInventory() {
   const [search, setSearch] = useState('');
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
 
-  const { data, isLoading } = useQuery<InventoryResponse>({
+  const { data, isLoading, isError, error } = useQuery<InventoryResponse>({
     queryKey: ['/api/admin/blocks/inventory'],
   });
 
@@ -90,7 +91,11 @@ export default function BlockInventory() {
           </div>
         )}
 
-        {!isLoading && filtered.length === 0 && (
+        {!isLoading && isError && (
+          <AdminErrorState error={error} queryKey={['/api/admin/blocks/inventory']} />
+        )}
+
+        {!isLoading && !isError && filtered.length === 0 && (
           <div className="text-center py-16 text-muted-foreground">
             {search ? 'No blocks match your search.' : 'No section data found.'}
           </div>
