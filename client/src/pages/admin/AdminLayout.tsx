@@ -15,6 +15,7 @@ import {
   SidebarFooter,
 } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
@@ -41,6 +42,7 @@ import {
   ImageIcon,
   Layers,
   Users,
+  ChevronRight,
   type LucideIcon,
 } from 'lucide-react';
 import type { Tenant } from '@shared/schema';
@@ -116,6 +118,42 @@ function getInitialExpandedState(): Record<string, boolean> {
     acc[group.title] = true;
     return acc;
   }, {} as Record<string, boolean>);
+}
+
+const GLOBAL_TEMPLATE_GROUP = 'Default Site Content';
+
+function BreadcrumbNav({ location, menuGroups }: { location: string; menuGroups: NavGroup[] }) {
+  if (location === '/admin' || location === '/admin/') return null;
+
+  for (const group of menuGroups) {
+    const item = group.items.find(i => i.url === location);
+    if (item) {
+      return (
+        <nav className="flex items-center gap-1 text-sm text-muted-foreground" data-testid="breadcrumb-nav">
+          <span>{group.title}</span>
+          <ChevronRight className="h-3.5 w-3.5" />
+          <span className="text-foreground font-medium">{item.title}</span>
+          {group.title === GLOBAL_TEMPLATE_GROUP && (
+            <Badge variant="outline" className="ml-2 text-xs border-orange-300 text-orange-600 bg-orange-50 dark:bg-orange-950/30">
+              Global Template
+            </Badge>
+          )}
+        </nav>
+      );
+    }
+  }
+
+  if (location.startsWith('/admin/sites/')) {
+    return (
+      <nav className="flex items-center gap-1 text-sm text-muted-foreground" data-testid="breadcrumb-nav">
+        <Link href="/admin/sites" className="hover:text-foreground transition-colors">Sites Hub</Link>
+        <ChevronRight className="h-3.5 w-3.5" />
+        <span className="text-foreground font-medium">Site Editor</span>
+      </nav>
+    );
+  }
+
+  return null;
 }
 
 const SUPER_ADMIN_ONLY_GROUPS = new Set(['Sites']);
@@ -280,8 +318,9 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         </Sidebar>
 
         <div className="flex flex-col flex-1 overflow-hidden">
-          <header className="h-14 border-b flex items-center px-4 gap-4">
+          <header className="h-14 border-b flex items-center px-4 gap-2">
             <SidebarTrigger data-testid="button-sidebar-toggle" />
+            <BreadcrumbNav location={location} menuGroups={visibleMenuGroups} />
             <div className="flex-1" />
           </header>
 

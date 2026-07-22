@@ -32,7 +32,9 @@ import {
   ChevronLeft, ChevronRight, LayoutList, Image, Star,
   Search, ArrowUpDown, X, Pencil, Copy, ExternalLink, Download,
   Globe, FileText, Link, Languages, Wand2, BookOpen,
+  AlertTriangle, Clock, Loader2,
 } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { formatDate } from '@/lib/utils';
@@ -934,6 +936,7 @@ export default function Blog({ embedded }: { embedded?: boolean } = {}) {
   const [generatingId, setGeneratingId] = useState<string | null>(null);
   const [translatingId, setTranslatingId] = useState<string | null>(null);
   const [aipoweringId, setAipoweringId] = useState<string | null>(null);
+  const [publishConfirmPost, setPublishConfirmPost] = useState<BlogPostWithTranslations | null>(null);
   const [view, setView] = useState<'list' | 'calendar'>('list');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -980,10 +983,11 @@ export default function Blog({ embedded }: { embedded?: boolean } = {}) {
     }
   }, [schedule]);
 
-  const { data: tenantData } = useQuery<{ domain?: string }>({
+  const { data: tenantData } = useQuery<{ domain?: string; status?: string }>({
     queryKey: ['/api/tenant'],
   });
   const tenantDomain = tenantData?.domain || window.location.hostname;
+  const isSiteDraft = tenantData?.status !== 'yayinda';
 
   const createMutation = useMutation({
     mutationFn: (data: any) => apiRequest('POST', '/api/admin/blog' + apiSuffix, data),
@@ -1085,6 +1089,13 @@ export default function Blog({ embedded }: { embedded?: boolean } = {}) {
       if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error || `HTTP ${res.status}`); }
       queryClient.invalidateQueries({ queryKey: ['/api/admin/blog' + apiSuffix] });
       toast({ title: 'Translation started!', description: 'Translating to 9 languages in the background — the language badges will update automatically.' });
+      if (post.status === 'yayinda') {
+        toast({
+          title: 'İçerik güncellendi — yazi taslağa alındı',
+          description: 'Çeviriler yenilendi. Tekrar yayınlamayı unutmayın.',
+          variant: 'default',
+        });
+      }
     } catch (e: any) {
       toast({ title: 'Translation failed', description: e.message, variant: 'destructive' });
     } finally {
@@ -1103,6 +1114,13 @@ export default function Blog({ embedded }: { embedded?: boolean } = {}) {
         toast({ title: 'English article ready!', description: 'Translating to 9 languages in the background — the status badge will update automatically.' });
       } else {
         toast({ title: `AI generated ${data.translations?.length || 0} translations` });
+      }
+      if (data.status === 'taslak' || post.status === 'yayinda') {
+        toast({
+          title: 'İçerik güncellendi — yazi taslağa alındı',
+          description: 'AI içerik yenilendi. Tekrar yayınlamayı unutmayın.',
+          variant: 'default',
+        });
       }
     } catch (e: any) {
       toast({ title: 'Generation failed', description: e.message, variant: 'destructive' });
@@ -1149,6 +1167,18 @@ export default function Blog({ embedded }: { embedded?: boolean } = {}) {
   return (
     <EmbeddableLayout embedded={embedded}>
       <div className="space-y-6 p-6">
+
+        {/* ── Madde 3: Site draft uyarı banner'ı ───────────────────────── */}
+        {isSiteDraft && tenantData && (
+          <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-amber-800 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-300" data-testid="banner-site-draft">
+            <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+            <p className="text-sm">
+              <strong>Bu site henüz canlıya alınmadı.</strong>{' '}
+              Yayınladığınız yazılar, site yayına girene kadar herkese açık görünmeyecek.
+            </p>
+          </div>
+        )}
+
         {/* ── Page header ───────────────────────────────────────────────── */}
         <div className="flex items-center justify-between">
           <div>
@@ -1292,7 +1322,36 @@ export default function Blog({ embedded }: { embedded?: boolean } = {}) {
                   </div>
                   <div>
                     <Label>Publish At (optional)</Label>
-                    <Input type="datetime-local" value={newPublishAt} onChange={e => setNewPublishAt(e.target.value)} data-testid="input-post-publish-at" />
+                    <div className="space-y-1">
+                      <div className="relative">
+                        <Clock className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                        <Input
+                          type="datetime-local"
+                          value={newPublishAt}
+                          min={new Date().toISOString().slice(0, 16)}
+                          onChange={e => {
+                            const val = e.target.value;
+                            if (!val || new Date(val) > new Date()) {
+                              setNewPublishAt(val);
+                            } else {
+                              setNewPublishAt('');
+                              toast({ title: 'Geçmiş tarih seçilemez', description: 'Lütfen gelecekte bir tarih seçin.', variant: 'destructive' });
+                            }
+                          }}
+                          className="pl-8"
+                          data-testid="input-post-publish-at"
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground flex items-center gap-1">
+                        <Clock className="h-3 w-3" />
+                        Format: YYYY-MM-DD HH:MM — geçmiş tarih girilemez
+                      </p>
+                      {newPublishAt && new Date(newPublishAt) <= new Date() && (
+                        <p className="text-xs text-destructive flex items-center gap-1">
+                          <AlertTriangle className="h-3 w-3" />Seçilen tarih geçmişte, lütfen temizleyin.
+                        </p>
+                      )}
+                    </div>
                   </div>
                   <Button className="w-full" disabled={!newKeyword || createMutation.isPending}
                     onClick={() => createMutation.mutate({ keyword: newKeyword, backlinkSites: newBacklinks.split(/[\n,]/).map(s => s.trim()).filter(Boolean), status: newStatus, publishAt: newPublishAt || null })}
@@ -1414,7 +1473,17 @@ export default function Blog({ embedded }: { embedded?: boolean } = {}) {
 
             <CardContent className="p-0">
               {isLoading ? (
-                <div className="p-6 text-center text-muted-foreground">Loading…</div>
+                <div className="p-4 space-y-2" data-testid="blog-skeleton">
+                  {[...Array(4)].map((_, i) => (
+                    <div key={i} className="flex items-center gap-3 px-2">
+                      <Skeleton className="h-4 w-4 rounded" />
+                      <Skeleton className="h-4 flex-1" />
+                      <Skeleton className="h-4 w-16" />
+                      <Skeleton className="h-4 w-20" />
+                      <Skeleton className="h-4 w-24" />
+                    </div>
+                  ))}
+                </div>
               ) : filteredPosts.length === 0 ? (
                 <div className="p-12 text-center text-muted-foreground">
                   {posts.length === 0
@@ -1423,7 +1492,8 @@ export default function Blog({ embedded }: { embedded?: boolean } = {}) {
                   }
                 </div>
               ) : (
-                <Table>
+                <div className="overflow-x-auto">
+                  <Table className="table-fixed w-full min-w-[700px]">
                   <TableHeader>
                     <TableRow>
                       <TableHead className="w-10 pl-4">
@@ -1434,11 +1504,11 @@ export default function Blog({ embedded }: { embedded?: boolean } = {}) {
                           data-testid="checkbox-select-all"
                         />
                       </TableHead>
-                      <TableHead>Title / Keyword</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>SEO</TableHead>
-                      <TableHead>Langs</TableHead>
-                      <TableHead>Publish At</TableHead>
+                      <TableHead className="w-[28%]">Title / Keyword</TableHead>
+                      <TableHead className="w-24">Status</TableHead>
+                      <TableHead className="w-16">SEO</TableHead>
+                      <TableHead className="w-28">Langs</TableHead>
+                      <TableHead className="w-32">Publish At</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -1545,9 +1615,17 @@ export default function Blog({ embedded }: { embedded?: boolean } = {}) {
 
                             {post.status !== 'yayinda' && (
                               <Button size="sm" variant="outline" className="text-green-700 border-green-200 hover:bg-green-50"
-                                onClick={() => approveMutation.mutate(post.id)} disabled={approveMutation.isPending}
+                                onClick={() => {
+                                  if (post.status === 'zamanli') {
+                                    setPublishConfirmPost(post);
+                                  } else {
+                                    approveMutation.mutate(post.id);
+                                  }
+                                }}
+                                disabled={approveMutation.isPending}
                                 data-testid={`button-approve-${post.id}`} title="Publish now">
-                                <CheckCircle className="w-3.5 h-3.5 mr-1" />Publish
+                                {approveMutation.isPending ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5 mr-1" />}
+                                Publish
                               </Button>
                             )}
 
@@ -1561,7 +1639,8 @@ export default function Blog({ embedded }: { embedded?: boolean } = {}) {
                       </TableRow>
                     ))}
                   </TableBody>
-                </Table>
+                  </Table>
+                </div>
               )}
             </CardContent>
           </Card>
@@ -1623,6 +1702,44 @@ export default function Blog({ embedded }: { embedded?: boolean } = {}) {
           {imagesPost && <BlogImagesDialog post={imagesPost} onClose={() => setImagesPost(null)} apiSuffix={apiSuffix} />}
         </DialogContent>
       </Dialog>
+
+      {/* Zamanli post publish confirmation dialog */}
+      <AlertDialog open={!!publishConfirmPost} onOpenChange={open => { if (!open) setPublishConfirmPost(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Clock className="w-4 h-4 text-amber-500" />
+              Zamanlanmış Yazıyı Şimdi Yayınla
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {publishConfirmPost && (
+                <>
+                  Bu yazı{' '}
+                  <span className="font-medium text-foreground">
+                    {publishConfirmPost.publishAt ? formatDate(publishConfirmPost.publishAt) : ''}
+                  </span>{' '}
+                  için zamanlanmış. Şimdi yayınlamak istediğinizden emin misiniz?
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-publish-confirm-cancel">İptal</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-green-600 text-white hover:bg-green-700"
+              onClick={() => {
+                if (publishConfirmPost) {
+                  approveMutation.mutate(publishConfirmPost.id);
+                  setPublishConfirmPost(null);
+                }
+              }}
+              data-testid="button-publish-confirm-ok"
+            >
+              <CheckCircle className="w-4 h-4 mr-1" />Şimdi Yayınla
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Bulk delete confirmation */}
       <AlertDialog open={bulkDeleteConfirm} onOpenChange={setBulkDeleteConfirm}>
