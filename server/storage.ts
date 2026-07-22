@@ -46,7 +46,10 @@ export interface IStorage {
   // Admin Users
   getAdminById(id: string): Promise<AdminUser | undefined>;
   getAdminByEmail(email: string): Promise<AdminUser | undefined>;
+  getAllAdminUsers(): Promise<AdminUser[]>;
   createAdminUser(admin: InsertAdminUser): Promise<AdminUser>;
+  updateAdminUser(id: string, data: Partial<InsertAdminUser>): Promise<AdminUser | undefined>;
+  deleteAdminUser(id: string): Promise<boolean>;
   updateAdminPassword(id: string, passwordHash: string, mustChangePassword: boolean): Promise<void>;
 
   // Sections
@@ -243,9 +246,23 @@ export class DatabaseStorage implements IStorage {
     return admin;
   }
 
+  async getAllAdminUsers(): Promise<AdminUser[]> {
+    return db.select().from(adminUsers).orderBy(adminUsers.createdAt);
+  }
+
   async createAdminUser(admin: InsertAdminUser): Promise<AdminUser> {
     const [created] = await db.insert(adminUsers).values(admin).returning();
     return created;
+  }
+
+  async updateAdminUser(id: string, data: Partial<InsertAdminUser>): Promise<AdminUser | undefined> {
+    const [updated] = await db.update(adminUsers).set(data).where(eq(adminUsers.id, id)).returning();
+    return updated;
+  }
+
+  async deleteAdminUser(id: string): Promise<boolean> {
+    const result = await db.delete(adminUsers).where(eq(adminUsers.id, id));
+    return (result.rowCount ?? 0) > 0;
   }
 
   async updateAdminPassword(id: string, passwordHash: string, mustChangePassword: boolean): Promise<void> {

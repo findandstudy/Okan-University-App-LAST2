@@ -34,6 +34,7 @@ import BlogIndex from "@/pages/Blog";
 import BlogPost from "@/pages/BlogPost";
 import PreviewPage from "@/pages/admin/PreviewPage";
 import BlockInventory from "@/pages/admin/BlockInventory";
+import AdminUsers from "@/pages/admin/AdminUsers";
 import NotFound from "@/pages/not-found";
 
 function WithDefaultSite({ children }: { children: React.ReactNode }) {
@@ -108,6 +109,7 @@ function Router() {
       <Route path="/admin/ai-settings" component={() => <RequireAuth><WithDefaultSite><AISettings /></WithDefaultSite></RequireAuth>} />
       <Route path="/admin/content-generator" component={() => <RequireAuth><WithDefaultSite><ContentGenerator /></WithDefaultSite></RequireAuth>} />
       <Route path="/admin/blog" component={() => <RequireAuth><WithDefaultSite><BlogAdmin /></WithDefaultSite></RequireAuth>} />
+      <Route path="/admin/users" component={() => <RequireAuth><AdminUsers /></RequireAuth>} />
       <Route path="/admin/blocks/inventory" component={() => <RequireAuth><BlockInventory /></RequireAuth>} />
       <Route path="/admin/sites" component={() => <RequireAuth><Sites /></RequireAuth>} />
       <Route path="/admin/sites/:tenantId" component={SiteEditor} />

@@ -463,6 +463,82 @@ export async function registerRoutes(
     }
   });
 
+  // ─── Admin User Management (super_admin only) ────────────────────────────────
+  app.get("/api/admin/users", requireAdmin, async (req, res) => {
+    try {
+      const actor = await storage.getAdminById(req.session.adminId!);
+      if (!actor || actor.role !== 'super_admin') return res.status(403).json({ error: "Forbidden" });
+      const users = await storage.getAllAdminUsers();
+      res.json(users.map(u => ({ ...u, passwordHash: undefined })));
+    } catch {
+      res.status(500).json({ error: "Failed to fetch admin users" });
+    }
+  });
+
+  app.post("/api/admin/users", requireAdmin, async (req, res) => {
+    try {
+      const actor = await storage.getAdminById(req.session.adminId!);
+      if (!actor || actor.role !== 'super_admin') return res.status(403).json({ error: "Forbidden" });
+      const { email, name, password, role, tenantId } = req.body;
+      if (!email || !name || !password) return res.status(400).json({ error: "email, name and password required" });
+      if (password.length < 8) return res.status(400).json({ error: "Password must be at least 8 characters" });
+      const existing = await storage.getAdminByEmail(email);
+      if (existing) return res.status(409).json({ error: "An admin with this email already exists" });
+      const passwordHash = await bcrypt.hash(password, 10);
+      const newAdmin = await storage.createAdminUser({
+        email,
+        name,
+        passwordHash,
+        role: role || 'admin',
+        tenantId: tenantId || null,
+        isActive: true,
+        mustChangePassword: true,
+      });
+      res.json({ ...newAdmin, passwordHash: undefined });
+    } catch (err: any) {
+      console.error("Create admin user error:", err);
+      res.status(500).json({ error: err?.message || "Failed to create admin user" });
+    }
+  });
+
+  app.patch("/api/admin/users/:id", requireAdmin, async (req, res) => {
+    try {
+      const actor = await storage.getAdminById(req.session.adminId!);
+      if (!actor || actor.role !== 'super_admin') return res.status(403).json({ error: "Forbidden" });
+      const id = req.params.id as string;
+      const { name, email, role, tenantId, isActive } = req.body;
+      const updateData: Record<string, unknown> = {};
+      if (name !== undefined) updateData.name = name;
+      if (email !== undefined) {
+        const existing = await storage.getAdminByEmail(email);
+        if (existing && existing.id !== id) return res.status(409).json({ error: "Email already in use" });
+        updateData.email = email;
+      }
+      if (role !== undefined) updateData.role = role;
+      if (tenantId !== undefined) updateData.tenantId = tenantId || null;
+      if (isActive !== undefined) updateData.isActive = isActive;
+      const updated = await storage.updateAdminUser(id, updateData as any);
+      if (!updated) return res.status(404).json({ error: "Admin user not found" });
+      res.json({ ...updated, passwordHash: undefined });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || "Failed to update admin user" });
+    }
+  });
+
+  app.delete("/api/admin/users/:id", requireAdmin, async (req, res) => {
+    try {
+      const actor = await storage.getAdminById(req.session.adminId!);
+      if (!actor || actor.role !== 'super_admin') return res.status(403).json({ error: "Forbidden" });
+      const id = req.params.id as string;
+      if (id === actor.id) return res.status(400).json({ error: "You cannot delete your own account" });
+      const deleted = await storage.deleteAdminUser(id);
+      if (!deleted) return res.status(404).json({ error: "Admin user not found" });
+      res.json({ success: true });
+    } catch {
+      res.status(500).json({ error: "Failed to delete admin user" });
+    }
+  });
+
   // ─── Admin Stats ────────────────────────────────────────────────────────────
   app.get("/api/admin/stats", requireAdmin, resolveTenant, requireAdminTenantAccess, async (req, res) => {
     try {

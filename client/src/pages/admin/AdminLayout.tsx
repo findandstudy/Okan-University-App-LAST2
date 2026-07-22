@@ -40,6 +40,7 @@ import {
   BookOpen,
   ImageIcon,
   Layers,
+  Users,
   type LucideIcon,
 } from 'lucide-react';
 import type { Tenant } from '@shared/schema';
@@ -95,6 +96,7 @@ const menuGroups: NavGroup[] = [
     items: [
       { title: 'Theme', url: '/admin/theme', icon: Palette },
       { title: 'Contact Form', url: '/admin/contact-form', icon: FormInput },
+      { title: 'Admin Users', url: '/admin/users', icon: Users },
     ],
   },
 ];
