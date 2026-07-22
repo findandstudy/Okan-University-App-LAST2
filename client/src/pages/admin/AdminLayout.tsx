@@ -118,6 +118,9 @@ function getInitialExpandedState(): Record<string, boolean> {
   }, {} as Record<string, boolean>);
 }
 
+const SUPER_ADMIN_ONLY_GROUPS = new Set(['Sites']);
+const SUPER_ADMIN_ONLY_URLS = new Set(['/admin/users']);
+
 export default function AdminLayout({ children }: AdminLayoutProps) {
   const [location, navigate] = useLocation();
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(getInitialExpandedState);
@@ -125,6 +128,21 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   const { data: tenant } = useQuery<Tenant>({
     queryKey: ['/api/tenant'],
   });
+
+  const { data: me } = useQuery<{ id: string; email: string; name: string; role: string; tenantId: string | null }>({
+    queryKey: ['/api/admin/me'],
+    staleTime: 60_000,
+  });
+
+  const isSuperAdmin = me?.role === 'super_admin';
+
+  const visibleMenuGroups = menuGroups
+    .filter(group => isSuperAdmin || !SUPER_ADMIN_ONLY_GROUPS.has(group.title))
+    .map(group => ({
+      ...group,
+      items: group.items.filter(item => isSuperAdmin || !SUPER_ADMIN_ONLY_URLS.has(item.url)),
+    }))
+    .filter(group => group.items.length > 0);
 
   useEffect(() => {
     const isAuth = localStorage.getItem('adminAuth');
@@ -190,7 +208,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
               </SidebarGroupContent>
             </SidebarGroup>
 
-            {menuGroups.map((group) => (
+            {visibleMenuGroups.map((group) => (
               <Collapsible
                 key={group.title}
                 open={expandedGroups[group.title]}
