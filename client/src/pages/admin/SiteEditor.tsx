@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams, Link } from 'wouter';
+import { useParams, Link, useLocation } from 'wouter';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import AdminLayout from './AdminLayout';
 import { SiteProvider } from '@/lib/siteContext';
@@ -1056,6 +1056,8 @@ export default function SiteEditor() {
   const tenantId = params.tenantId;
   const { toast } = useToast();
 
+  const [, navigate] = useLocation();
+
   const { data: tenant, isLoading } = useQuery<Tenant>({
     queryKey: ['/api/admin/tenants', tenantId],
     queryFn: async () => {
@@ -1064,6 +1066,18 @@ export default function SiteEditor() {
       return res.json();
     },
     enabled: !!tenantId,
+  });
+
+  const { data: me } = useQuery<{ id: string; role: string; tenantId: string | null }>({
+    queryKey: ['/api/admin/me'],
+    staleTime: 60_000,
+  });
+
+  const isSuperAdmin = me?.role === 'super_admin';
+
+  const { data: allTenants = [] } = useQuery<Tenant[]>({
+    queryKey: ['/api/admin/tenants'],
+    enabled: isSuperAdmin,
   });
 
   const [exportingZip, setExportingZip] = useState(false);
@@ -1175,10 +1189,35 @@ export default function SiteEditor() {
                   Sites
                 </Button>
               </Link>
-              <div>
-                <h1 className="text-xl font-bold">{isLoading ? '...' : (tenant?.universityName || 'Site Editor')}</h1>
-                <p className="text-xs text-muted-foreground">{tenant?.domain}</p>
-              </div>
+              {isSuperAdmin && allTenants.length > 1 ? (
+                <div className="flex flex-col gap-0.5">
+                  <Select
+                    value={tenantId}
+                    onValueChange={(id) => navigate(`/admin/sites/${id}`)}
+                  >
+                    <SelectTrigger
+                      className="h-8 text-sm font-semibold border-0 shadow-none px-1 focus:ring-0 w-auto max-w-[260px] gap-1"
+                      data-testid="select-tenant-switcher"
+                    >
+                      <SelectValue placeholder="Select site…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {allTenants.map(t => (
+                        <SelectItem key={t.id} value={t.id} data-testid={`option-tenant-${t.id}`}>
+                          <span className="font-medium">{t.universityName}</span>
+                          <span className="ml-2 text-xs text-muted-foreground">{t.domain}</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground px-1">{tenant?.domain}</p>
+                </div>
+              ) : (
+                <div>
+                  <h1 className="text-xl font-bold">{isLoading ? '...' : (tenant?.universityName || 'Site Editor')}</h1>
+                  <p className="text-xs text-muted-foreground">{tenant?.domain}</p>
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-2">
               <Badge variant={STATUS_VARIANTS[(tenant?.status as string) ?? 'taslak'] ?? 'secondary'}>
