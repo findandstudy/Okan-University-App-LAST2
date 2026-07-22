@@ -925,7 +925,7 @@ function BlogCalendar({ posts }: { posts: BlogPostWithTranslations[] }) {
 }
 
 export default function Blog({ embedded }: { embedded?: boolean } = {}) {
-  const { apiSuffix } = useSiteContext();
+  const { apiSuffix, tenantId } = useSiteContext();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [addDialogOpen, setAddDialogOpen] = useState(false);
@@ -983,11 +983,17 @@ export default function Blog({ embedded }: { embedded?: boolean } = {}) {
     }
   }, [schedule]);
 
+  const adminTenantQueryKey = tenantId && tenantId !== 'default'
+    ? [`/api/admin/tenants/${tenantId}`]
+    : ['/api/tenant' + apiSuffix];
   const { data: tenantData } = useQuery<{ domain?: string; status?: string }>({
-    queryKey: ['/api/tenant'],
+    queryKey: adminTenantQueryKey,
+    queryFn: tenantId && tenantId !== 'default'
+      ? () => fetch(`/api/admin/tenants/${tenantId}`, { credentials: 'include' }).then(r => r.json())
+      : undefined,
   });
   const tenantDomain = tenantData?.domain || window.location.hostname;
-  const isSiteDraft = tenantData?.status !== 'yayinda';
+  const isSiteDraft = !!tenantData && tenantData.status !== 'yayinda';
 
   const createMutation = useMutation({
     mutationFn: (data: any) => apiRequest('POST', '/api/admin/blog' + apiSuffix, data),
@@ -1169,7 +1175,7 @@ export default function Blog({ embedded }: { embedded?: boolean } = {}) {
       <div className="space-y-6 p-6">
 
         {/* ── Madde 3: Site draft uyarı banner'ı ───────────────────────── */}
-        {isSiteDraft && tenantData && (
+        {isSiteDraft && (
           <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-amber-800 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-300" data-testid="banner-site-draft">
             <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
             <p className="text-sm">
