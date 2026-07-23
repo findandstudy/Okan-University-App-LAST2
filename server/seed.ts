@@ -12,7 +12,7 @@ const defaultTenant = {
 const demoAdmin = {
   id: 'admin-1',
   tenantId: 'default',
-  email: 'admin@okan.edu.tr',
+  email: 'en@findandstudy.com',
   passwordHash: 'admin123',
   name: 'Admin User',
   role: 'super_admin',
@@ -51,12 +51,12 @@ async function seed() {
       console.log('Default tenant already exists');
     }
 
-    const existingAdmin = await db.select().from(adminUsers).where(eq(adminUsers.email, 'admin@okan.edu.tr'));
+    const existingAdmin = await db.select().from(adminUsers).where(eq(adminUsers.email, 'en@findandstudy.com'));
     
     if (existingAdmin.length === 0) {
       console.log('Creating demo admin user...');
       await db.insert(adminUsers).values(demoAdmin);
-      console.log('✅ Created admin user (admin@okan.edu.tr / admin123)');
+      console.log('✅ Created admin user (en@findandstudy.com / admin123)');
     } else {
       console.log('Demo admin already exists');
     }

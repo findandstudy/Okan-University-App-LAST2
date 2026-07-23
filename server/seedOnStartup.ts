@@ -143,21 +143,21 @@ export async function seedDatabase() {
     }
 
     // Admin — create or migrate password to bcrypt hash
-    const existingAdmins = await db.select().from(adminUsers).where(eq(adminUsers.email, 'admin@okan.edu.tr'));
+    const existingAdmins = await db.select().from(adminUsers).where(eq(adminUsers.email, 'en@findandstudy.com'));
     if (existingAdmins.length === 0) {
       console.log('Creating demo admin user...');
       const passwordHash = await bcrypt.hash('admin123', BCRYPT_ROUNDS);
       await db.insert(adminUsers).values({
         id: 'admin-1',
         tenantId: 'default',
-        email: 'admin@okan.edu.tr',
+        email: 'en@findandstudy.com',
         passwordHash,
         name: 'Admin User',
         role: 'super_admin',
         isActive: true,
         mustChangePassword: true,
       });
-      console.log('Created admin user (admin@okan.edu.tr / admin123) — mustChangePassword=true');
+      console.log('Created admin user (en@findandstudy.com / admin123) — mustChangePassword=true');
     } else {
       // Migrate plain-text password to bcrypt if needed
       const existing = existingAdmins[0];

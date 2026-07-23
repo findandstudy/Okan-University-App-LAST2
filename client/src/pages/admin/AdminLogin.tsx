@@ -88,7 +88,7 @@ export default function AdminLogin() {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="admin@okan.edu.tr"
+                  placeholder="en@findandstudy.com"
                   className="pl-10"
                   required
                   data-testid="input-email"
