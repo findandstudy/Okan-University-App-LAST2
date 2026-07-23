@@ -49,7 +49,13 @@ interface ImageSettingsData {
 
 export default function AISettings({ embedded }: { embedded?: boolean } = {}) {
   const { toast } = useToast();
-  const { apiSuffix } = useSiteContext();
+  const { apiSuffix, tenantId } = useSiteContext();
+  // Non-default sites inherit the global (default) AI provider + key + image
+  // source automatically (server-side fallback), so per-site setup is not
+  // needed. Show an inherited notice instead of the config form unless the
+  // admin explicitly chooses to override for this one site.
+  const isSubSite = !!tenantId && tenantId !== 'default';
+  const [override, setOverride] = useState(false);
 
   // ── AI Text settings ──────────────────────────────────────────────────────
   const [provider, setProvider] = useState<'anthropic' | 'openai'>('anthropic');
@@ -176,6 +182,23 @@ export default function AISettings({ embedded }: { embedded?: boolean } = {}) {
           <p className="text-muted-foreground">Configure AI provider for content generation and image source for blog posts.</p>
         </div>
 
+        {isSubSite && (
+          <Card>
+            <CardContent className="flex items-start gap-3 p-4">
+              <CheckCircle2 className="h-5 w-5 text-green-600 mt-0.5 shrink-0" />
+              <div className="space-y-1">
+                <p className="text-sm">
+                  <strong>This site uses your global AI settings.</strong> The AI provider, API key, and image source you configure once on your <strong>default</strong> site are applied to every site automatically — no per-site setup needed.
+                </p>
+                <Button variant="ghost" className="h-auto p-0 text-xs underline text-primary hover:bg-transparent" onClick={() => setOverride(o => !o)} data-testid="button-toggle-ai-override">
+                  {override ? 'Use global settings' : 'Override for this site (advanced)'}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {(!isSubSite || override) && (<>
         {/* ── AI Text Provider ─────────────────────────────── */}
         <Card>
           <CardHeader>
@@ -396,6 +419,7 @@ export default function AISettings({ embedded }: { embedded?: boolean } = {}) {
             )}
           </CardContent>
         </Card>
+        </>)}
 
         {/* ── How it works ─────────────────────────────────────── */}
         <Card>
