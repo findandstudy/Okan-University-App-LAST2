@@ -216,6 +216,14 @@ export class DatabaseStorage implements IStorage {
     await db.delete(tenantThemes).where(eq(tenantThemes.tenantId, id));
     await db.delete(tenantDomains).where(eq(tenantDomains.tenantId, id));
     await db.delete(mediaAssets).where(eq(mediaAssets.tenantId, id));
+    await db.delete(menuItems).where(eq(menuItems.tenantId, id));
+    await db.delete(trustBadges).where(eq(trustBadges.tenantId, id));
+    await db.delete(integrationSettings).where(eq(integrationSettings.tenantId, id));
+    await db.delete(blogPostImages).where(eq(blogPostImages.tenantId, id));
+    await db.delete(blogPostTranslations).where(eq(blogPostTranslations.tenantId, id));
+    await db.delete(blogSchedule).where(eq(blogSchedule.tenantId, id));
+    await db.delete(blogPosts).where(eq(blogPosts.tenantId, id));
+    await db.delete(adminUsers).where(eq(adminUsers.tenantId, id));
     const result = await db.delete(tenants).where(eq(tenants.id, id)).returning();
     return result.length > 0;
   }
