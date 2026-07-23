@@ -195,6 +195,36 @@ export default function BlogPost() {
     }
   }, [data, lang]);
 
+  // Inject hreflang <link> elements into <head> (not body) for valid HTML + bots
+  useEffect(() => {
+    const alternates = data?.alternates;
+    if (!alternates) return;
+    const inserted: HTMLLinkElement[] = [];
+    for (const [l, s] of Object.entries(alternates)) {
+      const href = `${window.location.origin}${l === 'en' ? '' : `/${l}`}/blog/${s}`;
+      const link = document.createElement('link');
+      link.rel = 'alternate';
+      link.hreflang = l;
+      link.href = href;
+      document.head.appendChild(link);
+      inserted.push(link);
+    }
+    // x-default → English or first available
+    const xHref = alternates['en']
+      ? `${window.location.origin}/blog/${alternates['en']}`
+      : Object.entries(alternates)[0]
+        ? `${window.location.origin}/${Object.entries(alternates)[0][0]}/blog/${Object.entries(alternates)[0][1]}`
+        : null;
+    if (xHref) {
+      const xLink = document.createElement('link');
+      xLink.rel = 'alternate';
+      xLink.hreflang = 'x-default';
+      xLink.href = xHref;
+      document.head.appendChild(xLink);
+      inserted.push(xLink);
+    }
+    return () => { inserted.forEach(el => el.parentNode?.removeChild(el)); };
+  }, [data]);
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -222,35 +252,6 @@ export default function BlogPost() {
   const universityName = tenant?.universityName || 'University';
   const logoUrl = tenant?.logoUrl || '';
 
-  // Inject hreflang <link> elements into <head> (not body) for valid HTML + bots
-  useEffect(() => {
-    if (!alternates) return;
-    const inserted: HTMLLinkElement[] = [];
-    for (const [l, s] of Object.entries(alternates)) {
-      const href = `${window.location.origin}${l === 'en' ? '' : `/${l}`}/blog/${s}`;
-      const link = document.createElement('link');
-      link.rel = 'alternate';
-      link.hreflang = l;
-      link.href = href;
-      document.head.appendChild(link);
-      inserted.push(link);
-    }
-    // x-default → English or first available
-    const xHref = alternates['en']
-      ? `${window.location.origin}/blog/${alternates['en']}`
-      : Object.entries(alternates)[0]
-        ? `${window.location.origin}/${Object.entries(alternates)[0][0]}/blog/${Object.entries(alternates)[0][1]}`
-        : null;
-    if (xHref) {
-      const xLink = document.createElement('link');
-      xLink.rel = 'alternate';
-      xLink.hreflang = 'x-default';
-      xLink.href = xHref;
-      document.head.appendChild(xLink);
-      inserted.push(xLink);
-    }
-    return () => { inserted.forEach(el => el.parentNode?.removeChild(el)); };
-  }, [alternates]);
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
