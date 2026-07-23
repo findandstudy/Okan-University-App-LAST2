@@ -3,7 +3,12 @@ import { callAI, parseAiJson } from './aiService';
 import { translateText } from './aiTranslation';
 import { SUPPORTED_LANGUAGES } from '@shared/schema';
 
-const _require = createRequire(import.meta.url);
+// import.meta.url is undefined in esbuild's CJS bundle output, which makes
+// createRequire throw ("Received undefined") at module load and breaks every
+// contentGenerator feature. Fall back to the CJS __filename the bundle
+// provides, so this works both as ESM (dev/tsx) and bundled CJS (prod).
+declare const __filename: string;
+const _require = createRequire(import.meta.url || __filename);
 
 export interface GeneratedContent {
   hero: {
