@@ -1,5 +1,25 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
+// In the admin preview, the public site loads inside an iframe at
+// `/<lang>?_tid=<tenant>`. The public SPA's data calls (e.g. /api/sections)
+// otherwise carry no tenant and resolve to the host (the default site), so the
+// preview showed the default site's content instead of the previewed one.
+// Forward the page URL's _tid to our own /api/* requests. Real public sites on
+// their own domain have no _tid (host resolution); admin pages use path params
+// and pass their own _tid explicitly, so this is a no-op there.
+function withTenantScope(url: string): string {
+  try {
+    if (typeof window === "undefined") return url;
+    const pageTid = new URLSearchParams(window.location.search).get("_tid");
+    if (!pageTid) return url;
+    if (!url.startsWith("/api/")) return url;
+    if (/[?&]_tid=/.test(url)) return url;
+    return url + (url.includes("?") ? "&" : "?") + "_tid=" + encodeURIComponent(pageTid);
+  } catch {
+    return url;
+  }
+}
+
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;
@@ -12,7 +32,7 @@ export async function apiRequest(
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
-  const res = await fetch(url, {
+  const res = await fetch(withTenantScope(url), {
     method,
     headers: data ? { "Content-Type": "application/json" } : {},
     body: data ? JSON.stringify(data) : undefined,
@@ -29,7 +49,7 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
-    const res = await fetch(queryKey.join("/") as string, {
+    const res = await fetch(withTenantScope(queryKey.join("/") as string), {
       credentials: "include",
     });
 
