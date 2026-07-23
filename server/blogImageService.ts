@@ -33,15 +33,30 @@ export interface GeneratedImage {
 // ── Config helpers ─────────────────────────────────────────────────────────
 
 export async function getImageConfig(tenantId: string): Promise<ImageConfig | null> {
-  const [row] = await db
-    .select()
-    .from(integrationSettings)
-    .where(and(
-      eq(integrationSettings.tenantId, tenantId),
-      eq(integrationSettings.integrationType, 'image'),
-    ));
-  if (!row?.settings) return null;
-  return row.settings as ImageConfig;
+  // Mirror getAIConfig(): try the requested tenant first, then fall back to the
+  // global 'default' config so every site can use the single shared image key
+  // without reconfiguring. A sub-tenant's own row is only honoured when it
+  // actually provides a usable AI/stock source with a key; a keyless or
+  // media_library row (what cloned sites get by default) is skipped so the
+  // tenant inherits the default's key instead of failing "not configured".
+  const tenantsToTry = tenantId === 'default' ? ['default'] : [tenantId, 'default'];
+  for (const tid of tenantsToTry) {
+    const [row] = await db
+      .select()
+      .from(integrationSettings)
+      .where(and(
+        eq(integrationSettings.tenantId, tid),
+        eq(integrationSettings.integrationType, 'image'),
+      ));
+    if (!row?.settings) continue;
+    const cfg = row.settings as ImageConfig;
+    if (tid !== 'default' && (cfg.source === 'media_library' || !cfg.encryptedApiKey)) {
+      // sub-tenant has no usable key of its own → fall through to default
+      continue;
+    }
+    return cfg;
+  }
+  return null;
 }
 
 export async function saveImageConfig(tenantId: string, config: ImageConfig): Promise<void> {
