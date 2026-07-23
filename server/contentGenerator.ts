@@ -28,21 +28,24 @@ export interface GeneratedContent {
   };
 }
 
-const PRIVATE_IP_RANGES = [
-  /^127\./,
-  /^10\./,
-  /^172\.(1[6-9]|2\d|3[01])\./,
-  /^192\.168\./,
-  /^169\.254\./,
-  /^::1$/,
-  /^fc00:/i,
-  /^fe80:/i,
-  /^0\./,
-  /^localhost$/i,
-];
-
 function isPrivateHost(hostname: string): boolean {
-  return PRIVATE_IP_RANGES.some(re => re.test(hostname));
+  // NOTE: keep this list *inside* the function. As a module-level const it gets
+  // bundled (esbuild __esm) such that this hoisted function can run before the
+  // const is initialised, making it `undefined` at call time and throwing
+  // "Cannot read properties of undefined (reading 'some')" on every URL scrape.
+  const privateRanges = [
+    /^127\./,
+    /^10\./,
+    /^172\.(1[6-9]|2\d|3[01])\./,
+    /^192\.168\./,
+    /^169\.254\./,
+    /^::1$/,
+    /^fc00:/i,
+    /^fe80:/i,
+    /^0\./,
+    /^localhost$/i,
+  ];
+  return privateRanges.some(re => re.test(hostname));
 }
 
 export async function extractTextFromUrl(url: string): Promise<string> {
