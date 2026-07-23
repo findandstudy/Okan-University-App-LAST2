@@ -2909,10 +2909,9 @@ Return ONLY this JSON:
   "metaDesc": "140-155 chars, keyword + benefit + CTA"
 }`;
 
-      const raw = await callAI(prompt, req.tenantId, systemPrompt);
-      const match = raw.match(/\{[\s\S]*\}/);
-      if (!match) throw new Error('AI returned invalid JSON');
-      const parsed = JSON.parse(match[0]) as { title: string; content: string; metaTitle: string; metaDesc: string };
+      const { parseAiJson } = await import('./aiService');
+      const raw = await callAI(prompt, req.tenantId, systemPrompt, true);
+      const parsed = parseAiJson<{ title: string; content: string; metaTitle: string; metaDesc: string }>(raw);
 
       const slug = toSlug(parsed.title);
 

@@ -58,7 +58,7 @@ export function defaultModel(provider: string): string {
   return 'gpt-4o-mini';
 }
 
-export async function callAI(prompt: string, tenantId: string, systemPrompt?: string): Promise<string> {
+export async function callAI(prompt: string, tenantId: string, systemPrompt?: string, jsonMode = false): Promise<string> {
   const config = await getAIConfig(tenantId);
   if (!config) throw new Error('AI not configured for this tenant');
   const apiKey = decryptApiKey(config.encryptedApiKey);
@@ -85,8 +85,77 @@ export async function callAI(prompt: string, tenantId: string, systemPrompt?: st
       model: config.model,
       messages,
       max_tokens: 8192,
+      ...(jsonMode ? { response_format: { type: 'json_object' as const } } : {}),
     });
     return response.choices[0]?.message?.content || '';
+  }
+}
+
+/**
+ * Repair the most common LLM JSON mistakes *inside string values* without
+ * touching structural characters: invalid backslash escapes (e.g. "\(" which
+ * makes JSON.parse throw "Bad escaped character in JSON") and raw control
+ * characters (unescaped newlines/tabs). Walks the text with a tiny string-state
+ * machine so whitespace between tokens is left untouched.
+ */
+function repairJson(src: string): string {
+  let out = '';
+  let inStr = false;
+  for (let i = 0; i < src.length; i++) {
+    const ch = src[i];
+    if (inStr) {
+      if (ch === '\\') {
+        const next = src[i + 1];
+        if (next !== undefined && '"\\/bfnrtu'.includes(next)) {
+          out += ch + next; // valid escape — keep both chars
+          i++;
+        } else {
+          out += '\\\\'; // invalid escape — escape the lone backslash
+        }
+      } else if (ch === '"') {
+        inStr = false;
+        out += ch;
+      } else if (ch === '\n') {
+        out += '\\n';
+      } else if (ch === '\r') {
+        out += '\\r';
+      } else if (ch === '\t') {
+        out += '\\t';
+      } else if (ch.charCodeAt(0) < 0x20) {
+        out += '\\u' + ch.charCodeAt(0).toString(16).padStart(4, '0');
+      } else {
+        out += ch;
+      }
+    } else {
+      out += ch;
+      if (ch === '"') inStr = true;
+    }
+  }
+  return out;
+}
+
+/**
+ * Robustly parse a JSON object/array out of a raw LLM response.
+ * Handles markdown ```json fences, prose around the JSON, and the frequent
+ * bad-escape / control-char problems in long generated content. Tries a strict
+ * parse first (so well-formed responses are unaffected), then a repaired parse.
+ */
+export function parseAiJson<T = any>(raw: string): T {
+  if (!raw || !raw.trim()) throw new Error('Empty AI response');
+  let s = raw.trim();
+  const fence = s.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (fence) s = fence[1].trim();
+  // Find the outermost {...} or [...] block
+  const candidates = ['{', '['].map(c => s.indexOf(c)).filter(i => i !== -1);
+  if (candidates.length === 0) throw new Error('No JSON found in AI response');
+  const start = Math.min(...candidates);
+  const end = Math.max(s.lastIndexOf('}'), s.lastIndexOf(']'));
+  if (end <= start) throw new Error('No JSON found in AI response');
+  const block = s.slice(start, end + 1);
+  try {
+    return JSON.parse(block) as T;
+  } catch {
+    return JSON.parse(repairJson(block)) as T;
   }
 }
 

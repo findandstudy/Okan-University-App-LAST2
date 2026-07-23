@@ -1,5 +1,5 @@
 import { createRequire } from 'module';
-import { callAI } from './aiService';
+import { callAI, parseAiJson } from './aiService';
 import { translateText } from './aiTranslation';
 import { SUPPORTED_LANGUAGES } from '@shared/schema';
 
@@ -151,10 +151,8 @@ Return a JSON object with this exact structure:
   }
 }`;
 
-  const raw = await callAI(prompt, tenantId, systemPrompt);
-  const match = raw.match(/\{[\s\S]*\}/);
-  if (!match) throw new Error('Invalid content generation response from AI');
-  const parsed = JSON.parse(match[0]) as GeneratedContent;
+  const raw = await callAI(prompt, tenantId, systemPrompt, true);
+  const parsed = parseAiJson<GeneratedContent>(raw);
 
   // Strip any stray [DOĞRULANMALI] markers the model may have embedded in text
   const cleanField = (s: string) => stripVerificationMarker(s).text;
@@ -287,10 +285,8 @@ Return ONLY this JSON (no markdown, no extra keys):
   "metaDesc": "Meta description 140-155 chars"
 }`;
 
-  const raw = await callAI(prompt, tenantId, systemPrompt);
-  const match = raw.match(/\{[\s\S]*\}/);
-  if (!match) throw new Error('Invalid blog generation response from AI');
-  const parsed = JSON.parse(match[0]) as Omit<BlogContent, 'slug'>;
+  const raw = await callAI(prompt, tenantId, systemPrompt, true);
+  const parsed = parseAiJson<Omit<BlogContent, 'slug'>>(raw);
   return {
     ...parsed,
     slug: toSlug(parsed.title),
